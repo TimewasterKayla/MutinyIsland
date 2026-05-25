@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 export default function HomePage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [username, setUsername] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function signUp() {
@@ -14,6 +15,11 @@ export default function HomePage() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          username: username, // 👈 STORES USERNAME
+        },
+      },
     })
 
     if (error) {
@@ -61,6 +67,7 @@ export default function HomePage() {
         {/* FORM */}
         <div className="bg-zinc-900 p-6 rounded-2xl space-y-4">
 
+          {/* EMAIL */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Email"
@@ -69,6 +76,15 @@ export default function HomePage() {
             onChange={(e) => setEmail(e.target.value)}
           />
 
+          {/* USERNAME (NEW) */}
+          <input
+            className="w-full p-3 rounded bg-zinc-800"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+
+          {/* PASSWORD */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Password"
@@ -77,7 +93,7 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          {/* BUTTONS */}
+          {/* SIGN UP */}
           <button
             onClick={signUp}
             disabled={loading}
@@ -86,6 +102,7 @@ export default function HomePage() {
             Sign Up
           </button>
 
+          {/* LOGIN */}
           <button
             onClick={login}
             disabled={loading}
