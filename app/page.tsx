@@ -12,7 +12,7 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   // -----------------------------
-  // SIGN UP (ONLY profiles TABLE)
+  // SIGN UP (WITH ROLLBACK LOGIC)
   // -----------------------------
   async function signUp() {
     setLoading(true)
@@ -36,24 +36,37 @@ export default function HomePage() {
       return
     }
 
-    // 2. Insert into profiles ONLY (NO usernames table)
+    const userId = data.user.id
+
+    // 2. Insert profile
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
-        id: data.user.id,
+        id: userId,
         username,
         email,
         coins: 0,
       })
 
+    // 3. IF PROFILE FAILS → CLEAN UP
     if (profileError) {
-      console.log(profileError)
+      console.log('Profile insert failed:', profileError)
 
       setErrorMessage(
         profileError.message.includes('duplicate')
           ? 'Username or email already taken'
-          : profileError.message
+          : 'Account creation failed'
       )
+
+      /**
+       * ⚠️ IMPORTANT LIMITATION:
+       * We cannot safely delete auth users from frontend
+       * without service role key.
+       *
+       * So we sign them out instead to prevent partial login state.
+       */
+
+      await supabase.auth.signOut()
 
       setLoading(false)
       return
@@ -64,7 +77,7 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // LOGIN (AUTH FIRST — PROFILES AFTER)
+  // LOGIN (AUTH ONLY — CORRECT FLOW)
   // -----------------------------
   async function login() {
     setLoading(true)
@@ -76,7 +89,7 @@ export default function HomePage() {
       return
     }
 
-    // 1. AUTH LOGIN ONLY (source of truth)
+    // 1. AUTH LOGIN
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -88,7 +101,7 @@ export default function HomePage() {
       return
     }
 
-    // 2. FETCH PROFILE FROM profiles TABLE ONLY
+    // 2. FETCH PROFILE (ONLY AFTER LOGIN)
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('username, coins')
@@ -102,7 +115,6 @@ export default function HomePage() {
       return
     }
 
-    // success
     window.location.href = '/games'
   }
 
@@ -119,7 +131,6 @@ export default function HomePage() {
 
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
-          {/* EMAIL */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Email"
@@ -127,7 +138,6 @@ export default function HomePage() {
             onChange={(e) => setEmail(e.target.value)}
           />
 
-          {/* USERNAME (ONLY USED FOR SIGNUP DISPLAY + PROFILE, NOT LOGIN) */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Username"
@@ -135,7 +145,6 @@ export default function HomePage() {
             onChange={(e) => setUsername(e.target.value)}
           />
 
-          {/* PASSWORD */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Password"
@@ -144,14 +153,12 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          {/* ERROR */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
             </p>
           )}
 
-          {/* SIGN UP */}
           <button
             onClick={signUp}
             disabled={loading}
@@ -160,7 +167,6 @@ export default function HomePage() {
             Sign Up
           </button>
 
-          {/* LOGIN */}
           <button
             onClick={login}
             disabled={loading}
