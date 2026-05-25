@@ -9,10 +9,35 @@ export default function HomePage() {
   const [username, setUsername] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // NEW ERROR MESSAGE STATE
+  const [errorMessage, setErrorMessage] = useState('')
+
   async function signUp() {
     setLoading(true)
+    setErrorMessage('')
 
-    const { error } = await supabase.auth.signUp({
+    // --------------------------------
+    // CHECK IF USERNAME EXISTS
+    // --------------------------------
+    const { data: existingUser } = await supabase
+      .from('usernames')
+      .select('*')
+      .eq('username', username)
+      .single()
+
+    if (existingUser) {
+      setErrorMessage(
+        'Another user has already claimed that username'
+      )
+
+      setLoading(false)
+      return
+    }
+
+    // --------------------------------
+    // CREATE AUTH ACCOUNT
+    // --------------------------------
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -28,12 +53,23 @@ export default function HomePage() {
       return
     }
 
+    // --------------------------------
+    // SAVE USERNAME
+    // --------------------------------
+    if (data.user) {
+      await supabase.from('usernames').insert({
+        username: username,
+        user_id: data.user.id,
+      })
+    }
+
     alert('Account created! You can now log in.')
     setLoading(false)
   }
 
   async function login() {
     setLoading(true)
+    setErrorMessage('')
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -52,10 +88,10 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
 
-      {/* 🌊 OCEAN BACKGROUND */}
+      {/* OCEAN BACKGROUND */}
       <div className="ocean-bg" />
 
-      {/* 🍾 FLOATING BOTTLES */}
+      {/* FLOATING BOTTLES */}
       <div className="bottle b1">🍾</div>
       <div className="bottle b2">🍾</div>
       <div className="bottle b3">🍾</div>
@@ -99,6 +135,13 @@ export default function HomePage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+
+          {/* RED ERROR MESSAGE */}
+          {errorMessage && (
+            <p className="text-red-400 italic text-sm">
+              {errorMessage}
+            </p>
+          )}
 
           <button
             onClick={signUp}
