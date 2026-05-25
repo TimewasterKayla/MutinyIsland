@@ -9,15 +9,37 @@ export default function Navbar() {
   const [username, setUsername] = useState<string | null>(null)
 
   useEffect(() => {
+    // initial load
     getUser()
+
+    // listen for login/logout changes
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (session?.user) {
+          const name =
+            session.user.user_metadata?.username ||
+            session.user.email?.split('@')[0]
+
+          setUsername(name)
+        } else {
+          setUsername(null)
+        }
+      }
+    )
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
   }, [])
 
   async function getUser() {
     const { data } = await supabase.auth.getUser()
 
-    if (!data.user) return
+    if (!data.user) {
+      setUsername(null)
+      return
+    }
 
-    // Try to get username from metadata or fallback to email
     const name =
       data.user.user_metadata?.username ||
       data.user.email?.split('@')[0]
@@ -27,13 +49,12 @@ export default function Navbar() {
 
   async function logout() {
     await supabase.auth.signOut()
+    setUsername(null) // 👈 instantly clear UI
     router.push('/')
   }
 
   return (
     <nav className="w-full bg-zinc-900 text-white flex items-center justify-between px-6 py-3">
-      
-      {/* LEFT SIDE */}
       <div className="flex gap-4">
         <button onClick={() => router.push('/games')}>
           Games
@@ -46,13 +67,14 @@ export default function Navbar() {
         )}
       </div>
 
-      {/* RIGHT SIDE */}
-      <button
-        onClick={logout}
-        className="bg-red-500 px-3 py-1 rounded"
-      >
-        Logout
-      </button>
+      {username && (
+        <button
+          onClick={logout}
+          className="bg-red-500 px-3 py-1 rounded"
+        >
+          Logout
+        </button>
+      )}
     </nav>
   )
 }
