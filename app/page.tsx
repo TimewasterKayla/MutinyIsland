@@ -12,7 +12,7 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   // -----------------------------
-  // SIGN UP (FIXED ORDER)
+  // SIGN UP (EDGE FUNCTION VERSION)
   // -----------------------------
   async function signUp() {
     setLoading(true)
@@ -24,49 +24,27 @@ export default function HomePage() {
       return
     }
 
-    // 1. CHECK USERNAME FIRST (IMPORTANT FIX)
-    const { data: existingUser } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('username', username)
-      .maybeSingle()
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/signup`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // IMPORTANT: required for Supabase Edge Functions
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          username,
+        }),
+      }
+    )
 
-    if (existingUser) {
-      setErrorMessage('Another user has already claimed that username')
-      setLoading(false)
-      return
-    }
+    const data = await res.json()
 
-    // 2. CREATE AUTH USER
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    })
-
-    if (error || !data.user) {
-      setErrorMessage(error?.message || 'Signup failed')
-      setLoading(false)
-      return
-    }
-
-    // 3. CREATE PROFILE
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        id: data.user.id,
-        username,
-        email,
-        coins: 0,
-      })
-
-    if (profileError) {
-      console.log(profileError)
-
-      setErrorMessage('Profile creation failed')
-
-      // optional cleanup (prevents orphan auth users)
-      await supabase.auth.signOut()
-
+    if (!res.ok) {
+      setErrorMessage(data.error || 'Signup failed')
       setLoading(false)
       return
     }
@@ -99,7 +77,6 @@ export default function HomePage() {
       return
     }
 
-    // fetch profile AFTER login
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('username, coins')
@@ -161,7 +138,7 @@ export default function HomePage() {
           <button
             onClick={signUp}
             disabled={loading}
-            className="w-full bg-yellow-500 text-black p-3 rounded font-bold hover:bg-yellow-400 cursor-pointer active:scale-95 transition"
+            className="w-full bg-yellow-500 text-black p-3 rounded font-bold hover:bg-yellow-400 active:scale-95 transition"
           >
             Sign Up
           </button>
@@ -169,7 +146,7 @@ export default function HomePage() {
           <button
             onClick={login}
             disabled={loading}
-            className="w-full bg-white text-black p-3 rounded font-bold hover:bg-gray-200 cursor-pointer active:scale-95 transition"
+            className="w-full bg-white text-black p-3 rounded font-bold hover:bg-gray-200 active:scale-95 transition"
           >
             Login
           </button>
