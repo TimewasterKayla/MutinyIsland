@@ -11,7 +11,7 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   // --------------------------------
-  // SIGN UP (FIXED + RELIABLE)
+  // SIGN UP (FIXED + BULLETPROOF)
   // --------------------------------
   async function signUp() {
     setLoading(true)
@@ -28,19 +28,13 @@ export default function HomePage() {
       },
     })
 
-    if (error) {
-      setErrorMessage(error.message)
+    if (error || !data.user) {
+      setErrorMessage(error?.message || 'Signup failed')
       setLoading(false)
       return
     }
 
-    if (!data.user) {
-      setErrorMessage('Signup failed. Try again.')
-      setLoading(false)
-      return
-    }
-
-    // 2. Insert username (DB ENFORCES UNIQUENESS)
+    // 2. Insert username into DB (THIS ENFORCES UNIQUENESS)
     const { error: insertError } = await supabase
       .from('usernames')
       .insert({
@@ -48,7 +42,7 @@ export default function HomePage() {
         user_id: data.user.id,
       })
 
-    // 3. Handle duplicate username properly
+    // 3. If username already exists → rollback account
     if (insertError) {
       await supabase.auth.signOut()
 
@@ -60,8 +54,8 @@ export default function HomePage() {
       return
     }
 
-    alert('Account created! You can now log in.')
     setLoading(false)
+    alert('Account created! You can now log in.')
   }
 
   // --------------------------------
@@ -113,7 +107,6 @@ export default function HomePage() {
         {/* FORM */}
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
-          {/* EMAIL */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Email"
@@ -122,7 +115,6 @@ export default function HomePage() {
             onChange={(e) => setEmail(e.target.value)}
           />
 
-          {/* USERNAME */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Username"
@@ -130,7 +122,6 @@ export default function HomePage() {
             onChange={(e) => setUsername(e.target.value)}
           />
 
-          {/* PASSWORD */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Password"
@@ -139,7 +130,7 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          {/* ERROR MESSAGE */}
+          {/* ERROR */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
