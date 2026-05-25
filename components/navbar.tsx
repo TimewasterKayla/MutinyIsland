@@ -51,32 +51,52 @@ export default function Navbar() {
     router.push('/')
   }
 
+  // ✅ FIX: button style is now properly defined
+  const btnStyle =
+    "px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition cursor-pointer"
+
   return (
     <nav className="w-full bg-zinc-900 text-white px-6 py-3 flex items-center justify-between">
 
-      {/* LEFT (empty for balance) */}
+      {/* LEFT SPACER */}
       <div className="w-1/3" />
 
-      {/* CENTER BUTTONS */}
-      <div className="w-1/3 flex justify-center gap-4">
+      {/* CENTER NAV BUTTONS */}
+      <div className="w-1/3 flex justify-center gap-3">
+
         <button
           onClick={() => router.push('/games')}
-          className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition cursor-pointer"
+          className={btnStyle}
         >
           Games
+        </button>
+
+        <button
+          onClick={() => router.push('/shop')}
+          className={btnStyle}
+        >
+          Shop
+        </button>
+
+        <button
+          onClick={() => router.push('/leaderboards')}
+          className={btnStyle}
+        >
+          Leaderboards
         </button>
 
         {username && (
           <button
             onClick={() => router.push(`/profile/${username}`)}
-            className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition cursor-pointer"
+            className={btnStyle}
           >
             {username}'s Profile
           </button>
         )}
+
       </div>
 
-      {/* RIGHT (logout stays right) */}
+      {/* RIGHT LOGOUT */}
       <div className="w-1/3 flex justify-end">
         {username && (
           <button
@@ -87,6 +107,7 @@ export default function Navbar() {
           </button>
         )}
       </div>
+
     </nav>
   )
 }
