@@ -123,7 +123,7 @@ export default function Navbar() {
     "px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition cursor-pointer"
 
   return (
-    <nav className="w-full bg-zinc-900 text-white px-6 py-3 flex items-center justify-between">
+    <nav className="w-full wooden-navbar text-white px-6 py-3 flex items-center justify-between">
 
       {/* LEFT: ONLINE USERS */}
       <div className="w-1/3 flex items-center gap-2 text-sm text-zinc-300">
