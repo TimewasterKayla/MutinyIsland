@@ -17,7 +17,7 @@ export default function HomePage() {
       password,
       options: {
         data: {
-          username: username, // 👈 STORES USERNAME
+          username: username,
         },
       },
     })
@@ -50,8 +50,18 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white flex items-center justify-center">
-      <div className="w-full max-w-md space-y-6 text-center">
+    <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
+
+      {/* 🌊 OCEAN BACKGROUND */}
+      <div className="ocean-bg" />
+
+      {/* 🍾 FLOATING BOTTLES */}
+      <div className="bottle b1">🍾</div>
+      <div className="bottle b2">🍾</div>
+      <div className="bottle b3">🍾</div>
+
+      {/* LOGIN CONTENT */}
+      <div className="w-full max-w-md space-y-6 text-center relative z-10">
 
         {/* TITLE */}
         <div>
@@ -59,15 +69,14 @@ export default function HomePage() {
             Mutiny Island
           </h1>
 
-          <p className="text-sm italic text-zinc-400 mt-2">
+          <p className="text-sm italic text-zinc-300 mt-2">
             Welcome aboard!
           </p>
         </div>
 
         {/* FORM */}
-        <div className="bg-zinc-900 p-6 rounded-2xl space-y-4">
+        <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
-          {/* EMAIL */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Email"
@@ -76,7 +85,6 @@ export default function HomePage() {
             onChange={(e) => setEmail(e.target.value)}
           />
 
-          {/* USERNAME (NEW) */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Username"
@@ -84,7 +92,6 @@ export default function HomePage() {
             onChange={(e) => setUsername(e.target.value)}
           />
 
-          {/* PASSWORD */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Password"
@@ -93,7 +100,6 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          {/* SIGN UP */}
           <button
             onClick={signUp}
             disabled={loading}
@@ -102,7 +108,6 @@ export default function HomePage() {
             Sign Up
           </button>
 
-          {/* LOGIN */}
           <button
             onClick={login}
             disabled={loading}

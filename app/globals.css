@@ -24,3 +24,86 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* =========================================
+   🌊 MUTINY ISLAND OCEAN BACKGROUND
+========================================= */
+
+.ocean-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    #001f3f,
+    #003f5c,
+    #005377,
+    #007ea7,
+    #003f5c
+  );
+  background-size: 300% 300%;
+  animation: oceanFlow 12s ease-in-out infinite;
+  z-index: 0;
+}
+
+@keyframes oceanFlow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* 🌊 wave texture overlay */
+.ocean-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("https://www.transparenttextures.com/patterns/waves.png");
+  opacity: 0.08;
+  animation: waveMove 25s linear infinite;
+}
+
+@keyframes waveMove {
+  from { transform: translateX(0); }
+  to { transform: translateX(-200px); }
+}
+
+/* =========================================
+   🍾 FLOATING BOTTLES (LOGIN BACKGROUND)
+========================================= */
+
+.bottle {
+  position: absolute;
+  bottom: -50px;
+  font-size: 24px;
+  opacity: 0.6;
+  animation: floatUp linear infinite;
+  z-index: 0;
+}
+
+.b1 {
+  left: 20%;
+  animation-duration: 12s;
+}
+
+.b2 {
+  left: 50%;
+  animation-duration: 18s;
+}
+
+.b3 {
+  left: 80%;
+  animation-duration: 15s;
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-120vh) rotate(360deg);
+    opacity: 0;
+  }
+}
