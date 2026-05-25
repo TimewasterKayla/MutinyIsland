@@ -12,7 +12,7 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   // -----------------------------
-  // SIGN UP (ONLY PROFILES)
+  // SIGN UP (ONLY profiles TABLE)
   // -----------------------------
   async function signUp() {
     setLoading(true)
@@ -36,7 +36,7 @@ export default function HomePage() {
       return
     }
 
-    // 2. IMPORTANT: ONLY INSERT INTO profiles
+    // 2. Insert into profiles ONLY (NO usernames table)
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -64,51 +64,52 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // LOGIN (NO PROFILES INSERT EVER)
+  // LOGIN (AUTH FIRST — PROFILES AFTER)
   // -----------------------------
   async function login() {
     setLoading(true)
     setErrorMessage('')
 
-    if (!email || !password || !username) {
-      setErrorMessage('Please fill in all fields')
+    if (!email || !password) {
+      setErrorMessage('Please enter email and password')
       setLoading(false)
       return
     }
 
-    // 1. VERIFY USERNAME + EMAIL MATCH
-    const { data: profile, error } = await supabase
+    // 1. AUTH LOGIN ONLY (source of truth)
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error || !data.user) {
+      setErrorMessage('Invalid email or password')
+      setLoading(false)
+      return
+    }
+
+    // 2. FETCH PROFILE FROM profiles TABLE ONLY
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('username, email')
-      .eq('username', username)
-      .eq('email', email)
+      .select('username, coins')
+      .eq('id', data.user.id)
       .single()
 
-    if (error || !profile) {
-      setErrorMessage('Invalid username or email')
+    if (profileError || !profile) {
+      console.log(profileError)
+      setErrorMessage('Profile not found')
       setLoading(false)
       return
     }
 
-    // 2. AUTH LOGIN ONLY
-    const { error: loginError } =
-      await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-    if (loginError) {
-      setErrorMessage('Incorrect password')
-      setLoading(false)
-      return
-    }
-
+    // success
     window.location.href = '/games'
   }
 
   return (
     <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
 
+      {/* BACKGROUND */}
       <div className="ocean-bg" />
 
       <div className="w-full max-w-md space-y-6 text-center relative z-10">
@@ -118,6 +119,7 @@ export default function HomePage() {
 
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
+          {/* EMAIL */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Email"
@@ -125,6 +127,7 @@ export default function HomePage() {
             onChange={(e) => setEmail(e.target.value)}
           />
 
+          {/* USERNAME (ONLY USED FOR SIGNUP DISPLAY + PROFILE, NOT LOGIN) */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Username"
@@ -132,6 +135,7 @@ export default function HomePage() {
             onChange={(e) => setUsername(e.target.value)}
           />
 
+          {/* PASSWORD */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Password"
@@ -140,12 +144,14 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
+          {/* ERROR */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
             </p>
           )}
 
+          {/* SIGN UP */}
           <button
             onClick={signUp}
             disabled={loading}
@@ -154,6 +160,7 @@ export default function HomePage() {
             Sign Up
           </button>
 
+          {/* LOGIN */}
           <button
             onClick={login}
             disabled={loading}
