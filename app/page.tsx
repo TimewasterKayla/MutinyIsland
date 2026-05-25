@@ -18,45 +18,57 @@ export default function HomePage() {
     setLoading(true)
     setErrorMessage('')
 
-    // AUTH ONLY STORES EMAIL + PASSWORD
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    })
+    // --------------------------------
+    // 1. CHECK IF USERNAME EXISTS
+    // BEFORE CREATING AUTH USER
+    // --------------------------------
+    const { data: existingUser } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('username', username)
+      .maybeSingle()
 
-    // auth failed
-    if (error || !data.user) {
-      setErrorMessage(error?.message || 'Signup failed')
+    if (existingUser) {
+      setErrorMessage(
+        'Another user has already claimed that username'
+      )
+
       setLoading(false)
       return
     }
 
-    // STORE REAL USERNAME IN profiles TABLE
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        id: data.user.id,
-        username: username,
-        coins: 0,
+    // --------------------------------
+    // 2. CREATE AUTH USER
+    // --------------------------------
+    const { data, error } =
+      await supabase.auth.signUp({
+        email,
+        password,
       })
 
-    // duplicate username OR other profile issue
+    if (error || !data.user) {
+      setErrorMessage(
+        error?.message || 'Signup failed'
+      )
+
+      setLoading(false)
+      return
+    }
+
+    // --------------------------------
+    // 3. CREATE PROFILE
+    // --------------------------------
+    const { error: profileError } =
+      await supabase
+        .from('profiles')
+        .insert({
+          id: data.user.id,
+          username: username,
+          coins: 0,
+        })
+
     if (profileError) {
-      await supabase.auth.signOut()
-
-      const msg = profileError.message.toLowerCase()
-
-      if (
-        msg.includes('duplicate') ||
-        msg.includes('unique') ||
-        msg.includes('already exists')
-      ) {
-        setErrorMessage(
-          'That username is already taken.'
-        )
-      } else {
-        setErrorMessage(profileError.message)
-      }
+      setErrorMessage(profileError.message)
 
       setLoading(false)
       return
@@ -82,6 +94,7 @@ export default function HomePage() {
 
     if (error) {
       setErrorMessage(error.message)
+
       setLoading(false)
       return
     }
@@ -149,7 +162,7 @@ export default function HomePage() {
             }
           />
 
-          {/* ERROR MESSAGE */}
+          {/* ERROR */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
