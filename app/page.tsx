@@ -9,9 +9,12 @@ export default function HomePage() {
   const [username, setUsername] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // NEW ERROR MESSAGE STATE
+  // ERROR MESSAGE
   const [errorMessage, setErrorMessage] = useState('')
 
+  // --------------------------------
+  // SIGN UP
+  // --------------------------------
   async function signUp() {
     setLoading(true)
     setErrorMessage('')
@@ -19,13 +22,13 @@ export default function HomePage() {
     // --------------------------------
     // CHECK IF USERNAME EXISTS
     // --------------------------------
-    const { data: existingUser } = await supabase
-      .from('usernames')
-      .select('*')
-      .eq('username', username)
-      .single()
+    const { data: existingUsers } =
+      await supabase
+        .from('usernames')
+        .select('username')
+        .eq('username', username)
 
-    if (existingUser) {
+    if (existingUsers && existingUsers.length > 0) {
       setErrorMessage(
         'Another user has already claimed that username'
       )
@@ -57,24 +60,41 @@ export default function HomePage() {
     // SAVE USERNAME
     // --------------------------------
     if (data.user) {
-      await supabase.from('usernames').insert({
-        username: username,
-        user_id: data.user.id,
-      })
+      const { error: insertError } =
+        await supabase
+          .from('usernames')
+          .insert({
+            username: username,
+            user_id: data.user.id,
+          })
+
+      // catches duplicate username race conditions
+      if (insertError) {
+        setErrorMessage(
+          'Another user has already claimed that username'
+        )
+
+        setLoading(false)
+        return
+      }
     }
 
     alert('Account created! You can now log in.')
     setLoading(false)
   }
 
+  // --------------------------------
+  // LOGIN
+  // --------------------------------
   async function login() {
     setLoading(true)
     setErrorMessage('')
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    const { error } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
     if (error) {
       alert(error.message)
@@ -88,10 +108,10 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
 
-      {/* OCEAN BACKGROUND */}
+      {/* 🌊 OCEAN BACKGROUND */}
       <div className="ocean-bg" />
 
-      {/* FLOATING BOTTLES */}
+      {/* 🍾 FLOATING BOTTLES */}
       <div className="bottle b1">🍾</div>
       <div className="bottle b2">🍾</div>
       <div className="bottle b3">🍾</div>
@@ -113,6 +133,7 @@ export default function HomePage() {
         {/* FORM */}
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
+          {/* EMAIL */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Email"
@@ -121,6 +142,7 @@ export default function HomePage() {
             onChange={(e) => setEmail(e.target.value)}
           />
 
+          {/* USERNAME */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Username"
@@ -128,6 +150,7 @@ export default function HomePage() {
             onChange={(e) => setUsername(e.target.value)}
           />
 
+          {/* PASSWORD */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Password"
@@ -136,13 +159,14 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          {/* RED ERROR MESSAGE */}
+          {/* ERROR MESSAGE */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
             </p>
           )}
 
+          {/* SIGN UP */}
           <button
             onClick={signUp}
             disabled={loading}
@@ -151,6 +175,7 @@ export default function HomePage() {
             Sign Up
           </button>
 
+          {/* LOGIN */}
           <button
             onClick={login}
             disabled={loading}
