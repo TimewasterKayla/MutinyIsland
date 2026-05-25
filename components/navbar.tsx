@@ -2,71 +2,78 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
-import { usePresence } from "@/lib/usePresence"
+import { usePresence } from '@/lib/usePresence'
 
 export default function Navbar() {
   const router = useRouter()
 
   const [username, setUsername] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [onlineCount, setOnlineCount] = useState(0)
   const [coins, setCoins] = useState(0)
 
-  // ----------------------------
-  // AUTH
-  // ----------------------------
+  // --------------------------------
+  // PRESENCE TRACKING
+  // --------------------------------
+  usePresence(userId)
+
+  // --------------------------------
+  // GET USER PROFILE
+  // USERNAME COMES ONLY
+  // FROM profiles.username
+  // --------------------------------
+  async function getUserProfile() {
+    const { data: userData } = await supabase.auth.getUser()
+
+    if (!userData.user) {
+      setUsername(null)
+      setUserId(null)
+      setCoins(0)
+      return
+    }
+
+    // store real auth user id
+    setUserId(userData.user.id)
+
+    // fetch profile data
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('username, coins')
+      .eq('id', userData.user.id)
+      .single()
+
+    if (error || !profile) {
+      setUsername(null)
+      setCoins(0)
+      return
+    }
+
+    // ONLY use username from profiles table
+    setUsername(profile.username)
+    setCoins(profile.coins || 0)
+  }
+
+  // --------------------------------
+  // AUTH LISTENER
+  // --------------------------------
   useEffect(() => {
-    getUser()
+    getUserProfile()
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session?.user) {
-          const name =
-            session.user.user_metadata?.username ||
-            session.user.email?.split('@')[0]
-
-          setUsername(name)
-
-          // fetch coins when auth changes
-          fetchCoins(session.user.id)
-        } else {
-          setUsername(null)
-          setCoins(0)
-        }
-      }
-    )
+    const { data: listener } =
+      supabase.auth.onAuthStateChange(() => {
+        getUserProfile()
+      })
 
     return () => {
       listener.subscription.unsubscribe()
     }
   }, [])
 
-  async function getUser() {
-    const { data } = await supabase.auth.getUser()
-
-    if (!data.user) {
-      setUsername(null)
-      return
-    }
-
-    const name =
-      data.user.user_metadata?.username ||
-      data.user.email?.split('@')[0]
-
-    setUsername(name)
-
-    // fetch coins on page load
-    fetchCoins(data.user.id)
-  }
-
-  // ----------------------------
-  // PRESENCE SYSTEM
-  // ----------------------------
-  usePresence(username)
-
-  // ----------------------------
+  // --------------------------------
   // FETCH ONLINE USERS
-  // ----------------------------
+  // --------------------------------
   async function fetchOnlineUsers() {
     const { data } = await supabase
       .from('user_presence')
@@ -92,65 +99,47 @@ export default function Navbar() {
     return () => clearInterval(interval)
   }, [])
 
-  // ----------------------------
-  // FETCH COINS
-  // ----------------------------
-  async function fetchCoins(userId: string | null) {
-    if (!userId) return
-
-    const { data } = await supabase
-      .from('user_coins')
-      .select('coins')
-      .eq('user_id', userId)
-      .single()
-
-    if (data?.coins !== undefined) {
-      setCoins(data.coins)
-    }
-  }
-
-  // ----------------------------
+  // --------------------------------
   // LOGOUT
-  // ----------------------------
+  // --------------------------------
   async function logout() {
     await supabase.auth.signOut()
+
     setUsername(null)
+    setUserId(null)
     setCoins(0)
+
     router.push('/')
   }
 
+  // --------------------------------
+  // BUTTON STYLE
+  // --------------------------------
   const btnStyle =
-    "px-4 py-2 rounded-lg bg-amber-900/80 hover:bg-amber-800 border border-amber-700 shadow-md active:scale-95 transition cursor-pointer"
+    'px-4 py-2 rounded-lg bg-black/40 border border-yellow-700 hover:bg-yellow-700/40 active:scale-95 transition cursor-pointer text-white shadow-md backdrop-blur-sm'
 
   return (
-    <nav className="w-full text-white px-6 py-3 flex items-center justify-between border-b-4 border-amber-950 shadow-xl relative overflow-hidden bg-gradient-to-b from-amber-700 via-amber-800 to-amber-950">
+    <nav
+      className="w-full px-6 py-3 flex items-center justify-between border-b border-yellow-900"
+      style={{
+        backgroundImage: "url('/wood-texture.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
 
-      {/* WOOD GRAIN OVERLAY */}
-      <div
-        className="absolute inset-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(to right, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)"
-        }}
-      />
+      {/* LEFT SIDE */}
+      <div className="w-1/3 flex items-center gap-2 text-sm text-zinc-200">
 
-      {/* PLANK LINES */}
-      <div
-        className="absolute inset-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(to bottom, transparent 0px, transparent 36px, rgba(0,0,0,0.35) 37px, transparent 38px)"
-        }}
-      />
+        {/* ONLINE INDICATOR */}
+        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
 
-      {/* LEFT: ONLINE USERS */}
-      <div className="relative z-10 w-1/3 flex items-center gap-2 text-sm text-zinc-200">
-        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
         <span>{onlineCount} online</span>
+
       </div>
 
-      {/* CENTER NAV BUTTONS */}
-      <div className="relative z-10 w-1/3 flex justify-center gap-3">
+      {/* CENTER NAV */}
+      <div className="w-1/3 flex justify-center gap-3 flex-wrap">
 
         <button
           onClick={() => router.push('/home')}
@@ -191,26 +180,32 @@ export default function Navbar() {
 
       </div>
 
-      {/* RIGHT: COINS + LOGOUT */}
-      <div className="relative z-10 w-1/3 flex justify-end items-center gap-3">
+      {/* RIGHT SIDE */}
+      <div className="w-1/3 flex justify-end items-center gap-4">
 
-        {/* COINS */}
-        <div className="flex items-center gap-1 text-sm text-yellow-200">
+        {/* COIN DISPLAY */}
+        {username && (
+          <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-lg border border-yellow-700">
 
-          <img
-            src="/coin.png"
-            alt="coin"
-            className="w-4 h-4"
-          />
+            <Image
+              src="/coin.png"
+              alt="Coins"
+              width={18}
+              height={18}
+            />
 
-          <span>{coins}</span>
-        </div>
+            <span className="text-yellow-300 font-semibold">
+              {coins}
+            </span>
+
+          </div>
+        )}
 
         {/* LOGOUT */}
         {username && (
           <button
             onClick={logout}
-            className="bg-red-700 hover:bg-red-600 px-3 py-1 rounded border border-red-900 shadow-md active:scale-95 transition cursor-pointer"
+            className="bg-red-600 px-3 py-1 rounded-lg hover:bg-red-700 active:scale-95 transition cursor-pointer text-white shadow-md"
           >
             Logout
           </button>

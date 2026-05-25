@@ -7,6 +7,7 @@ export default function HomePage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
+
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -17,27 +18,29 @@ export default function HomePage() {
     setLoading(true)
     setErrorMessage('')
 
-    // 1. Create auth user (EMAIL ONLY)
+    // AUTH ONLY STORES EMAIL + PASSWORD
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
     })
 
+    // auth failed
     if (error || !data.user) {
       setErrorMessage(error?.message || 'Signup failed')
       setLoading(false)
       return
     }
 
-    // 2. Save REAL username into profiles table
+    // STORE REAL USERNAME IN profiles TABLE
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
         id: data.user.id,
         username: username,
+        coins: 0,
       })
 
-    // 3. Handle duplicate username properly
+    // duplicate username OR other profile issue
     if (profileError) {
       await supabase.auth.signOut()
 
@@ -48,7 +51,9 @@ export default function HomePage() {
         msg.includes('unique') ||
         msg.includes('already exists')
       ) {
-        setErrorMessage('That username is already taken.')
+        setErrorMessage(
+          'That username is already taken.'
+        )
       } else {
         setErrorMessage(profileError.message)
       }
@@ -58,6 +63,7 @@ export default function HomePage() {
     }
 
     alert('Account created successfully!')
+
     setLoading(false)
   }
 
@@ -68,10 +74,11 @@ export default function HomePage() {
     setLoading(true)
     setErrorMessage('')
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    const { error } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
     if (error) {
       setErrorMessage(error.message)
@@ -85,43 +92,50 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
 
-      {/* 🌊 BACKGROUND */}
+      {/* OCEAN BACKGROUND */}
       <div className="ocean-bg" />
 
-      {/* DECOR */}
+      {/* FLOATING DECOR */}
       <div className="bottle b1">🍾</div>
       <div className="bottle b2">🍾</div>
       <div className="bottle b3">🍾</div>
 
-      {/* CARD */}
+      {/* LOGIN CARD */}
       <div className="w-full max-w-md space-y-6 text-center relative z-10">
 
+        {/* TITLE */}
         <div>
           <h1 className="text-4xl font-bold">
             Mutiny Island
           </h1>
+
           <p className="text-sm italic text-zinc-300 mt-2">
             Welcome aboard!
           </p>
         </div>
 
+        {/* FORM */}
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
-          {/* EMAIL (AUTH ONLY) */}
+          {/* EMAIL */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) =>
+              setEmail(e.target.value)
+            }
           />
 
-          {/* USERNAME (PROFILE ONLY) */}
+          {/* USERNAME */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Username"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) =>
+              setUsername(e.target.value)
+            }
           />
 
           {/* PASSWORD */}
@@ -130,10 +144,12 @@ export default function HomePage() {
             placeholder="Password"
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) =>
+              setPassword(e.target.value)
+            }
           />
 
-          {/* ERROR */}
+          {/* ERROR MESSAGE */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
