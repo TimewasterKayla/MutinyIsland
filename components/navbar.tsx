@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { usePresence } from "@/lib/usePresence"
 
 export default function Navbar() {
   const router = useRouter()
@@ -10,7 +11,7 @@ export default function Navbar() {
   const [onlineCount, setOnlineCount] = useState(0)
 
   // ----------------------------
-  // USER AUTH + SESSION TRACKING
+  // AUTH
   // ----------------------------
   useEffect(() => {
     getUser()
@@ -50,7 +51,12 @@ export default function Navbar() {
   }
 
   // ----------------------------
-  // ONLINE USERS (PRESENCE)
+  // 🔥 THIS IS THE FIX (ACTUALLY TRACK PRESENCE)
+  // ----------------------------
+  usePresence(username)
+
+  // ----------------------------
+  // ONLINE USERS
   // ----------------------------
   async function fetchOnlineUsers() {
     const { data } = await supabase.from('user_presence').select('*')
@@ -61,7 +67,7 @@ export default function Navbar() {
 
     const online = data.filter((u: any) => {
       const lastSeen = new Date(u.last_seen).getTime()
-      return now - lastSeen < 60000 // 1 minute threshold
+      return now - lastSeen < 60000
     })
 
     setOnlineCount(online.length)

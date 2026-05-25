@@ -12,8 +12,11 @@ export function usePresence(userId: string | null) {
       })
     }
 
+    // run immediately
     updatePresence()
-    const interval = setInterval(updatePresence, 30000)
+
+    // keep updating every 15 seconds
+    const interval = setInterval(updatePresence, 15000)
 
     return () => clearInterval(interval)
   }, [userId])
