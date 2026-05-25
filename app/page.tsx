@@ -8,8 +8,6 @@ export default function HomePage() {
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
   const [loading, setLoading] = useState(false)
-
-  // ERROR MESSAGE
   const [errorMessage, setErrorMessage] = useState('')
 
   // --------------------------------
@@ -20,25 +18,30 @@ export default function HomePage() {
     setErrorMessage('')
 
     // --------------------------------
-    // CHECK IF USERNAME EXISTS
+    // CHECK USERNAME (FIXED)
     // --------------------------------
-    const { data: existingUsers } =
-      await supabase
-        .from('usernames')
-        .select('username')
-        .eq('username', username)
+    const { data: existingUser, error: checkError } = await supabase
+      .from('usernames')
+      .select('username')
+      .eq('username', username)
+      .maybeSingle()
 
-    if (existingUsers && existingUsers.length > 0) {
+    if (checkError) {
+      setErrorMessage('Error checking username. Try again.')
+      setLoading(false)
+      return
+    }
+
+    if (existingUser) {
       setErrorMessage(
         'Another user has already claimed that username'
       )
-
       setLoading(false)
       return
     }
 
     // --------------------------------
-    // CREATE AUTH ACCOUNT
+    // CREATE AUTH USER
     // --------------------------------
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -51,29 +54,26 @@ export default function HomePage() {
     })
 
     if (error) {
-      alert(error.message)
+      setErrorMessage(error.message)
       setLoading(false)
       return
     }
 
     // --------------------------------
-    // SAVE USERNAME
+    // STORE USERNAME
     // --------------------------------
     if (data.user) {
-      const { error: insertError } =
-        await supabase
-          .from('usernames')
-          .insert({
-            username: username,
-            user_id: data.user.id,
-          })
+      const { error: insertError } = await supabase
+        .from('usernames')
+        .insert({
+          username: username,
+          user_id: data.user.id,
+        })
 
-      // catches duplicate username race conditions
       if (insertError) {
         setErrorMessage(
           'Another user has already claimed that username'
         )
-
         setLoading(false)
         return
       }
@@ -90,14 +90,13 @@ export default function HomePage() {
     setLoading(true)
     setErrorMessage('')
 
-    const { error } =
-      await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
 
     if (error) {
-      alert(error.message)
+      setErrorMessage(error.message)
       setLoading(false)
       return
     }
