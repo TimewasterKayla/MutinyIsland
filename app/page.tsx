@@ -11,7 +11,7 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   // --------------------------------
-  // SIGN UP (SAFE + STABLE FLOW)
+  // SIGN UP
   // --------------------------------
   async function signUp() {
     setLoading(true)
@@ -29,7 +29,7 @@ export default function HomePage() {
       return
     }
 
-    // 2. Create profile AFTER auth succeeds
+    // 2. Insert profile (THIS is where uniqueness is enforced)
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -37,27 +37,20 @@ export default function HomePage() {
         username: username,
       })
 
-    // 3. Handle duplicate username cleanly
+    // 3. If username already exists → rollback
     if (profileError) {
       await supabase.auth.signOut()
 
-      // More accurate message if it's a duplicate
-      const msg = profileError.message.toLowerCase()
-
-      if (msg.includes('duplicate') || msg.includes('unique')) {
-        setErrorMessage(
-          'Another user has already claimed that username'
-        )
-      } else {
-        setErrorMessage(profileError.message)
-      }
+      setErrorMessage(
+        'That username is already taken. Please choose another.'
+      )
 
       setLoading(false)
       return
     }
 
-    setLoading(false)
     alert('Account created successfully!')
+    setLoading(false)
   }
 
   // --------------------------------
@@ -87,7 +80,7 @@ export default function HomePage() {
       {/* 🌊 BACKGROUND */}
       <div className="ocean-bg" />
 
-      {/* 🍾 DECOR */}
+      {/* DECOR */}
       <div className="bottle b1">🍾</div>
       <div className="bottle b2">🍾</div>
       <div className="bottle b3">🍾</div>
