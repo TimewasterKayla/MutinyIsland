@@ -51,7 +51,6 @@ export default function Navbar() {
     router.push('/')
   }
 
-  // ✅ FIX: button style is now properly defined
   const btnStyle =
     "px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition cursor-pointer"
 
@@ -63,6 +62,14 @@ export default function Navbar() {
 
       {/* CENTER NAV BUTTONS */}
       <div className="w-1/3 flex justify-center gap-3">
+
+        {/* NEW: HOME BUTTON (left of others) */}
+        <button
+          onClick={() => router.push('/')}
+          className={btnStyle}
+        >
+          Home
+        </button>
 
         <button
           onClick={() => router.push('/games')}
