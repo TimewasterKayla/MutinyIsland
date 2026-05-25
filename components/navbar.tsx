@@ -7,7 +7,11 @@ import { supabase } from '@/lib/supabase'
 export default function Navbar() {
   const router = useRouter()
   const [username, setUsername] = useState<string | null>(null)
+  const [onlineCount, setOnlineCount] = useState(0)
 
+  // ----------------------------
+  // USER AUTH + SESSION TRACKING
+  // ----------------------------
   useEffect(() => {
     getUser()
 
@@ -45,6 +49,35 @@ export default function Navbar() {
     setUsername(name)
   }
 
+  // ----------------------------
+  // ONLINE USERS (PRESENCE)
+  // ----------------------------
+  async function fetchOnlineUsers() {
+    const { data } = await supabase.from('user_presence').select('*')
+
+    if (!data) return
+
+    const now = Date.now()
+
+    const online = data.filter((u: any) => {
+      const lastSeen = new Date(u.last_seen).getTime()
+      return now - lastSeen < 60000 // 1 minute threshold
+    })
+
+    setOnlineCount(online.length)
+  }
+
+  useEffect(() => {
+    fetchOnlineUsers()
+
+    const interval = setInterval(fetchOnlineUsers, 30000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  // ----------------------------
+  // LOGOUT
+  // ----------------------------
   async function logout() {
     await supabase.auth.signOut()
     setUsername(null)
@@ -57,13 +90,15 @@ export default function Navbar() {
   return (
     <nav className="w-full bg-zinc-900 text-white px-6 py-3 flex items-center justify-between">
 
-      {/* LEFT SPACER */}
-      <div className="w-1/3" />
+      {/* LEFT: ONLINE USERS */}
+      <div className="w-1/3 flex items-center gap-2 text-sm text-zinc-300">
+        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+        <span>{onlineCount} online</span>
+      </div>
 
       {/* CENTER NAV BUTTONS */}
       <div className="w-1/3 flex justify-center gap-3">
 
-        {/* NEW: HOME BUTTON (left of others) */}
         <button
           onClick={() => router.push('/home')}
           className={btnStyle}
@@ -103,7 +138,7 @@ export default function Navbar() {
 
       </div>
 
-      {/* RIGHT LOGOUT */}
+      {/* RIGHT: LOGOUT */}
       <div className="w-1/3 flex justify-end">
         {username && (
           <button
