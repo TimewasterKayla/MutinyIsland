@@ -65,7 +65,7 @@ export default function Navbar() {
 
         {/* NEW: HOME BUTTON (left of others) */}
         <button
-          onClick={() => router.push('/')}
+          onClick={() => router.push('/home')}
           className={btnStyle}
         >
           Home
