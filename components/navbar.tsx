@@ -15,16 +15,15 @@ export default function Navbar() {
   const [coins, setCoins] = useState(0)
 
   // -----------------------------
-  // PRESENCE TRACKING
+  // PRESENCE
   // -----------------------------
   usePresence(userId)
 
   // -----------------------------
-  // GET USER PROFILE
+  // GET USER + PROFILE (COINS HERE)
   // -----------------------------
-  async function getUserProfile() {
-    const { data: userData } =
-      await supabase.auth.getUser()
+  async function getUser() {
+    const { data: userData } = await supabase.auth.getUser()
 
     if (!userData.user) {
       setUsername(null)
@@ -44,6 +43,9 @@ export default function Navbar() {
     if (profile) {
       setUsername(profile.username)
       setCoins(profile.coins || 0)
+    } else {
+      setUsername(null)
+      setCoins(0)
     }
   }
 
@@ -51,11 +53,11 @@ export default function Navbar() {
   // AUTH LISTENER
   // -----------------------------
   useEffect(() => {
-    getUserProfile()
+    getUser()
 
     const { data: listener } =
       supabase.auth.onAuthStateChange(() => {
-        getUserProfile()
+        getUser()
       })
 
     return () => {
@@ -76,10 +78,7 @@ export default function Navbar() {
     const now = Date.now()
 
     const online = data.filter((u: any) => {
-      const lastSeen = new Date(
-        u.last_seen
-      ).getTime()
-
+      const lastSeen = new Date(u.last_seen).getTime()
       return now - lastSeen < 60000
     })
 
@@ -88,12 +87,7 @@ export default function Navbar() {
 
   useEffect(() => {
     fetchOnlineUsers()
-
-    const interval = setInterval(
-      fetchOnlineUsers,
-      30000
-    )
-
+    const interval = setInterval(fetchOnlineUsers, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -118,73 +112,43 @@ export default function Navbar() {
 
   return (
     <nav
-      className="
-        w-full
-        px-6
-        py-3
-        flex
-        items-center
-        justify-between
-        border-b
-        border-yellow-900
-        bg-[#3b2414]
-        text-white
-      "
+      className="w-full px-6 py-3 flex items-center justify-between border-b border-yellow-900 text-white"
       style={{
-        backgroundImage:
-          "url('/wood-texture.jpg')",
+        backgroundImage: "url('/wood-texture.jpg')",
         backgroundSize: 'cover',
         backgroundPosition: 'center',
+        backgroundColor: '#3b2414',
       }}
     >
 
       {/* LEFT */}
       <div className="w-1/3 flex items-center gap-2 text-sm">
-
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-
         <span>{onlineCount} online</span>
-
       </div>
 
       {/* CENTER */}
       <div className="w-1/3 flex justify-center gap-3 flex-wrap">
 
-        <button
-          onClick={() => router.push('/home')}
-          className={btnStyle}
-        >
+        <button onClick={() => router.push('/home')} className={btnStyle}>
           Home
         </button>
 
-        <button
-          onClick={() => router.push('/games')}
-          className={btnStyle}
-        >
+        <button onClick={() => router.push('/games')} className={btnStyle}>
           Games
         </button>
 
-        <button
-          onClick={() => router.push('/shop')}
-          className={btnStyle}
-        >
+        <button onClick={() => router.push('/shop')} className={btnStyle}>
           Shop
         </button>
 
-        <button
-          onClick={() =>
-            router.push('/leaderboards')
-          }
-          className={btnStyle}
-        >
+        <button onClick={() => router.push('/leaderboards')} className={btnStyle}>
           Leaderboards
         </button>
 
         {username && (
           <button
-            onClick={() =>
-              router.push(`/profile/${username}`)
-            }
+            onClick={() => router.push(`/profile/${username}`)}
             className={btnStyle}
           >
             {username}'s Profile
@@ -196,7 +160,7 @@ export default function Navbar() {
       {/* RIGHT */}
       <div className="w-1/3 flex justify-end items-center gap-4">
 
-        {/* COINS */}
+        {/* COINS (FROM profiles) */}
         {username && (
           <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-lg border border-yellow-700">
 
@@ -218,18 +182,7 @@ export default function Navbar() {
         {username && (
           <button
             onClick={logout}
-            className="
-              bg-red-600
-              px-3
-              py-1
-              rounded-lg
-              hover:bg-red-700
-              active:scale-95
-              transition
-              cursor-pointer
-              text-white
-              shadow-md
-            "
+            className="bg-red-600 px-3 py-1 rounded-lg hover:bg-red-700 active:scale-95 transition cursor-pointer text-white shadow-md"
           >
             Logout
           </button>

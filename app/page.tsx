@@ -18,83 +18,86 @@ export default function HomePage() {
     setLoading(true)
     setErrorMessage('')
 
-    // --------------------------------
-    // 1. CHECK IF USERNAME EXISTS
-    // BEFORE CREATING AUTH USER
-    // --------------------------------
-    const { data: existingUser } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('username', username)
-      .maybeSingle()
-
-    if (existingUser) {
-      setErrorMessage(
-        'Another user has already claimed that username'
-      )
-
+    if (!email || !password || !username) {
+      setErrorMessage('Please fill in all fields')
       setLoading(false)
       return
     }
 
-    // --------------------------------
-    // 2. CREATE AUTH USER
-    // --------------------------------
-    const { data, error } =
-      await supabase.auth.signUp({
-        email,
-        password,
-      })
+    // 1. create auth user (email/password only)
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    })
 
     if (error || !data.user) {
-      setErrorMessage(
-        error?.message || 'Signup failed'
-      )
-
+      setErrorMessage(error?.message || 'Signup failed')
       setLoading(false)
       return
     }
 
-    // --------------------------------
-    // 3. CREATE PROFILE
-    // --------------------------------
-    const { error: profileError } =
-      await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          username: username,
-          coins: 0,
-        })
+    // 2. create profile (username + email + coins)
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: data.user.id,
+        username,
+        email,
+        coins: 0,
+      })
 
     if (profileError) {
-      setErrorMessage(profileError.message)
+      const msg = profileError.message.toLowerCase()
+
+      setErrorMessage(
+        msg.includes('duplicate') || msg.includes('unique')
+          ? 'Username or email already taken.'
+          : profileError.message
+      )
 
       setLoading(false)
       return
     }
 
     alert('Account created successfully!')
-
     setLoading(false)
   }
 
   // --------------------------------
-  // LOGIN
+  // LOGIN (USERNAME + EMAIL + PASSWORD)
   // --------------------------------
   async function login() {
     setLoading(true)
     setErrorMessage('')
 
-    const { error } =
-      await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+    if (!email || !password || !username) {
+      setErrorMessage('Please fill in all fields')
+      setLoading(false)
+      return
+    }
+
+    // 1. verify username + email match in profiles
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('username, email')
+      .eq('username', username)
+      .eq('email', email)
+      .single()
+
+    if (profileError || !profile) {
+      setErrorMessage('Invalid username or email')
+      setLoading(false)
+      return
+    }
+
+    // 2. login via Supabase Auth
+    const { error } = await supabase.auth.signInWithPassword({
+      email: profile.email,
+      password,
+    })
 
     if (error) {
-      setErrorMessage(error.message)
-
+      setErrorMessage('Incorrect password')
       setLoading(false)
       return
     }
@@ -105,15 +108,9 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
 
-      {/* OCEAN BACKGROUND */}
+      {/* BACKGROUND */}
       <div className="ocean-bg" />
 
-      {/* FLOATING DECOR */}
-      <div className="bottle b1">🍾</div>
-      <div className="bottle b2">🍾</div>
-      <div className="bottle b3">🍾</div>
-
-      {/* LOGIN CARD */}
       <div className="w-full max-w-md space-y-6 text-center relative z-10">
 
         {/* TITLE */}
@@ -121,7 +118,6 @@ export default function HomePage() {
           <h1 className="text-4xl font-bold">
             Mutiny Island
           </h1>
-
           <p className="text-sm italic text-zinc-300 mt-2">
             Welcome aboard!
           </p>
@@ -136,9 +132,7 @@ export default function HomePage() {
             placeholder="Email"
             type="email"
             value={email}
-            onChange={(e) =>
-              setEmail(e.target.value)
-            }
+            onChange={(e) => setEmail(e.target.value)}
           />
 
           {/* USERNAME */}
@@ -146,9 +140,7 @@ export default function HomePage() {
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Username"
             value={username}
-            onChange={(e) =>
-              setUsername(e.target.value)
-            }
+            onChange={(e) => setUsername(e.target.value)}
           />
 
           {/* PASSWORD */}
@@ -157,9 +149,7 @@ export default function HomePage() {
             placeholder="Password"
             type="password"
             value={password}
-            onChange={(e) =>
-              setPassword(e.target.value)
-            }
+            onChange={(e) => setPassword(e.target.value)}
           />
 
           {/* ERROR */}
