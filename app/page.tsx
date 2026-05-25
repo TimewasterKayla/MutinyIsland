@@ -11,38 +11,13 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   // --------------------------------
-  // SIGN UP
+  // SIGN UP (FIXED + RELIABLE)
   // --------------------------------
   async function signUp() {
     setLoading(true)
     setErrorMessage('')
 
-    // --------------------------------
-    // CHECK USERNAME (FIXED)
-    // --------------------------------
-    const { data: existingUser, error: checkError } = await supabase
-      .from('usernames')
-      .select('username')
-      .eq('username', username)
-      .maybeSingle()
-
-    if (checkError) {
-      setErrorMessage('Error checking username. Try again.')
-      setLoading(false)
-      return
-    }
-
-    if (existingUser) {
-      setErrorMessage(
-        'Another user has already claimed that username'
-      )
-      setLoading(false)
-      return
-    }
-
-    // --------------------------------
-    // CREATE AUTH USER
-    // --------------------------------
+    // 1. Create auth user first
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -59,24 +34,30 @@ export default function HomePage() {
       return
     }
 
-    // --------------------------------
-    // STORE USERNAME
-    // --------------------------------
-    if (data.user) {
-      const { error: insertError } = await supabase
-        .from('usernames')
-        .insert({
-          username: username,
-          user_id: data.user.id,
-        })
+    if (!data.user) {
+      setErrorMessage('Signup failed. Try again.')
+      setLoading(false)
+      return
+    }
 
-      if (insertError) {
-        setErrorMessage(
-          'Another user has already claimed that username'
-        )
-        setLoading(false)
-        return
-      }
+    // 2. Insert username (DB ENFORCES UNIQUENESS)
+    const { error: insertError } = await supabase
+      .from('usernames')
+      .insert({
+        username: username,
+        user_id: data.user.id,
+      })
+
+    // 3. Handle duplicate username properly
+    if (insertError) {
+      await supabase.auth.signOut()
+
+      setErrorMessage(
+        'Another user has already claimed that username'
+      )
+
+      setLoading(false)
+      return
     }
 
     alert('Account created! You can now log in.')
