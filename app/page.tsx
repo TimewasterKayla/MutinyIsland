@@ -12,7 +12,7 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   // -----------------------------
-  // SIGN UP (WITH ROLLBACK LOGIC)
+  // SIGN UP (FIXED ORDER)
   // -----------------------------
   async function signUp() {
     setLoading(true)
@@ -24,7 +24,20 @@ export default function HomePage() {
       return
     }
 
-    // 1. Create auth user
+    // 1. CHECK USERNAME FIRST (IMPORTANT FIX)
+    const { data: existingUser } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('username', username)
+      .maybeSingle()
+
+    if (existingUser) {
+      setErrorMessage('Another user has already claimed that username')
+      setLoading(false)
+      return
+    }
+
+    // 2. CREATE AUTH USER
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -36,36 +49,22 @@ export default function HomePage() {
       return
     }
 
-    const userId = data.user.id
-
-    // 2. Insert profile
+    // 3. CREATE PROFILE
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
-        id: userId,
+        id: data.user.id,
         username,
         email,
         coins: 0,
       })
 
-    // 3. IF PROFILE FAILS → CLEAN UP
     if (profileError) {
-      console.log('Profile insert failed:', profileError)
+      console.log(profileError)
 
-      setErrorMessage(
-        profileError.message.includes('duplicate')
-          ? 'Username or email already taken'
-          : 'Account creation failed'
-      )
+      setErrorMessage('Profile creation failed')
 
-      /**
-       * ⚠️ IMPORTANT LIMITATION:
-       * We cannot safely delete auth users from frontend
-       * without service role key.
-       *
-       * So we sign them out instead to prevent partial login state.
-       */
-
+      // optional cleanup (prevents orphan auth users)
       await supabase.auth.signOut()
 
       setLoading(false)
@@ -77,7 +76,7 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // LOGIN (AUTH ONLY — CORRECT FLOW)
+  // LOGIN (AUTH ONLY)
   // -----------------------------
   async function login() {
     setLoading(true)
@@ -89,7 +88,6 @@ export default function HomePage() {
       return
     }
 
-    // 1. AUTH LOGIN
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -101,7 +99,7 @@ export default function HomePage() {
       return
     }
 
-    // 2. FETCH PROFILE (ONLY AFTER LOGIN)
+    // fetch profile AFTER login
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('username, coins')
@@ -109,7 +107,6 @@ export default function HomePage() {
       .single()
 
     if (profileError || !profile) {
-      console.log(profileError)
       setErrorMessage('Profile not found')
       setLoading(false)
       return
@@ -121,13 +118,15 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
 
-      {/* BACKGROUND */}
+      {/* background */}
       <div className="ocean-bg" />
 
       <div className="w-full max-w-md space-y-6 text-center relative z-10">
 
         <h1 className="text-4xl font-bold">Mutiny Island</h1>
-        <p className="text-sm italic text-zinc-300">Welcome aboard!</p>
+        <p className="text-sm italic text-zinc-300">
+          Welcome aboard!
+        </p>
 
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
