@@ -11,9 +11,9 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
-  // --------------------------------
-  // SIGN UP
-  // --------------------------------
+  // -----------------------------
+  // SIGN UP (ONLY PROFILES)
+  // -----------------------------
   async function signUp() {
     setLoading(true)
     setErrorMessage('')
@@ -24,7 +24,7 @@ export default function HomePage() {
       return
     }
 
-    // 1. create auth user (email/password only)
+    // 1. Create auth user
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -36,7 +36,7 @@ export default function HomePage() {
       return
     }
 
-    // 2. create profile (username + email + coins)
+    // 2. IMPORTANT: ONLY INSERT INTO profiles
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -47,11 +47,11 @@ export default function HomePage() {
       })
 
     if (profileError) {
-      const msg = profileError.message.toLowerCase()
+      console.log(profileError)
 
       setErrorMessage(
-        msg.includes('duplicate') || msg.includes('unique')
-          ? 'Username or email already taken.'
+        profileError.message.includes('duplicate')
+          ? 'Username or email already taken'
           : profileError.message
       )
 
@@ -63,9 +63,9 @@ export default function HomePage() {
     setLoading(false)
   }
 
-  // --------------------------------
-  // LOGIN (USERNAME + EMAIL + PASSWORD)
-  // --------------------------------
+  // -----------------------------
+  // LOGIN (NO PROFILES INSERT EVER)
+  // -----------------------------
   async function login() {
     setLoading(true)
     setErrorMessage('')
@@ -76,27 +76,28 @@ export default function HomePage() {
       return
     }
 
-    // 1. verify username + email match in profiles
-    const { data: profile, error: profileError } = await supabase
+    // 1. VERIFY USERNAME + EMAIL MATCH
+    const { data: profile, error } = await supabase
       .from('profiles')
       .select('username, email')
       .eq('username', username)
       .eq('email', email)
       .single()
 
-    if (profileError || !profile) {
+    if (error || !profile) {
       setErrorMessage('Invalid username or email')
       setLoading(false)
       return
     }
 
-    // 2. login via Supabase Auth
-    const { error } = await supabase.auth.signInWithPassword({
-      email: profile.email,
-      password,
-    })
+    // 2. AUTH LOGIN ONLY
+    const { error: loginError } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
+    if (loginError) {
       setErrorMessage('Incorrect password')
       setLoading(false)
       return
@@ -108,34 +109,22 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
 
-      {/* BACKGROUND */}
       <div className="ocean-bg" />
 
       <div className="w-full max-w-md space-y-6 text-center relative z-10">
 
-        {/* TITLE */}
-        <div>
-          <h1 className="text-4xl font-bold">
-            Mutiny Island
-          </h1>
-          <p className="text-sm italic text-zinc-300 mt-2">
-            Welcome aboard!
-          </p>
-        </div>
+        <h1 className="text-4xl font-bold">Mutiny Island</h1>
+        <p className="text-sm italic text-zinc-300">Welcome aboard!</p>
 
-        {/* FORM */}
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
-          {/* EMAIL */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Email"
-            type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
 
-          {/* USERNAME */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Username"
@@ -143,7 +132,6 @@ export default function HomePage() {
             onChange={(e) => setUsername(e.target.value)}
           />
 
-          {/* PASSWORD */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Password"
@@ -152,14 +140,12 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          {/* ERROR */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
             </p>
           )}
 
-          {/* SIGN UP */}
           <button
             onClick={signUp}
             disabled={loading}
@@ -168,7 +154,6 @@ export default function HomePage() {
             Sign Up
           </button>
 
-          {/* LOGIN */}
           <button
             onClick={login}
             disabled={loading}
