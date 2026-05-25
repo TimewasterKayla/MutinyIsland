@@ -17,7 +17,7 @@ export default function HomePage() {
     setLoading(true)
     setErrorMessage('')
 
-    // 1. Create auth user
+    // 1. Create auth user (EMAIL ONLY)
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -29,7 +29,7 @@ export default function HomePage() {
       return
     }
 
-    // 2. Create profile (THIS is where username uniqueness is enforced)
+    // 2. Save REAL username into profiles table
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -37,7 +37,7 @@ export default function HomePage() {
         username: username,
       })
 
-    // 3. Handle duplicate username (DB constraint handles it)
+    // 3. Handle duplicate username properly
     if (profileError) {
       await supabase.auth.signOut()
 
@@ -93,7 +93,7 @@ export default function HomePage() {
       <div className="bottle b2">🍾</div>
       <div className="bottle b3">🍾</div>
 
-      {/* LOGIN CARD */}
+      {/* CARD */}
       <div className="w-full max-w-md space-y-6 text-center relative z-10">
 
         <div>
@@ -107,7 +107,7 @@ export default function HomePage() {
 
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
-          {/* EMAIL */}
+          {/* EMAIL (AUTH ONLY) */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Email"
@@ -116,7 +116,7 @@ export default function HomePage() {
             onChange={(e) => setEmail(e.target.value)}
           />
 
-          {/* USERNAME */}
+          {/* USERNAME (PROFILE ONLY) */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Username"
@@ -133,7 +133,7 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          {/* ERROR MESSAGE */}
+          {/* ERROR */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
