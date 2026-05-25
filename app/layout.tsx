@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
-import Navbar from "@/components/navbar"
-import { usePathname } from "next/navigation"
+import LayoutClient from "@/components/LayoutClient"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,39 +18,20 @@ export const metadata: Metadata = {
   description: "A multiplayer Survivor-style game simulator",
 }
 
-function LayoutContent({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const pathname = usePathname()
-
-  // Hide navbar on login/home page
-  const hideNavbar = pathname === "/"
-
-  return (
-    <>
-      {!hideNavbar && <Navbar />}
-
-      <main className="flex-1">
-        {children}
-      </main>
-    </>
-  )
-}
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-black text-white">
-        <LayoutContent>{children}</LayoutContent>
+        <LayoutClient>
+          <main className="flex-1">{children}</main>
+        </LayoutClient>
       </body>
     </html>
   )
