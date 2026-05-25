@@ -29,7 +29,7 @@ export default function HomePage() {
       return
     }
 
-    // 2. Insert profile (THIS is where uniqueness is enforced)
+    // 2. Create profile (THIS is where username uniqueness is enforced)
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -37,13 +37,21 @@ export default function HomePage() {
         username: username,
       })
 
-    // 3. If username already exists → rollback
+    // 3. Handle duplicate username (DB constraint handles it)
     if (profileError) {
       await supabase.auth.signOut()
 
-      setErrorMessage(
-        'That username is already taken. Please choose another.'
-      )
+      const msg = profileError.message.toLowerCase()
+
+      if (
+        msg.includes('duplicate') ||
+        msg.includes('unique') ||
+        msg.includes('already exists')
+      ) {
+        setErrorMessage('That username is already taken.')
+      } else {
+        setErrorMessage(profileError.message)
+      }
 
       setLoading(false)
       return
@@ -125,7 +133,7 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          {/* ERROR */}
+          {/* ERROR MESSAGE */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
