@@ -11,14 +11,13 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   // --------------------------------
-  // SIGN UP (FIXED + BULLETPROOF)
+  // SIGN UP (DATABASE ENFORCED)
   // --------------------------------
   async function signUp() {
     setLoading(true)
     setErrorMessage('')
 
-    // 1. Create auth user first
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -28,34 +27,30 @@ export default function HomePage() {
       },
     })
 
-    if (error || !data.user) {
-      setErrorMessage(error?.message || 'Signup failed')
-      setLoading(false)
-      return
-    }
+    // --------------------------------
+    // HANDLE ERRORS (INCLUDING DUPLICATE USERNAME)
+    // --------------------------------
+    if (error) {
+      const msg = error.message.toLowerCase()
 
-    // 2. Insert username into DB (THIS ENFORCES UNIQUENESS)
-    const { error: insertError } = await supabase
-      .from('usernames')
-      .insert({
-        username: username,
-        user_id: data.user.id,
-      })
-
-    // 3. If username already exists → rollback account
-    if (insertError) {
-      await supabase.auth.signOut()
-
-      setErrorMessage(
-        'Another user has already claimed that username'
-      )
+      if (
+        msg.includes('duplicate') ||
+        msg.includes('already exists') ||
+        msg.includes('unique')
+      ) {
+        setErrorMessage(
+          'Another user has already claimed that username'
+        )
+      } else {
+        setErrorMessage(error.message)
+      }
 
       setLoading(false)
       return
     }
 
-    setLoading(false)
     alert('Account created! You can now log in.')
+    setLoading(false)
   }
 
   // --------------------------------
@@ -107,6 +102,7 @@ export default function HomePage() {
         {/* FORM */}
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
+          {/* EMAIL */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Email"
@@ -115,6 +111,7 @@ export default function HomePage() {
             onChange={(e) => setEmail(e.target.value)}
           />
 
+          {/* USERNAME */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Username"
@@ -122,6 +119,7 @@ export default function HomePage() {
             onChange={(e) => setUsername(e.target.value)}
           />
 
+          {/* PASSWORD */}
           <input
             className="w-full p-3 rounded bg-zinc-800"
             placeholder="Password"
@@ -130,7 +128,7 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          {/* ERROR */}
+          {/* ERROR MESSAGE */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
