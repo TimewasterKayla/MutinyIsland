@@ -9,10 +9,8 @@ export default function Navbar() {
   const [username, setUsername] = useState<string | null>(null)
 
   useEffect(() => {
-    // initial load
     getUser()
 
-    // listen for login/logout changes
     const { data: listener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (session?.user) {
@@ -49,32 +47,46 @@ export default function Navbar() {
 
   async function logout() {
     await supabase.auth.signOut()
-    setUsername(null) // 👈 instantly clear UI
+    setUsername(null)
     router.push('/')
   }
 
   return (
-    <nav className="w-full bg-zinc-900 text-white flex items-center justify-between px-6 py-3">
-      <div className="flex gap-4">
-        <button onClick={() => router.push('/games')}>
+    <nav className="w-full bg-zinc-900 text-white px-6 py-3 flex items-center justify-between">
+
+      {/* LEFT (empty for balance) */}
+      <div className="w-1/3" />
+
+      {/* CENTER BUTTONS */}
+      <div className="w-1/3 flex justify-center gap-4">
+        <button
+          onClick={() => router.push('/games')}
+          className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition cursor-pointer"
+        >
           Games
         </button>
 
         {username && (
-          <button onClick={() => router.push(`/profile/${username}`)}>
+          <button
+            onClick={() => router.push(`/profile/${username}`)}
+            className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition cursor-pointer"
+          >
             {username}'s Profile
           </button>
         )}
       </div>
 
-      {username && (
-        <button
-          onClick={logout}
-          className="bg-red-500 px-3 py-1 rounded"
-        >
-          Logout
-        </button>
-      )}
+      {/* RIGHT (logout stays right) */}
+      <div className="w-1/3 flex justify-end">
+        {username && (
+          <button
+            onClick={logout}
+            className="bg-red-500 px-3 py-1 rounded hover:bg-red-600 active:scale-95 transition cursor-pointer"
+          >
+            Logout
+          </button>
+        )}
+      </div>
     </nav>
   )
 }
