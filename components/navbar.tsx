@@ -7,8 +7,10 @@ import { usePresence } from "@/lib/usePresence"
 
 export default function Navbar() {
   const router = useRouter()
+
   const [username, setUsername] = useState<string | null>(null)
   const [onlineCount, setOnlineCount] = useState(0)
+  const [coins, setCoins] = useState(0)
 
   // ----------------------------
   // AUTH
@@ -17,15 +19,19 @@ export default function Navbar() {
     getUser()
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         if (session?.user) {
           const name =
             session.user.user_metadata?.username ||
             session.user.email?.split('@')[0]
 
           setUsername(name)
+
+          // fetch coins when auth changes
+          fetchCoins(session.user.id)
         } else {
           setUsername(null)
+          setCoins(0)
         }
       }
     )
@@ -48,18 +54,23 @@ export default function Navbar() {
       data.user.email?.split('@')[0]
 
     setUsername(name)
+
+    // fetch coins on page load
+    fetchCoins(data.user.id)
   }
 
   // ----------------------------
-  // 🔥 THIS IS THE FIX (ACTUALLY TRACK PRESENCE)
+  // PRESENCE SYSTEM
   // ----------------------------
   usePresence(username)
 
   // ----------------------------
-  // ONLINE USERS
+  // FETCH ONLINE USERS
   // ----------------------------
   async function fetchOnlineUsers() {
-    const { data } = await supabase.from('user_presence').select('*')
+    const { data } = await supabase
+      .from('user_presence')
+      .select('*')
 
     if (!data) return
 
@@ -82,11 +93,29 @@ export default function Navbar() {
   }, [])
 
   // ----------------------------
+  // FETCH COINS
+  // ----------------------------
+  async function fetchCoins(userId: string | null) {
+    if (!userId) return
+
+    const { data } = await supabase
+      .from('user_coins')
+      .select('coins')
+      .eq('user_id', userId)
+      .single()
+
+    if (data?.coins !== undefined) {
+      setCoins(data.coins)
+    }
+  }
+
+  // ----------------------------
   // LOGOUT
   // ----------------------------
   async function logout() {
     await supabase.auth.signOut()
     setUsername(null)
+    setCoins(0)
     router.push('/')
   }
 
@@ -144,8 +173,22 @@ export default function Navbar() {
 
       </div>
 
-      {/* RIGHT: LOGOUT */}
-      <div className="w-1/3 flex justify-end">
+      {/* RIGHT: COINS + LOGOUT */}
+      <div className="w-1/3 flex justify-end items-center gap-3">
+
+        {/* COINS */}
+        <div className="flex items-center gap-1 text-sm text-yellow-300">
+
+          <img
+            src="/coin.png"
+            alt="coin"
+            className="w-4 h-4"
+          />
+
+          <span>{coins}</span>
+        </div>
+
+        {/* LOGOUT */}
         {username && (
           <button
             onClick={logout}
@@ -154,6 +197,7 @@ export default function Navbar() {
             Logout
           </button>
         )}
+
       </div>
 
     </nav>
