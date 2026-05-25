@@ -11,46 +11,53 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   // --------------------------------
-  // SIGN UP (DATABASE ENFORCED)
+  // SIGN UP (SAFE + STABLE FLOW)
   // --------------------------------
   async function signUp() {
     setLoading(true)
     setErrorMessage('')
 
-    const { error } = await supabase.auth.signUp({
+    // 1. Create auth user
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          username: username,
-        },
-      },
     })
 
-    // --------------------------------
-    // HANDLE ERRORS (INCLUDING DUPLICATE USERNAME)
-    // --------------------------------
-    if (error) {
-      const msg = error.message.toLowerCase()
+    if (error || !data.user) {
+      setErrorMessage(error?.message || 'Signup failed')
+      setLoading(false)
+      return
+    }
 
-      if (
-        msg.includes('duplicate') ||
-        msg.includes('already exists') ||
-        msg.includes('unique')
-      ) {
+    // 2. Create profile AFTER auth succeeds
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: data.user.id,
+        username: username,
+      })
+
+    // 3. Handle duplicate username cleanly
+    if (profileError) {
+      await supabase.auth.signOut()
+
+      // More accurate message if it's a duplicate
+      const msg = profileError.message.toLowerCase()
+
+      if (msg.includes('duplicate') || msg.includes('unique')) {
         setErrorMessage(
           'Another user has already claimed that username'
         )
       } else {
-        setErrorMessage(error.message)
+        setErrorMessage(profileError.message)
       }
 
       setLoading(false)
       return
     }
 
-    alert('Account created! You can now log in.')
     setLoading(false)
+    alert('Account created successfully!')
   }
 
   // --------------------------------
@@ -77,29 +84,26 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
 
-      {/* 🌊 OCEAN BACKGROUND */}
+      {/* 🌊 BACKGROUND */}
       <div className="ocean-bg" />
 
-      {/* 🍾 FLOATING BOTTLES */}
+      {/* 🍾 DECOR */}
       <div className="bottle b1">🍾</div>
       <div className="bottle b2">🍾</div>
       <div className="bottle b3">🍾</div>
 
-      {/* LOGIN CONTENT */}
+      {/* LOGIN CARD */}
       <div className="w-full max-w-md space-y-6 text-center relative z-10">
 
-        {/* TITLE */}
         <div>
           <h1 className="text-4xl font-bold">
             Mutiny Island
           </h1>
-
           <p className="text-sm italic text-zinc-300 mt-2">
             Welcome aboard!
           </p>
         </div>
 
-        {/* FORM */}
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
           {/* EMAIL */}
@@ -128,7 +132,7 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          {/* ERROR MESSAGE */}
+          {/* ERROR */}
           {errorMessage && (
             <p className="text-red-400 italic text-sm">
               {errorMessage}
