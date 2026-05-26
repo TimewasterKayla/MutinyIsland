@@ -7,6 +7,7 @@ export default function HomePage() {
   const [posts, setPosts] = useState<any[]>([])
   const [showModal, setShowModal] = useState(false)
   const [postContent, setPostContent] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
@@ -41,10 +42,10 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // CREATE POST
+  // CREATE POST (with optional image)
   // -----------------------------
   async function createPost() {
-    if (!postContent.trim()) return
+    if (!postContent.trim() && !imageUrl.trim()) return
 
     setLoading(true)
 
@@ -58,12 +59,14 @@ export default function HomePage() {
 
     const { error } = await supabase.from('posts').insert({
       content: postContent,
+      image_url: imageUrl || null,
       user_id: user.data.user?.id,
       username: profile?.username || 'unknown',
     })
 
     if (!error) {
       setPostContent('')
+      setImageUrl('')
       setShowModal(false)
       fetchPosts()
     }
@@ -117,7 +120,7 @@ export default function HomePage() {
               {currentUserId === post.user_id && (
                 <button
                   onClick={() => deletePost(post.id)}
-                  className="absolute top-3 right-3 bg-red-600 hover:bg-red-500 rounded-lg p-2 transition active:scale-95"
+                  className="absolute top-3 right-3 bg-red-600 hover:bg-red-500 rounded-lg p-2 transition active:scale-95 cursor-pointer"
                 >
                   <img
                     src="/trash.png"
@@ -131,7 +134,19 @@ export default function HomePage() {
                 {post.username}
               </p>
 
-              <p>{post.content}</p>
+              {/* TEXT */}
+              {post.content && (
+                <p className="mb-2">{post.content}</p>
+              )}
+
+              {/* IMAGE (optional) */}
+              {post.image_url && (
+                <img
+                  src={post.image_url}
+                  alt="post"
+                  className="rounded-lg max-w-full mt-2 border border-zinc-700"
+                />
+              )}
 
             </div>
           ))}
@@ -149,11 +164,20 @@ export default function HomePage() {
 
             <h2 className="text-xl font-bold">Create Post</h2>
 
+            {/* TEXT INPUT */}
             <textarea
               className="w-full p-3 rounded bg-zinc-800"
               placeholder="What's happening?"
               value={postContent}
               onChange={(e) => setPostContent(e.target.value)}
+            />
+
+            {/* IMAGE URL INPUT */}
+            <input
+              className="w-full p-3 rounded bg-zinc-800"
+              placeholder="Image URL (optional - jpg/png link)"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
             />
 
             <div className="flex justify-end gap-2">
