@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
 type Player = {
@@ -12,6 +12,8 @@ type Player = {
 type Message = {
   id: string
   content: string
+  sender_id: string
+  username?: string
 }
 
 export default function SeasonPage({
@@ -26,9 +28,13 @@ export default function SeasonPage({
   const [voteTarget, setVoteTarget] = useState('')
   const [lobby, setLobby] = useState<any>(null)
 
+  const chatRef = useRef<HTMLDivElement>(null)
+
   const MAX_PLAYERS = 16
 
-  // Unwrap params (handles both Next 14 and 15)
+  // -----------------------------
+  // UNWRAP PARAMS
+  // -----------------------------
   useEffect(() => {
     Promise.resolve(params).then((p) => {
       setLobbyId(p.id)
@@ -47,10 +53,21 @@ export default function SeasonPage({
 
     const interval = setInterval(() => {
       loadPlayers()
+      loadMessages()
     }, 3000)
 
     return () => clearInterval(interval)
   }, [lobbyId])
+
+  // -----------------------------
+  // AUTO SCROLL CHAT TO BOTTOM
+  // -----------------------------
+  useEffect(() => {
+    if (chatRef.current) {
+      chatRef.current.scrollTop =
+        chatRef.current.scrollHeight
+    }
+  }, [messages])
 
   // -----------------------------
   // LOBBY
@@ -86,14 +103,10 @@ export default function SeasonPage({
 
     const userIds = data.map((p) => p.user_id)
 
-    const { data: profileData, error: profileError } = await supabase
+    const { data: profileData } = await supabase
       .from('profiles')
       .select('id, username')
       .in('id', userIds)
-
-    if (profileError) {
-      console.error('PROFILE ERROR:', profileError)
-    }
 
     const profileMap = Object.fromEntries(
       (profileData || []).map((p) => [p.id, p.username])
@@ -103,7 +116,9 @@ export default function SeasonPage({
       data.map((p) => ({
         id: p.id,
         user_id: p.user_id,
-        username: profileMap[p.user_id] ?? p.user_id.slice(0, 8),
+        username:
+          profileMap[p.user_id] ??
+          p.user_id.slice(0, 8),
       }))
     )
   }
@@ -112,26 +127,64 @@ export default function SeasonPage({
   // MESSAGES
   // -----------------------------
   async function loadMessages() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
       .select('*')
       .eq('season_id', lobbyId)
       .order('created_at', { ascending: true })
 
-    setMessages(data || [])
+    if (error) {
+      console.error('MESSAGE LOAD ERROR:', error)
+      return
+    }
+
+    if (!data || data.length === 0) {
+      setMessages([])
+      return
+    }
+
+    const senderIds = [
+      ...new Set(data.map((m) => m.sender_id)),
+    ]
+
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('id, username')
+      .in('id', senderIds)
+
+    const profileMap = Object.fromEntries(
+      (profileData || []).map((p) => [p.id, p.username])
+    )
+
+    setMessages(
+      data.map((m) => ({
+        ...m,
+        username:
+          profileMap[m.sender_id] ??
+          m.sender_id.slice(0, 8),
+      }))
+    )
   }
 
+  // -----------------------------
+  // SEND MESSAGE
+  // -----------------------------
   async function sendMessage() {
-    if (!text) return
+    if (!text.trim()) return
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     if (!user) return
 
-    const { error } = await supabase.from('messages').insert({
-      season_id: lobbyId,
-      sender_id: user.id,
-      content: text,
-    })
+    const { error } = await supabase
+      .from('messages')
+      .insert({
+        season_id: lobbyId,
+        sender_id: user.id,
+        content: text.trim(),
+      })
 
     if (error) {
       console.error('MESSAGE ERROR:', error)
@@ -142,15 +195,23 @@ export default function SeasonPage({
     loadMessages()
   }
 
+  // -----------------------------
+  // VOTING
+  // -----------------------------
   async function castVote() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     if (!user || !voteTarget) return
 
-    const { error } = await supabase.from('votes').insert({
-      season_id: lobbyId,
-      voter_id: user.id,
-      target_id: voteTarget,
-    })
+    const { error } = await supabase
+      .from('votes')
+      .insert({
+        season_id: lobbyId,
+        voter_id: user.id,
+        target_id: voteTarget,
+      })
 
     if (error) {
       console.error('VOTE ERROR:', error)
@@ -161,35 +222,47 @@ export default function SeasonPage({
   }
 
   // -----------------------------
-  // DAY SYSTEM (12hr cycles)
+  // DAY SYSTEM
   // -----------------------------
   function getDayNumber() {
     if (!lobby?.started_at) return 0
 
-    const start = new Date(lobby.started_at).getTime()
+    const start = new Date(
+      lobby.started_at
+    ).getTime()
+
     const now = Date.now()
 
-    const hoursPassed = (now - start) / (1000 * 60 * 60)
+    const hoursPassed =
+      (now - start) / (1000 * 60 * 60)
+
     return Math.floor(hoursPassed / 12) + 1
   }
 
   const day = getDayNumber()
 
   // -----------------------------
+  // LOADING
+  // -----------------------------
+  if (!lobbyId) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
+        Loading...
+      </div>
+    )
+  }
+
+  // -----------------------------
   // UI
   // -----------------------------
-  if (!lobbyId) return (
-    <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
-      Loading...
-    </div>
-  )
-
   return (
     <main className="min-h-screen bg-zinc-950 text-white grid grid-cols-3 gap-6 p-6">
 
       {/* PLAYERS */}
       <div className="bg-zinc-900 rounded-2xl p-6">
-        <h2 className="text-3xl font-bold mb-4">Players</h2>
+        <h2 className="text-3xl font-bold mb-4">
+          Players
+        </h2>
 
         <div className="space-y-2">
           {players.map((player) => (
@@ -203,33 +276,56 @@ export default function SeasonPage({
         </div>
 
         <p className="italic text-zinc-400 mt-4">
-          Waiting for players ({players.length}/{MAX_PLAYERS})
+          Waiting for players (
+          {players.length}/{MAX_PLAYERS})
         </p>
       </div>
 
       {/* CHAT */}
-      <div className="bg-zinc-900 rounded-2xl p-6 flex flex-col">
-        <h2 className="text-3xl font-bold mb-4">Tribe Chat</h2>
+      <div className="bg-zinc-900 rounded-2xl p-6 flex flex-col h-[85vh]">
 
-        <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+        <h2 className="text-3xl font-bold mb-4">
+          Tribe Chat
+        </h2>
+
+        <div
+          ref={chatRef}
+          className="flex-1 overflow-y-auto space-y-3 mb-4 pr-2"
+        >
           {messages.map((m) => (
-            <div key={m.id} className="bg-zinc-800 p-2 rounded">
-              {m.content}
+            <div
+              key={m.id}
+              className="bg-zinc-800 p-3 rounded"
+            >
+              <p className="text-yellow-400 font-bold text-sm mb-1">
+                {m.username}
+              </p>
+
+              <p className="text-white">
+                {m.content}
+              </p>
             </div>
           ))}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 mt-auto">
           <input
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) =>
+              setText(e.target.value)
+            }
             className="flex-1 bg-zinc-800 p-3 rounded"
             placeholder="Type message..."
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                sendMessage()
+              }
+            }}
           />
 
           <button
             onClick={sendMessage}
-            className="bg-yellow-500 text-black px-4 rounded"
+            className="bg-yellow-500 text-black px-4 rounded font-bold"
           >
             Send
           </button>
@@ -245,13 +341,20 @@ export default function SeasonPage({
 
         <select
           value={voteTarget}
-          onChange={(e) => setVoteTarget(e.target.value)}
+          onChange={(e) =>
+            setVoteTarget(e.target.value)
+          }
           className="w-full p-3 rounded mb-4 border"
         >
-          <option value="">Select Player</option>
+          <option value="">
+            Select Player
+          </option>
 
           {players.map((p) => (
-            <option key={p.user_id} value={p.user_id}>
+            <option
+              key={p.user_id}
+              value={p.user_id}
+            >
               {p.username}
             </option>
           ))}
