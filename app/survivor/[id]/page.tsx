@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase'
 type Player = {
   id: string
   user_id: string
-  tribe: string | null
   profiles: {
     username: string
   } | null
@@ -51,23 +50,27 @@ export default function SeasonPage({
   // LOBBY
   // -----------------------------
   async function loadLobby() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('lobbies')
       .select('*')
       .eq('id', lobbyId)
       .single()
 
+    if (error) {
+      console.error('LOBBY ERROR:', error)
+      return
+    }
+
     setLobby(data)
   }
 
   // -----------------------------
-  // PLAYERS (FIXED - NO BROKEN JOIN)
+  // PLAYERS (STABLE + SAFE)
   // -----------------------------
   async function loadPlayers() {
-    // STEP 1: get lobby players
     const { data: lobbyPlayers, error } = await supabase
       .from('lobby_players')
-      .select('id, user_id, tribe')
+      .select('id, user_id')
       .eq('lobby_id', lobbyId)
 
     if (error) {
@@ -80,22 +83,30 @@ export default function SeasonPage({
       return
     }
 
-    // STEP 2: get profiles separately
     const userIds = lobbyPlayers.map((p) => p.user_id)
 
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profileError } = await supabase
       .from('profiles')
       .select('id, username')
       .in('id', userIds)
 
-    // STEP 3: merge manually
-    const merged: Player[] = lobbyPlayers.map((p) => ({
-      id: p.id,
-      user_id: p.user_id,
-      tribe: p.tribe ?? null,
-      profiles:
-        profiles?.find((x) => x.id === p.user_id) || null,
-    }))
+    if (profileError) {
+      console.error('PROFILE ERROR:', profileError)
+    }
+
+    const merged: Player[] = lobbyPlayers.map((p) => {
+      const profile = profiles?.find((x) => x.id === p.user_id)
+
+      return {
+        id: p.id,
+        user_id: p.user_id,
+        profiles: profile
+          ? { username: profile.username }
+          : null,
+      }
+    })
+
+    console.log('LOBBY PLAYERS:', merged)
 
     setPlayers(merged)
   }
@@ -119,11 +130,16 @@ export default function SeasonPage({
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    await supabase.from('messages').insert({
+    const { error } = await supabase.from('messages').insert({
       season_id: lobbyId,
       sender_id: user.id,
       content: text,
     })
+
+    if (error) {
+      console.error('MESSAGE ERROR:', error)
+      return
+    }
 
     setText('')
     loadMessages()
@@ -133,11 +149,16 @@ export default function SeasonPage({
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || !voteTarget) return
 
-    await supabase.from('votes').insert({
+    const { error } = await supabase.from('votes').insert({
       season_id: lobbyId,
       voter_id: user.id,
       target_id: voteTarget,
     })
+
+    if (error) {
+      console.error('VOTE ERROR:', error)
+      return
+    }
 
     alert('Vote submitted')
   }
