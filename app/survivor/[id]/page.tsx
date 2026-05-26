@@ -71,7 +71,7 @@ export default function SeasonPage({
   async function loadPlayers() {
     const { data, error } = await supabase
       .from('lobby_players')
-      .select('id, user_id, profiles(username)')
+      .select('id, user_id')
       .eq('lobby_id', lobbyId)
 
     if (error) {
@@ -79,11 +79,31 @@ export default function SeasonPage({
       return
     }
 
+    if (!data || data.length === 0) {
+      setPlayers([])
+      return
+    }
+
+    const userIds = data.map((p) => p.user_id)
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, username')
+      .in('id', userIds)
+
+    if (profileError) {
+      console.error('PROFILE ERROR:', profileError)
+    }
+
+    const profileMap = Object.fromEntries(
+      (profileData || []).map((p) => [p.id, p.username])
+    )
+
     setPlayers(
-      (data || []).map((p: any) => ({
+      data.map((p) => ({
         id: p.id,
         user_id: p.user_id,
-        username: p.profiles?.username ?? p.user_id.slice(0, 8),
+        username: profileMap[p.user_id] ?? p.user_id.slice(0, 8),
       }))
     )
   }
@@ -158,7 +178,11 @@ export default function SeasonPage({
   // -----------------------------
   // UI
   // -----------------------------
-  if (!lobbyId) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">Loading...</div>
+  if (!lobbyId) return (
+    <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
+      Loading...
+    </div>
+  )
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white grid grid-cols-3 gap-6 p-6">
