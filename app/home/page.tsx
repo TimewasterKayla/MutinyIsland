@@ -12,7 +12,7 @@ export default function HomePage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   // -----------------------------
-  // GET CURRENT USER
+  // GET USER
   // -----------------------------
   useEffect(() => {
     const getUser = async () => {
@@ -42,49 +42,43 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // CREATE POST (FIXED)
+  // CREATE POST
   // -----------------------------
   async function createPost() {
     if (!postContent.trim() && !imageUrl.trim()) return
 
     setLoading(true)
 
-    try {
-      const { data: userData } = await supabase.auth.getUser()
-      const user = userData.user
+    const { data: userData } = await supabase.auth.getUser()
+    const user = userData.user
 
-      if (!user) {
-        alert('You must be logged in to post')
-        return
-      }
+    if (!user) {
+      setLoading(false)
+      return
+    }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', user.id)
-        .single()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', user.id)
+      .single()
 
-      const { error } = await supabase.from('posts').insert({
-        content: postContent,
-        image_url: imageUrl || null,
-        user_id: user.id,
-        username: profile?.username || 'unknown',
-      })
+    const { error } = await supabase.from('posts').insert({
+      content: postContent,
+      image_url: imageUrl || null,
+      user_id: user.id,
+      username: profile?.username || 'unknown',
+      likes: 0,
+    })
 
-      if (error) {
-        console.error(error)
-        alert('Failed to create post')
-        return
-      }
-
+    if (!error) {
       setPostContent('')
       setImageUrl('')
       setShowModal(false)
       fetchPosts()
-
-    } finally {
-      setLoading(false)
     }
+
+    setLoading(false)
   }
 
   // -----------------------------
@@ -101,6 +95,26 @@ export default function HomePage() {
     }
   }
 
+  // -----------------------------
+  // LIKE TOGGLE (simple version)
+  // -----------------------------
+  async function toggleLike(post: any) {
+    const newLikes = (post.likes || 0) + 1
+
+    const { error } = await supabase
+      .from('posts')
+      .update({ likes: newLikes })
+      .eq('id', post.id)
+
+    if (!error) {
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === post.id ? { ...p, likes: newLikes } : p
+        )
+      )
+    }
+  }
+
   return (
     <main className="min-h-screen flex justify-center text-white bg-zinc-950">
 
@@ -114,7 +128,7 @@ export default function HomePage() {
 
           <button
             onClick={() => setShowModal(true)}
-            className="bg-green-500 hover:bg-green-400 text-black font-bold px-4 py-2 rounded-lg transition active:scale-95"
+            className="bg-green-500 hover:bg-green-400 text-black font-bold px-4 py-2 rounded-lg cursor-pointer transition"
           >
             New Post
           </button>
@@ -129,34 +143,40 @@ export default function HomePage() {
               className="relative bg-zinc-900 p-4 rounded-xl border border-zinc-800"
             >
 
-              {/* DELETE BUTTON */}
+              {/* DELETE */}
               {currentUserId === post.user_id && (
                 <button
                   onClick={() => deletePost(post.id)}
-                  className="absolute top-3 right-3 bg-red-600 hover:bg-red-500 rounded-lg p-2 transition active:scale-95 cursor-pointer"
+                  className="absolute top-3 right-12 bg-red-600 hover:bg-red-500 rounded-lg p-2 cursor-pointer"
                 >
-                  <img
-                    src="/trash.png"
-                    alt="delete"
-                    className="w-4 h-4"
-                  />
+                  <img src="/trash.png" className="w-4 h-4" />
                 </button>
               )}
+
+              {/* LIKE BUTTON */}
+              <button
+                onClick={() => toggleLike(post)}
+                className="absolute top-3 right-3 flex items-center gap-1 cursor-pointer"
+              >
+                <span className="text-xl">
+                  {post.liked ? '❤️' : '🤍'}
+                </span>
+                <span className="text-sm text-zinc-300">
+                  {post.likes || 0}
+                </span>
+              </button>
 
               <p className="text-sm text-zinc-400 mb-2">
                 {post.username}
               </p>
 
-              {/* TEXT */}
               {post.content && (
                 <p className="mb-2">{post.content}</p>
               )}
 
-              {/* IMAGE */}
               {post.image_url && (
                 <img
                   src={post.image_url}
-                  alt="post image"
                   className="rounded-lg max-w-full mt-2 border border-zinc-700"
                 />
               )}
@@ -167,9 +187,7 @@ export default function HomePage() {
 
       </div>
 
-      {/* -----------------------------
-          MODAL
-      ----------------------------- */}
+      {/* MODAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
 
@@ -195,7 +213,7 @@ export default function HomePage() {
 
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 bg-zinc-700 rounded"
+                className="px-4 py-2 bg-zinc-700 rounded cursor-pointer"
               >
                 Cancel
               </button>
@@ -203,7 +221,7 @@ export default function HomePage() {
               <button
                 onClick={createPost}
                 disabled={loading}
-                className="px-4 py-2 bg-green-500 text-black font-bold rounded disabled:opacity-50"
+                className="px-4 py-2 bg-green-500 text-black font-bold rounded cursor-pointer"
               >
                 {loading ? 'Posting...' : 'Post'}
               </button>
