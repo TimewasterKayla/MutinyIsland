@@ -126,7 +126,7 @@ export default function SurvivorPage() {
 
         <button
           onClick={() => joinGame()}
-          className="bg-green-500 text-black px-4 py-2 rounded font-bold mb-6"
+          className="bg-green-500 text-black px-4 py-2 rounded font-bold mb-6 cursor-pointer"
         >
           Join Game
         </button>
@@ -142,14 +142,14 @@ export default function SurvivorPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => joinGame(lobby.id)}
-                  className="bg-white text-black px-3 py-1 rounded"
+                  className="bg-white text-black px-3 py-1 rounded cursor-pointer"
                 >
                   Join
                 </button>
 
                 <button
                   onClick={() => router.push(`/survivor/${lobby.id}`)}
-                  className="bg-zinc-600 px-3 py-1 rounded"
+                  className="bg-zinc-600 px-3 py-1 rounded cursor-pointer"
                 >
                   View
                 </button>
