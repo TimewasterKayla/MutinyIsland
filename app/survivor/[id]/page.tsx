@@ -60,7 +60,7 @@ export default function SeasonPage({
   }, [lobbyId])
 
   // -----------------------------
-  // AUTO SCROLL CHAT TO BOTTOM
+  // AUTO SCROLL TO BOTTOM
   // -----------------------------
   useEffect(() => {
     if (chatRef.current) {
@@ -288,26 +288,30 @@ export default function SeasonPage({
           Tribe Chat
         </h2>
 
+        {/* CHAT AREA */}
         <div
           ref={chatRef}
-          className="flex-1 overflow-y-auto space-y-3 mb-4 pr-2"
+          className="flex-1 overflow-y-auto mb-4 pr-2 flex flex-col justify-end"
         >
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className="bg-zinc-800 p-3 rounded"
-            >
-              <p className="text-yellow-400 font-bold text-sm mb-1">
-                {m.username}
-              </p>
+          <div className="space-y-3">
+            {messages.map((m) => (
+              <div
+                key={m.id}
+                className="bg-zinc-800 p-3 rounded"
+              >
+                <p className="text-yellow-400 font-bold text-sm mb-1">
+                  {m.username}
+                </p>
 
-              <p className="text-white">
-                {m.content}
-              </p>
-            </div>
-          ))}
+                <p className="text-white">
+                  {m.content}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
 
+        {/* INPUT */}
         <div className="flex gap-2 mt-auto">
           <input
             value={text}
@@ -369,7 +373,7 @@ export default function SeasonPage({
 
         {/* DAY DISPLAY */}
         <div className="absolute bottom-4 left-0 right-0 text-center">
-          <p className="font-bold text-2xl tracking-widest uppercase">
+          <p className="font-black text-5xl tracking-[0.3em] uppercase">
             DAY {day}
           </p>
         </div>
