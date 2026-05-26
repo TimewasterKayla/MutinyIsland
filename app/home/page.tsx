@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 
 export default function HomePage() {
   const [posts, setPosts] = useState<any[]>([])
+  const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({})
   const [showModal, setShowModal] = useState(false)
   const [postContent, setPostContent] = useState('')
   const [imageUrl, setImageUrl] = useState('')
@@ -17,14 +18,20 @@ export default function HomePage() {
   useEffect(() => {
     const getUser = async () => {
       const { data } = await supabase.auth.getUser()
-      setCurrentUserId(data.user?.id || null)
+      const user = data.user
+
+      setCurrentUserId(user?.id || null)
+
+      if (user) {
+        fetchLikedPosts(user.id)
+      }
     }
 
     getUser()
   }, [])
 
   // -----------------------------
-  // POSTS
+  // FETCH POSTS
   // -----------------------------
   useEffect(() => {
     fetchPosts()
@@ -36,16 +43,40 @@ export default function HomePage() {
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('FETCH ERROR:', error)
-      return
-    }
-
-    setPosts(data || [])
+    if (!error && data) setPosts(data)
   }
 
   // -----------------------------
-  // CREATE POST (FIXED)
+  // FETCH USER LIKES
+  // -----------------------------
+  async function fetchLikedPosts(userId: string) {
+    const { data } = await supabase
+      .from('post_likes')
+      .select('post_id')
+      .eq('user_id', userId)
+
+    const map: Record<string, boolean> = {}
+    data?.forEach((l) => {
+      map[l.post_id] = true
+    })
+
+    setLikedPosts(map)
+  }
+
+  // -----------------------------
+  // FORMAT DATE
+  // -----------------------------
+  function formatDate(dateString: string) {
+    const d = new Date(dateString)
+    return d.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
+
+  // -----------------------------
+  // CREATE POST
   // -----------------------------
   async function createPost() {
     if (!postContent.trim() && !imageUrl.trim()) return
@@ -55,36 +86,21 @@ export default function HomePage() {
     const { data: userData } = await supabase.auth.getUser()
     const user = userData.user
 
-    if (!user) {
-      alert('Not logged in')
-      setLoading(false)
-      return
-    }
+    if (!user) return
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from('profiles')
       .select('username')
       .eq('id', user.id)
       .single()
 
-    if (profileError) {
-      console.error(profileError)
-    }
-
-    const { error } = await supabase.from('posts').insert({
+    await supabase.from('posts').insert({
       content: postContent,
       image_url: imageUrl || null,
       user_id: user.id,
       username: profile?.username || 'unknown',
       likes: 0,
     })
-
-    if (error) {
-      console.error('POST ERROR:', error)
-      alert(error.message)
-      setLoading(false)
-      return
-    }
 
     setPostContent('')
     setImageUrl('')
@@ -97,53 +113,48 @@ export default function HomePage() {
   // DELETE POST
   // -----------------------------
   async function deletePost(postId: string) {
-    const { error } = await supabase
-      .from('posts')
-      .delete()
-      .eq('id', postId)
-
-    if (error) {
-      console.error('DELETE ERROR:', error)
-      return
-    }
-
-    setPosts((prev) => prev.filter((p) => p.id !== postId))
+    await supabase.from('posts').delete().eq('id', postId)
+    setPosts((p) => p.filter((x) => x.id !== postId))
   }
 
   // -----------------------------
-  // LIKE (FIXED UPDATE FLOW)
+  // TOGGLE LIKE (REAL SYSTEM)
   // -----------------------------
   async function toggleLike(post: any) {
-    const newLikes = (post.likes || 0) + 1
+    if (!currentUserId) return
 
-    const { error } = await supabase
-      .from('posts')
-      .update({ likes: newLikes })
-      .eq('id', post.id)
+    const isLiked = likedPosts[post.id]
 
-    if (error) {
-      console.error('LIKE ERROR:', error)
-      alert(error.message)
-      return
+    if (isLiked) {
+      // unlike
+      await supabase
+        .from('post_likes')
+        .delete()
+        .eq('post_id', post.id)
+        .eq('user_id', currentUserId)
+
+      await supabase
+        .from('posts')
+        .update({ likes: (post.likes || 1) - 1 })
+        .eq('id', post.id)
+
+      setLikedPosts((prev) => ({ ...prev, [post.id]: false }))
+    } else {
+      // like
+      await supabase.from('post_likes').insert({
+        post_id: post.id,
+        user_id: currentUserId,
+      })
+
+      await supabase
+        .from('posts')
+        .update({ likes: (post.likes || 0) + 1 })
+        .eq('id', post.id)
+
+      setLikedPosts((prev) => ({ ...prev, [post.id]: true }))
     }
 
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === post.id ? { ...p, likes: newLikes } : p
-      )
-    )
-  }
-
-  // -----------------------------
-  // DATE FORMAT
-  // -----------------------------
-  function formatDate(dateString: string) {
-    const d = new Date(dateString)
-    return d.toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    fetchPosts()
   }
 
   return (
@@ -151,7 +162,7 @@ export default function HomePage() {
 
       <div className="w-full max-w-2xl px-4 py-8">
 
-        {/* TOP */}
+        {/* TOP BAR */}
         <div className="flex justify-between items-center mb-6">
 
           <h1 className="text-3xl font-bold">Mutiny Island</h1>
@@ -173,25 +184,35 @@ export default function HomePage() {
               className="relative bg-zinc-900 p-4 rounded-xl border border-zinc-800"
             >
 
-              {/* DELETE */}
-              {currentUserId === post.user_id && (
+              {/* RIGHT SIDE STACK */}
+              <div className="absolute top-3 right-3 flex flex-col items-end gap-2">
+
+                {/* LIKE */}
                 <button
-                  onClick={() => deletePost(post.id)}
-                  className="absolute top-3 right-12 bg-red-600 p-2 rounded cursor-pointer"
+                  onClick={() => toggleLike(post)}
+                  className="flex items-center gap-1 cursor-pointer"
                 >
-                  🗑
+                  <span className="text-xl">
+                    {likedPosts[post.id] ? '❤️' : '🤍'}
+                  </span>
+                  <span className="text-sm text-zinc-300">
+                    {post.likes || 0}
+                  </span>
                 </button>
-              )}
 
-              {/* LIKE */}
-              <button
-                onClick={() => toggleLike(post)}
-                className="absolute top-3 right-3 flex items-center gap-1 cursor-pointer"
-              >
-                🤍 <span>{post.likes || 0}</span>
-              </button>
+                {/* DELETE */}
+                {currentUserId === post.user_id && (
+                  <button
+                    onClick={() => deletePost(post.id)}
+                    className="bg-red-600 hover:bg-red-500 p-2 rounded cursor-pointer"
+                  >
+                    🗑
+                  </button>
+                )}
 
-              {/* USER */}
+              </div>
+
+              {/* USER + DATE */}
               <p className="text-sm text-zinc-400 mb-2">
                 {post.username} • {formatDate(post.created_at)}
               </p>
@@ -215,6 +236,7 @@ export default function HomePage() {
       {/* MODAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center">
+
           <div className="bg-zinc-900 p-6 rounded-xl w-full max-w-md space-y-3">
 
             <textarea
