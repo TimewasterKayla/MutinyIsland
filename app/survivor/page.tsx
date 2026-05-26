@@ -4,63 +4,124 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export default function SurvivorPage() {
-  const [seasons, setSeasons] = useState<any[]>([])
+  const [lobbies, setLobbies] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    loadSeasons()
-  }, [])
-
-  async function loadSeasons() {
+  // -----------------------------
+  // LOAD PUBLIC LOBBIES
+  // -----------------------------
+  async function fetchLobbies() {
     const { data } = await supabase
-      .from('seasons')
+      .from('lobbies')
       .select('*')
-      .order('created_at', { ascending: false })
+      .eq('status', 'open')
 
-    if (data) setSeasons(data)
+    setLobbies(data || [])
   }
 
-  async function createSeason() {
-    const { data: game } = await supabase
-      .from('games')
+  useEffect(() => {
+    fetchLobbies()
+  }, [])
+
+  // -----------------------------
+  // JOIN GAME LOGIC
+  // -----------------------------
+  async function joinGame(lobbyId?: string) {
+    setLoading(true)
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    // 1. CHECK IF USER ALREADY IN A GAME
+    const { data: existing } = await supabase
+      .from('lobby_players')
       .select('*')
-      .eq('name', 'Survivor')
-      .single()
+      .eq('user_id', user.id)
+      .maybeSingle()
 
-    if (!game) return
+    if (existing) {
+      alert('You are already in a game')
+      setLoading(false)
+      return
+    }
 
-    await supabase.from('seasons').insert({
-      game_id: game.id,
-      next_deadline: new Date(Date.now() + 1000 * 60 * 60 * 12),
+    let targetLobbyId = lobbyId
+
+    // 2. IF NO LOBBY SELECTED → FIND OPEN OR CREATE ONE
+    if (!targetLobbyId) {
+      const { data: openLobby } = await supabase
+        .from('lobbies')
+        .select('*')
+        .eq('status', 'open')
+        .limit(1)
+        .maybeSingle()
+
+      if (openLobby) {
+        targetLobbyId = openLobby.id
+      } else {
+        const { data: newLobby } = await supabase
+          .from('lobbies')
+          .insert({ status: 'open' })
+          .select()
+          .single()
+
+        targetLobbyId = newLobby.id
+      }
+    }
+
+    // 3. JOIN LOBBY
+    await supabase.from('lobby_players').insert({
+      lobby_id: targetLobbyId,
+      user_id: user.id,
     })
 
-    loadSeasons()
+    setLoading(false)
+    fetchLobbies()
+
+    alert('Joined game!')
   }
 
   return (
-    <main className="min-h-screen bg-black text-white p-10">
-      <div className="flex justify-between items-center mb-10">
-        <h1 className="text-5xl font-bold">Survivor Seasons</h1>
+    <div className="min-h-screen text-white flex">
+
+      {/* LEFT COLUMN */}
+      <div className="w-1/2 p-6 border-r border-zinc-700">
+        <h1 className="text-3xl font-bold mb-4">Public Islands</h1>
 
         <button
-          onClick={createSeason}
-          className="bg-yellow-500 text-black px-6 py-3 rounded-xl font-bold"
+          onClick={() => joinGame()}
+          className="bg-green-500 text-black px-4 py-2 rounded font-bold mb-6"
         >
-          Create Season
+          Join Game
         </button>
+
+        <div className="space-y-3">
+          {lobbies.map((lobby) => (
+            <div
+              key={lobby.id}
+              className="bg-zinc-800 p-3 rounded flex justify-between"
+            >
+              <span>Island #{lobby.id.slice(0, 6)}</span>
+
+              <button
+                onClick={() => joinGame(lobby.id)}
+                className="bg-white text-black px-3 py-1 rounded"
+              >
+                Join
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="grid gap-6">
-        {seasons.map((season) => (
-          <a
-            key={season.id}
-            href={`/survivor/${season.id}`}
-            className="bg-zinc-900 p-6 rounded-2xl"
-          >
-            <h2 className="text-2xl font-bold">Season {season.id.slice(0, 6)}</h2>
-            <p>Status: {season.status}</p>
-          </a>
-        ))}
+      {/* RIGHT COLUMN */}
+      <div className="w-1/2 p-6">
+        <h1 className="text-3xl font-bold">Private Islands</h1>
       </div>
-    </main>
+
+    </div>
   )
 }
