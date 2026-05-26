@@ -24,48 +24,56 @@ export default function HomePage() {
       return
     }
 
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/signup`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // IMPORTANT: required for Supabase Edge Functions
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          username,
-        }),
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/signup`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            username,
+          }),
+        }
+      )
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setErrorMessage(data.error || 'Signup failed')
+        setLoading(false)
+        return
       }
-    )
 
-    const data = await res.json()
-
-    if (!res.ok) {
-      setErrorMessage(data.error || 'Signup failed')
-      setLoading(false)
-      return
+      alert('Account created successfully!')
+    } catch (err) {
+      console.error(err)
+      setErrorMessage('Something went wrong')
     }
 
-    alert('Account created successfully!')
     setLoading(false)
   }
 
   // -----------------------------
-  // LOGIN (AUTH ONLY)
+  // LOGIN
   // -----------------------------
   async function login() {
     setLoading(true)
     setErrorMessage('')
 
-    if (!email || !password) {
-      setErrorMessage('Please enter email and password')
+    if (!email || !password || !username) {
+      setErrorMessage('Please fill in all fields')
       setLoading(false)
       return
     }
 
+    // ---------------------------------
+    // SIGN IN WITH EMAIL/PASSWORD
+    // ---------------------------------
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -77,6 +85,9 @@ export default function HomePage() {
       return
     }
 
+    // ---------------------------------
+    // FETCH PROFILE
+    // ---------------------------------
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('username, coins')
@@ -84,11 +95,30 @@ export default function HomePage() {
       .single()
 
     if (profileError || !profile) {
+      await supabase.auth.signOut()
+
       setErrorMessage('Profile not found')
       setLoading(false)
       return
     }
 
+    // ---------------------------------
+    // VERIFY USERNAME MATCH
+    // ---------------------------------
+    if (
+      profile.username.toLowerCase() !==
+      username.toLowerCase()
+    ) {
+      await supabase.auth.signOut()
+
+      setErrorMessage('Incorrect username')
+      setLoading(false)
+      return
+    }
+
+    // ---------------------------------
+    // SUCCESS
+    // ---------------------------------
     window.location.href = '/games'
   }
 
@@ -101,6 +131,7 @@ export default function HomePage() {
       <div className="w-full max-w-md space-y-6 text-center relative z-10">
 
         <h1 className="text-4xl font-bold">Mutiny Island</h1>
+
         <p className="text-sm italic text-zinc-300">
           Welcome aboard!
         </p>
@@ -138,17 +169,17 @@ export default function HomePage() {
           <button
             onClick={signUp}
             disabled={loading}
-            className="w-full bg-yellow-500 text-black p-3 rounded font-bold hover:bg-yellow-400 active:scale-95 transition"
+            className="w-full bg-yellow-500 text-black p-3 rounded font-bold hover:bg-yellow-400 active:scale-95 transition disabled:opacity-50"
           >
-            Sign Up
+            {loading ? 'Loading...' : 'Sign Up'}
           </button>
 
           <button
             onClick={login}
             disabled={loading}
-            className="w-full bg-white text-black p-3 rounded font-bold hover:bg-gray-200 active:scale-95 transition"
+            className="w-full bg-white text-black p-3 rounded font-bold hover:bg-gray-200 active:scale-95 transition disabled:opacity-50"
           >
-            Login
+            {loading ? 'Loading...' : 'Login'}
           </button>
 
         </div>
