@@ -31,7 +31,6 @@ export default function SeasonPage({
   // Unwrap params (handles both Next 14 and 15)
   useEffect(() => {
     Promise.resolve(params).then((p) => {
-      console.log('Resolved lobbyId:', p.id)
       setLobbyId(p.id)
     })
   }, [params])
@@ -70,14 +69,10 @@ export default function SeasonPage({
   // PLAYERS
   // -----------------------------
   async function loadPlayers() {
-    console.log('Loading players for lobbyId:', lobbyId, typeof lobbyId)
-
     const { data, error } = await supabase
       .from('lobby_players')
-      .select('id, user_id, lobby_id')
+      .select('id, user_id, profiles(username)')
       .eq('lobby_id', lobbyId)
-
-    console.log('PLAYERS RESULT:', { data, error, count: data?.length })
 
     if (error) {
       console.error('PLAYER ERROR:', error)
@@ -85,10 +80,10 @@ export default function SeasonPage({
     }
 
     setPlayers(
-      (data || []).map((p) => ({
+      (data || []).map((p: any) => ({
         id: p.id,
         user_id: p.user_id,
-        username: p.user_id.slice(0, 8),
+        username: p.profiles?.username ?? p.user_id.slice(0, 8),
       }))
     )
   }
