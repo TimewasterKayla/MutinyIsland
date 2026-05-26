@@ -17,10 +17,9 @@ type Message = {
 export default function SeasonPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
-  const lobbyId = params.id
-
+  const [lobbyId, setLobbyId] = useState<string | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [text, setText] = useState('')
@@ -28,6 +27,14 @@ export default function SeasonPage({
   const [lobby, setLobby] = useState<any>(null)
 
   const MAX_PLAYERS = 16
+
+  // Unwrap params (handles both Next 14 and 15)
+  useEffect(() => {
+    Promise.resolve(params).then((p) => {
+      console.log('Resolved lobbyId:', p.id)
+      setLobbyId(p.id)
+    })
+  }, [params])
 
   // -----------------------------
   // INIT
@@ -60,29 +67,31 @@ export default function SeasonPage({
   }
 
   // -----------------------------
-  // PLAYERS (FIXED + SAFE)
+  // PLAYERS
   // -----------------------------
-async function loadPlayers() {
-  const { data, error } = await supabase
-    .from('lobby_players')
-    .select('id, user_id, lobby_id')
-    .eq('lobby_id', String(lobbyId))
+  async function loadPlayers() {
+    console.log('Loading players for lobbyId:', lobbyId, typeof lobbyId)
 
-  if (error) {
-    console.error('PLAYER ERROR:', error)
-    return
+    const { data, error } = await supabase
+      .from('lobby_players')
+      .select('id, user_id, lobby_id')
+      .eq('lobby_id', lobbyId)
+
+    console.log('PLAYERS RESULT:', { data, error, count: data?.length })
+
+    if (error) {
+      console.error('PLAYER ERROR:', error)
+      return
+    }
+
+    setPlayers(
+      (data || []).map((p) => ({
+        id: p.id,
+        user_id: p.user_id,
+        username: p.user_id.slice(0, 8),
+      }))
+    )
   }
-
-  console.log('PLAYERS RAW:', data)
-
-  setPlayers(
-    (data || []).map((p) => ({
-      id: p.id,
-      user_id: p.user_id,
-      username: p.user_id.slice(0, 8),
-    }))
-  )
-}
 
   // -----------------------------
   // MESSAGES
@@ -154,6 +163,8 @@ async function loadPlayers() {
   // -----------------------------
   // UI
   // -----------------------------
+  if (!lobbyId) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">Loading...</div>
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white grid grid-cols-3 gap-6 p-6">
 
