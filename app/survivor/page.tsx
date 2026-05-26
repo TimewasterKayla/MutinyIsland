@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 
 export default function SurvivorPage() {
   const [lobbies, setLobbies] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   // -----------------------------
-  // LOAD PUBLIC LOBBIES
+  // LOAD LOBBIES
   // -----------------------------
   async function fetchLobbies() {
     const { data } = await supabase
@@ -24,7 +26,7 @@ export default function SurvivorPage() {
   }, [])
 
   // -----------------------------
-  // JOIN GAME LOGIC
+  // JOIN / CREATE GAME
   // -----------------------------
   async function joinGame(lobbyId?: string) {
     setLoading(true)
@@ -35,7 +37,7 @@ export default function SurvivorPage() {
 
     if (!user) return
 
-    // 1. CHECK IF USER ALREADY IN A GAME
+    // prevent multiple games per user
     const { data: existing } = await supabase
       .from('lobby_players')
       .select('*')
@@ -50,7 +52,7 @@ export default function SurvivorPage() {
 
     let targetLobbyId = lobbyId
 
-    // 2. IF NO LOBBY SELECTED → FIND OPEN OR CREATE ONE
+    // find or create lobby
     if (!targetLobbyId) {
       const { data: openLobby } = await supabase
         .from('lobbies')
@@ -72,7 +74,6 @@ export default function SurvivorPage() {
       }
     }
 
-    // 3. JOIN LOBBY
     await supabase.from('lobby_players').insert({
       lobby_id: targetLobbyId,
       user_id: user.id,
@@ -81,14 +82,15 @@ export default function SurvivorPage() {
     setLoading(false)
     fetchLobbies()
 
-    alert('Joined game!')
+    // go straight into lobby page
+    router.push(`/survivor/${targetLobbyId}`)
   }
 
   return (
-    <div className="min-h-screen text-white flex">
+    <div className="min-h-screen bg-zinc-950 text-white flex">
 
-      {/* LEFT COLUMN */}
-      <div className="w-1/2 p-6 border-r border-zinc-700">
+      {/* LEFT */}
+      <div className="w-1/2 p-6 border-r border-zinc-800">
         <h1 className="text-3xl font-bold mb-4">Public Islands</h1>
 
         <button
@@ -102,22 +104,31 @@ export default function SurvivorPage() {
           {lobbies.map((lobby) => (
             <div
               key={lobby.id}
-              className="bg-zinc-800 p-3 rounded flex justify-between"
+              className="bg-zinc-800 p-3 rounded flex justify-between items-center"
             >
               <span>Island #{lobby.id.slice(0, 6)}</span>
 
-              <button
-                onClick={() => joinGame(lobby.id)}
-                className="bg-white text-black px-3 py-1 rounded"
-              >
-                Join
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => joinGame(lobby.id)}
+                  className="bg-white text-black px-3 py-1 rounded"
+                >
+                  Join
+                </button>
+
+                <button
+                  onClick={() => router.push(`/survivor/${lobby.id}`)}
+                  className="bg-zinc-600 px-3 py-1 rounded"
+                >
+                  View
+                </button>
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* RIGHT COLUMN */}
+      {/* RIGHT */}
       <div className="w-1/2 p-6">
         <h1 className="text-3xl font-bold">Private Islands</h1>
       </div>

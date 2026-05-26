@@ -6,7 +6,10 @@ import { supabase } from '@/lib/supabase'
 type Player = {
   id: string
   user_id: string
-  tribe: string
+  tribe: string | null
+  profiles: {
+    username: string
+  } | null
 }
 
 type Message = {
@@ -29,22 +32,40 @@ export default function SeasonPage({
     loadMessages()
   }, [])
 
+  // -----------------------------
+  // PLAYERS (FIXED + NORMALIZED)
+  // -----------------------------
   async function loadPlayers() {
     const { data, error } = await supabase
-      .from('season_players')
-      .select('*')
-      .eq('season_id', params.id)
+      .from('lobby_players')
+      .select(`
+        id,
+        user_id,
+        tribe,
+        profiles:profiles(username)
+      `)
+      .eq('lobby_id', params.id)
 
     if (error) {
       console.error(error)
       return
     }
 
-    if (data) {
-      setPlayers(data)
-    }
+    const normalized: Player[] = (data || []).map((p: any) => ({
+      id: p.id,
+      user_id: p.user_id,
+      tribe: p.tribe ?? null,
+      profiles: Array.isArray(p.profiles)
+        ? p.profiles[0]
+        : p.profiles ?? null,
+    }))
+
+    setPlayers(normalized)
   }
 
+  // -----------------------------
+  // MESSAGES
+  // -----------------------------
   async function loadMessages() {
     const { data, error } = await supabase
       .from('messages')
@@ -57,9 +78,7 @@ export default function SeasonPage({
       return
     }
 
-    if (data) {
-      setMessages(data)
-    }
+    setMessages(data || [])
   }
 
   async function sendMessage() {
@@ -117,7 +136,8 @@ export default function SeasonPage({
   }
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-white grid grid-cols-3 gap-6 p-6">
+    <main className="min-h-screen bg-zinc-950 text-white grid grid-cols-3 gap-6 p-6">
+
       {/* PLAYERS */}
       <div className="bg-zinc-900 rounded-2xl p-6">
         <h2 className="text-3xl font-bold mb-4">Players</h2>
@@ -128,7 +148,7 @@ export default function SeasonPage({
               key={player.id}
               className="bg-zinc-800 p-3 rounded"
             >
-              {player.user_id}
+              {player.profiles?.username || player.user_id}
             </div>
           ))}
         </div>
@@ -136,9 +156,7 @@ export default function SeasonPage({
 
       {/* CHAT */}
       <div className="bg-zinc-900 rounded-2xl p-6 flex flex-col">
-        <h2 className="text-3xl font-bold mb-4">
-          Tribe Chat
-        </h2>
+        <h2 className="text-3xl font-bold mb-4">Tribe Chat</h2>
 
         <div className="flex-1 overflow-y-auto space-y-2 mb-4">
           {messages.map((message) => (
@@ -170,9 +188,7 @@ export default function SeasonPage({
 
       {/* VOTING */}
       <div className="bg-amber-100 text-black rounded-2xl p-6">
-        <h2 className="text-3xl font-bold mb-4">
-          Voting Parchment
-        </h2>
+        <h2 className="text-3xl font-bold mb-4">Voting Parchment</h2>
 
         <select
           value={voteTarget}
@@ -182,11 +198,8 @@ export default function SeasonPage({
           <option value="">Select Player</option>
 
           {players.map((player) => (
-            <option
-              key={player.user_id}
-              value={player.user_id}
-            >
-              {player.user_id}
+            <option key={player.user_id} value={player.user_id}>
+              {player.profiles?.username || player.user_id}
             </option>
           ))}
         </select>
@@ -198,7 +211,7 @@ export default function SeasonPage({
           Cast Vote
         </button>
       </div>
+
     </main>
   )
 }
-
