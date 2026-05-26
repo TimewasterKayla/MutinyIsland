@@ -32,9 +32,6 @@ export default function SeasonPage({
 
   const [lobby, setLobby] = useState<any>(null)
 
-  const [currentUserId, setCurrentUserId] =
-    useState<string | null>(null)
-
   const [isPlayerInLobby, setIsPlayerInLobby] =
     useState(false)
 
@@ -82,7 +79,7 @@ export default function SeasonPage({
   }, [messages])
 
   // -----------------------------
-  // GET CURRENT USER
+  // CURRENT USER
   // -----------------------------
   async function getCurrentUser() {
     const {
@@ -90,12 +87,9 @@ export default function SeasonPage({
     } = await supabase.auth.getUser()
 
     if (!user) {
-      setCurrentUserId(null)
       setIsPlayerInLobby(false)
       return
     }
-
-    setCurrentUserId(user.id)
 
     const { data } = await supabase
       .from('lobby_players')
@@ -126,7 +120,13 @@ export default function SeasonPage({
   async function loadPlayers() {
     const { data, error } = await supabase
       .from('lobby_players')
-      .select('id, user_id')
+      .select(`
+        id,
+        user_id,
+        profiles (
+          username
+        )
+      `)
       .eq('lobby_id', lobbyId)
 
     if (error) {
@@ -139,30 +139,19 @@ export default function SeasonPage({
       return
     }
 
-    const userIds = data.map((p) => p.user_id)
-
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('id, username')
-      .in('id', userIds)
-
-    const profileMap = Object.fromEntries(
-      (profileData || []).map((p) => [
-        p.id,
-        p.username,
-      ])
-    )
-
-    setPlayers(
-      data.map((p) => ({
+    const formattedPlayers: Player[] = data.map(
+      (p: any) => ({
         id: p.id,
         user_id: p.user_id,
 
-        // ALWAYS username ONLY
+        // FIXED USERNAME FETCH
         username:
-          profileMap[p.user_id] || 'Unknown User',
-      }))
+          p.profiles?.username ||
+          'Unknown User',
+      })
     )
+
+    setPlayers(formattedPlayers)
   }
 
   // -----------------------------
@@ -225,7 +214,6 @@ export default function SeasonPage({
   async function sendMessage() {
     if (!text.trim()) return
 
-    // BLOCK NON-PLAYERS
     if (!isPlayerInLobby) {
       alert(
         'You must be in this lobby to chat.'
