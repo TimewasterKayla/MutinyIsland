@@ -21,7 +21,7 @@ export default function SeasonPage({
 }: {
   params: { id: string }
 }) {
-  const lobbyId = params.id
+  const lobbyId = params?.id
 
   const [players, setPlayers] = useState<Player[]>([])
   const [messages, setMessages] = useState<Message[]>([])
@@ -30,6 +30,15 @@ export default function SeasonPage({
   const [lobby, setLobby] = useState<any>(null)
 
   const MAX_PLAYERS = 16
+
+  // 🚨 HARD GUARD (THIS FIXES YOUR CURRENT CRASH)
+  if (!lobbyId || lobbyId === 'undefined') {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
+        Invalid lobby ID
+      </div>
+    )
+  }
 
   // -----------------------------
   // INIT
@@ -65,9 +74,11 @@ export default function SeasonPage({
   }
 
   // -----------------------------
-  // PLAYERS (STABLE + SAFE)
+  // PLAYERS (SAFE UUID USAGE)
   // -----------------------------
   async function loadPlayers() {
+    if (!lobbyId) return
+
     const { data: lobbyPlayers, error } = await supabase
       .from('lobby_players')
       .select('id, user_id')
@@ -100,13 +111,9 @@ export default function SeasonPage({
       return {
         id: p.id,
         user_id: p.user_id,
-        profiles: profile
-          ? { username: profile.username }
-          : null,
+        profiles: profile ? { username: profile.username } : null,
       }
     })
-
-    console.log('LOBBY PLAYERS:', merged)
 
     setPlayers(merged)
   }
