@@ -117,7 +117,7 @@ export default function HomePage() {
     }
 
     // ---------------------------------
-    // SUCCESS
+    // SUCCESSS
     // ---------------------------------
     window.location.href = '/games'
   }
