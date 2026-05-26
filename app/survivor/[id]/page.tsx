@@ -28,17 +28,14 @@ export default function SeasonPage({
   const [text, setText] = useState('')
   const [voteTarget, setVoteTarget] = useState('')
   const [lobby, setLobby] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
 
   const MAX_PLAYERS = 16
 
   // -----------------------------
-  // INIT (SAFE)
+  // INIT (NO BLOCKING STATE)
   // -----------------------------
   useEffect(() => {
     if (!lobbyId) return
-
-    setLoading(true)
 
     loadLobby()
     loadPlayers()
@@ -47,8 +44,6 @@ export default function SeasonPage({
     const interval = setInterval(() => {
       loadPlayers()
     }, 3000)
-
-    setLoading(false)
 
     return () => clearInterval(interval)
   }, [lobbyId])
@@ -74,7 +69,7 @@ export default function SeasonPage({
   }
 
   // -----------------------------
-  // PLAYERS (SAFE)
+  // PLAYERS
   // -----------------------------
   async function loadPlayers() {
     if (!lobbyId) return
@@ -135,11 +130,16 @@ export default function SeasonPage({
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    await supabase.from('messages').insert({
+    const { error } = await supabase.from('messages').insert({
       season_id: lobbyId,
       sender_id: user.id,
       content: text,
     })
+
+    if (error) {
+      console.error('MESSAGE ERROR:', error)
+      return
+    }
 
     setText('')
     loadMessages()
@@ -149,11 +149,16 @@ export default function SeasonPage({
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || !voteTarget || !lobbyId) return
 
-    await supabase.from('votes').insert({
+    const { error } = await supabase.from('votes').insert({
       season_id: lobbyId,
       voter_id: user.id,
       target_id: voteTarget,
     })
+
+    if (error) {
+      console.error('VOTE ERROR:', error)
+      return
+    }
 
     alert('Vote submitted')
   }
@@ -174,12 +179,12 @@ export default function SeasonPage({
   const day = getDayNumber()
 
   // -----------------------------
-  // LOADING STATE (IMPORTANT FIX)
+  // INVALID ID FALLBACK (NON-BLOCKING)
   // -----------------------------
-  if (!lobbyId) {
+  if (lobbyId === 'undefined') {
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
-        Loading lobby...
+        Invalid lobby ID
       </div>
     )
   }
