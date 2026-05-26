@@ -42,6 +42,28 @@ export default function HomePage() {
   }
 
   // -----------------------------
+  // FORMAT DATE (May 25th, 2026)
+  // -----------------------------
+  function formatDate(dateString: string) {
+    const date = new Date(dateString)
+
+    const month = date.toLocaleString('en-US', { month: 'long' })
+    const day = date.getDate()
+    const year = date.getFullYear()
+
+    const suffix =
+      day % 10 === 1 && day !== 11
+        ? 'st'
+        : day % 10 === 2 && day !== 12
+        ? 'nd'
+        : day % 10 === 3 && day !== 13
+        ? 'rd'
+        : 'th'
+
+    return `${month} ${day}${suffix}, ${year}`
+  }
+
+  // -----------------------------
   // CREATE POST
   // -----------------------------
   async function createPost() {
@@ -96,7 +118,7 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // LIKE TOGGLE (simple version)
+  // LIKE (FIXED RELIABLE VERSION)
   // -----------------------------
   async function toggleLike(post: any) {
     const newLikes = (post.likes || 0) + 1
@@ -107,11 +129,7 @@ export default function HomePage() {
       .eq('id', post.id)
 
     if (!error) {
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === post.id ? { ...p, likes: newLikes } : p
-        )
-      )
+      fetchPosts()
     }
   }
 
@@ -153,27 +171,31 @@ export default function HomePage() {
                 </button>
               )}
 
-              {/* LIKE BUTTON */}
+              {/* LIKE */}
               <button
                 onClick={() => toggleLike(post)}
                 className="absolute top-3 right-3 flex items-center gap-1 cursor-pointer"
               >
-                <span className="text-xl">
-                  {post.liked ? '❤️' : '🤍'}
-                </span>
+                <span className="text-xl">🤍</span>
                 <span className="text-sm text-zinc-300">
                   {post.likes || 0}
                 </span>
               </button>
 
+              {/* USER + DATE */}
               <p className="text-sm text-zinc-400 mb-2">
-                {post.username}
+                {post.username}{' '}
+                <span className="text-zinc-600">
+                  • {formatDate(post.created_at)}
+                </span>
               </p>
 
+              {/* CONTENT */}
               {post.content && (
                 <p className="mb-2">{post.content}</p>
               )}
 
+              {/* IMAGE */}
               {post.image_url && (
                 <img
                   src={post.image_url}
