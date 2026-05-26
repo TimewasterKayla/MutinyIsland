@@ -42,36 +42,49 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // CREATE POST (with optional image)
+  // CREATE POST (FIXED)
   // -----------------------------
   async function createPost() {
     if (!postContent.trim() && !imageUrl.trim()) return
 
     setLoading(true)
 
-    const user = await supabase.auth.getUser()
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      const user = userData.user
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('id', user.data.user?.id)
-      .single()
+      if (!user) {
+        alert('You must be logged in to post')
+        return
+      }
 
-    const { error } = await supabase.from('posts').insert({
-      content: postContent,
-      image_url: imageUrl || null,
-      user_id: user.data.user?.id,
-      username: profile?.username || 'unknown',
-    })
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', user.id)
+        .single()
 
-    if (!error) {
+      const { error } = await supabase.from('posts').insert({
+        content: postContent,
+        image_url: imageUrl || null,
+        user_id: user.id,
+        username: profile?.username || 'unknown',
+      })
+
+      if (error) {
+        console.error(error)
+        alert('Failed to create post')
+        return
+      }
+
       setPostContent('')
       setImageUrl('')
       setShowModal(false)
       fetchPosts()
-    }
 
-    setLoading(false)
+    } finally {
+      setLoading(false)
+    }
   }
 
   // -----------------------------
@@ -116,7 +129,7 @@ export default function HomePage() {
               className="relative bg-zinc-900 p-4 rounded-xl border border-zinc-800"
             >
 
-              {/* DELETE BUTTON (only owner) */}
+              {/* DELETE BUTTON */}
               {currentUserId === post.user_id && (
                 <button
                   onClick={() => deletePost(post.id)}
@@ -139,11 +152,11 @@ export default function HomePage() {
                 <p className="mb-2">{post.content}</p>
               )}
 
-              {/* IMAGE (optional) */}
+              {/* IMAGE */}
               {post.image_url && (
                 <img
                   src={post.image_url}
-                  alt="post"
+                  alt="post image"
                   className="rounded-lg max-w-full mt-2 border border-zinc-700"
                 />
               )}
@@ -155,7 +168,7 @@ export default function HomePage() {
       </div>
 
       {/* -----------------------------
-          NEW POST MODAL
+          MODAL
       ----------------------------- */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -164,7 +177,6 @@ export default function HomePage() {
 
             <h2 className="text-xl font-bold">Create Post</h2>
 
-            {/* TEXT INPUT */}
             <textarea
               className="w-full p-3 rounded bg-zinc-800"
               placeholder="What's happening?"
@@ -172,10 +184,9 @@ export default function HomePage() {
               onChange={(e) => setPostContent(e.target.value)}
             />
 
-            {/* IMAGE URL INPUT */}
             <input
               className="w-full p-3 rounded bg-zinc-800"
-              placeholder="Image URL (optional - jpg/png link)"
+              placeholder="Image URL (optional)"
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
             />
