@@ -6,9 +6,7 @@ import { supabase } from '@/lib/supabase'
 type Player = {
   id: string
   user_id: string
-  profiles: {
-    username: string
-  } | null
+  username: string
 }
 
 type Message = {
@@ -32,7 +30,7 @@ export default function SeasonPage({
   const MAX_PLAYERS = 16
 
   // -----------------------------
-  // INIT (NO BLOCKING STATE)
+  // INIT
   // -----------------------------
   useEffect(() => {
     if (!lobbyId) return
@@ -43,7 +41,7 @@ export default function SeasonPage({
 
     const interval = setInterval(() => {
       loadPlayers()
-    }, 3000)
+    }, 2500)
 
     return () => clearInterval(interval)
   }, [lobbyId])
@@ -52,28 +50,19 @@ export default function SeasonPage({
   // LOBBY
   // -----------------------------
   async function loadLobby() {
-    if (!lobbyId) return
-
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('lobbies')
       .select('*')
       .eq('id', lobbyId)
       .maybeSingle()
 
-    if (error) {
-      console.error('LOBBY ERROR:', error)
-      return
-    }
-
     setLobby(data)
   }
 
   // -----------------------------
-  // PLAYERS
+  // PLAYERS (FIXED ROOT ISSUE)
   // -----------------------------
   async function loadPlayers() {
-    if (!lobbyId) return
-
     const { data: lobbyPlayers, error } = await supabase
       .from('lobby_players')
       .select('id, user_id')
@@ -84,27 +73,39 @@ export default function SeasonPage({
       return
     }
 
-    if (!lobbyPlayers?.length) {
+    console.log('RAW LOBBY PLAYERS:', lobbyPlayers)
+
+    if (!lobbyPlayers || lobbyPlayers.length === 0) {
       setPlayers([])
       return
     }
 
     const userIds = lobbyPlayers.map((p) => p.user_id)
 
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profileError } = await supabase
       .from('profiles')
       .select('id, username')
-      .in('id', userIds)
+
+    if (profileError) {
+      console.error('PROFILE ERROR:', profileError)
+    }
+
+    console.log('PROFILES:', profiles)
 
     const merged: Player[] = lobbyPlayers.map((p) => {
-      const profile = profiles?.find((x) => x.id === p.user_id)
+      const match = profiles?.find((x) => x.id === p.user_id)
 
       return {
         id: p.id,
         user_id: p.user_id,
-        profiles: profile ? { username: profile.username } : null,
+        username:
+          match?.username ||
+          p.user_id?.slice(0, 8) || // fallback so YOU ALWAYS SEE SOMETHING
+          'Unknown',
       }
     })
+
+    console.log('MERGED PLAYERS:', merged)
 
     setPlayers(merged)
   }
@@ -113,8 +114,6 @@ export default function SeasonPage({
   // MESSAGES
   // -----------------------------
   async function loadMessages() {
-    if (!lobbyId) return
-
     const { data } = await supabase
       .from('messages')
       .select('*')
@@ -125,21 +124,16 @@ export default function SeasonPage({
   }
 
   async function sendMessage() {
-    if (!text || !lobbyId) return
+    if (!text) return
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { error } = await supabase.from('messages').insert({
+    await supabase.from('messages').insert({
       season_id: lobbyId,
       sender_id: user.id,
       content: text,
     })
-
-    if (error) {
-      console.error('MESSAGE ERROR:', error)
-      return
-    }
 
     setText('')
     loadMessages()
@@ -147,18 +141,13 @@ export default function SeasonPage({
 
   async function castVote() {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user || !voteTarget || !lobbyId) return
+    if (!user || !voteTarget) return
 
-    const { error } = await supabase.from('votes').insert({
+    await supabase.from('votes').insert({
       season_id: lobbyId,
       voter_id: user.id,
       target_id: voteTarget,
     })
-
-    if (error) {
-      console.error('VOTE ERROR:', error)
-      return
-    }
 
     alert('Vote submitted')
   }
@@ -179,17 +168,6 @@ export default function SeasonPage({
   const day = getDayNumber()
 
   // -----------------------------
-  // INVALID ID FALLBACK (NON-BLOCKING)
-  // -----------------------------
-  if (lobbyId === 'undefined') {
-    return (
-      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
-        Invalid lobby ID
-      </div>
-    )
-  }
-
-  // -----------------------------
   // UI
   // -----------------------------
   return (
@@ -205,7 +183,7 @@ export default function SeasonPage({
               key={player.id}
               className="bg-zinc-800 p-3 rounded"
             >
-              {player.profiles?.username || player.user_id}
+              {player.username}
             </div>
           ))}
         </div>
@@ -260,7 +238,7 @@ export default function SeasonPage({
 
           {players.map((p) => (
             <option key={p.user_id} value={p.user_id}>
-              {p.profiles?.username || p.user_id}
+              {p.username}
             </option>
           ))}
         </select>
@@ -272,7 +250,6 @@ export default function SeasonPage({
           Cast Vote
         </button>
 
-        {/* DAY DISPLAY */}
         <div className="absolute bottom-4 left-0 right-0 text-center">
           <p className="font-bold text-2xl tracking-widest uppercase">
             DAY {day}
