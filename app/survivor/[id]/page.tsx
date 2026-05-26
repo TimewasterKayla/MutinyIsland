@@ -62,41 +62,27 @@ export default function SeasonPage({
   // -----------------------------
   // PLAYERS (FIXED + SAFE)
   // -----------------------------
-  async function loadPlayers() {
-    const { data: lobbyPlayers, error } = await supabase
-      .from('lobby_players')
-      .select('id, user_id')
-      .eq('lobby_id', lobbyId)
+async function loadPlayers() {
+  const { data, error } = await supabase
+    .from('lobby_players')
+    .select('id, user_id, lobby_id')
+    .eq('lobby_id', String(lobbyId))
 
-    if (error) {
-      console.error('PLAYER LOAD ERROR:', error)
-      return
-    }
-
-    if (!lobbyPlayers || lobbyPlayers.length === 0) {
-      setPlayers([])
-      return
-    }
-
-    const userIds = lobbyPlayers.map((p) => p.user_id)
-
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, username')
-      .in('id', userIds)
-
-    const merged: Player[] = lobbyPlayers.map((p) => {
-      const profile = profiles?.find((x) => x.id === p.user_id)
-
-      return {
-        id: p.id,
-        user_id: p.user_id,
-        username: profile?.username || p.user_id.slice(0, 8),
-      }
-    })
-
-    setPlayers(merged)
+  if (error) {
+    console.error('PLAYER ERROR:', error)
+    return
   }
+
+  console.log('PLAYERS RAW:', data)
+
+  setPlayers(
+    (data || []).map((p) => ({
+      id: p.id,
+      user_id: p.user_id,
+      username: p.user_id.slice(0, 8),
+    }))
+  )
+}
 
   // -----------------------------
   // MESSAGES
