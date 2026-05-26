@@ -7,9 +7,9 @@ export default function GamesPage() {
         href="/survivor"
         className="block bg-zinc-900 p-8 rounded-2xl hover:bg-zinc-800 transition"
       >
-        <h2 className="text-3xl font-bold">Survivor</h2>
+        <h2 className="text-3xl font-bold">Mutiny Island</h2>
         <p className="text-zinc-400 mt-2">
-          16 players • 2 tribes • social strategy
+          16 Castaways • 2 Crews • Social Strategy
         </p>
       </a>
     </main>
