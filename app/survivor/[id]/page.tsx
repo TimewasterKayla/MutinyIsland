@@ -28,22 +28,18 @@ export default function SeasonPage({
   const [text, setText] = useState('')
   const [voteTarget, setVoteTarget] = useState('')
   const [lobby, setLobby] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
 
   const MAX_PLAYERS = 16
 
-  // 🚨 HARD GUARD (THIS FIXES YOUR CURRENT CRASH)
-  if (!lobbyId || lobbyId === 'undefined') {
-    return (
-      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
-        Invalid lobby ID
-      </div>
-    )
-  }
-
   // -----------------------------
-  // INIT
+  // INIT (SAFE)
   // -----------------------------
   useEffect(() => {
+    if (!lobbyId) return
+
+    setLoading(true)
+
     loadLobby()
     loadPlayers()
     loadMessages()
@@ -52,6 +48,8 @@ export default function SeasonPage({
       loadPlayers()
     }, 3000)
 
+    setLoading(false)
+
     return () => clearInterval(interval)
   }, [lobbyId])
 
@@ -59,11 +57,13 @@ export default function SeasonPage({
   // LOBBY
   // -----------------------------
   async function loadLobby() {
+    if (!lobbyId) return
+
     const { data, error } = await supabase
       .from('lobbies')
       .select('*')
       .eq('id', lobbyId)
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('LOBBY ERROR:', error)
@@ -74,7 +74,7 @@ export default function SeasonPage({
   }
 
   // -----------------------------
-  // PLAYERS (SAFE UUID USAGE)
+  // PLAYERS (SAFE)
   // -----------------------------
   async function loadPlayers() {
     if (!lobbyId) return
@@ -89,21 +89,17 @@ export default function SeasonPage({
       return
     }
 
-    if (!lobbyPlayers || lobbyPlayers.length === 0) {
+    if (!lobbyPlayers?.length) {
       setPlayers([])
       return
     }
 
     const userIds = lobbyPlayers.map((p) => p.user_id)
 
-    const { data: profiles, error: profileError } = await supabase
+    const { data: profiles } = await supabase
       .from('profiles')
       .select('id, username')
       .in('id', userIds)
-
-    if (profileError) {
-      console.error('PROFILE ERROR:', profileError)
-    }
 
     const merged: Player[] = lobbyPlayers.map((p) => {
       const profile = profiles?.find((x) => x.id === p.user_id)
@@ -122,6 +118,8 @@ export default function SeasonPage({
   // MESSAGES
   // -----------------------------
   async function loadMessages() {
+    if (!lobbyId) return
+
     const { data } = await supabase
       .from('messages')
       .select('*')
@@ -132,21 +130,16 @@ export default function SeasonPage({
   }
 
   async function sendMessage() {
-    if (!text) return
+    if (!text || !lobbyId) return
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { error } = await supabase.from('messages').insert({
+    await supabase.from('messages').insert({
       season_id: lobbyId,
       sender_id: user.id,
       content: text,
     })
-
-    if (error) {
-      console.error('MESSAGE ERROR:', error)
-      return
-    }
 
     setText('')
     loadMessages()
@@ -154,18 +147,13 @@ export default function SeasonPage({
 
   async function castVote() {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user || !voteTarget) return
+    if (!user || !voteTarget || !lobbyId) return
 
-    const { error } = await supabase.from('votes').insert({
+    await supabase.from('votes').insert({
       season_id: lobbyId,
       voter_id: user.id,
       target_id: voteTarget,
     })
-
-    if (error) {
-      console.error('VOTE ERROR:', error)
-      return
-    }
 
     alert('Vote submitted')
   }
@@ -184,6 +172,17 @@ export default function SeasonPage({
   }
 
   const day = getDayNumber()
+
+  // -----------------------------
+  // LOADING STATE (IMPORTANT FIX)
+  // -----------------------------
+  if (!lobbyId) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
+        Loading lobby...
+      </div>
+    )
+  }
 
   // -----------------------------
   // UI
