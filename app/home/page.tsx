@@ -8,6 +8,19 @@ export default function HomePage() {
   const [showModal, setShowModal] = useState(false)
   const [postContent, setPostContent] = useState('')
   const [loading, setLoading] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  // -----------------------------
+  // GET CURRENT USER
+  // -----------------------------
+  useEffect(() => {
+    const getUser = async () => {
+      const { data } = await supabase.auth.getUser()
+      setCurrentUserId(data.user?.id || null)
+    }
+
+    getUser()
+  }, [])
 
   // -----------------------------
   // FETCH POSTS
@@ -58,6 +71,20 @@ export default function HomePage() {
     setLoading(false)
   }
 
+  // -----------------------------
+  // DELETE POST
+  // -----------------------------
+  async function deletePost(postId: string) {
+    const { error } = await supabase
+      .from('posts')
+      .delete()
+      .eq('id', postId)
+
+    if (!error) {
+      setPosts((prev) => prev.filter((p) => p.id !== postId))
+    }
+  }
+
   return (
     <main className="min-h-screen flex justify-center text-white bg-zinc-950">
 
@@ -83,12 +110,29 @@ export default function HomePage() {
           {posts.map((post) => (
             <div
               key={post.id}
-              className="bg-zinc-900 p-4 rounded-xl border border-zinc-800"
+              className="relative bg-zinc-900 p-4 rounded-xl border border-zinc-800"
             >
+
+              {/* DELETE BUTTON (only owner) */}
+              {currentUserId === post.user_id && (
+                <button
+                  onClick={() => deletePost(post.id)}
+                  className="absolute top-3 right-3 bg-red-600 hover:bg-red-500 rounded-lg p-2 transition active:scale-95"
+                >
+                  <img
+                    src="/trash.png"
+                    alt="delete"
+                    className="w-4 h-4"
+                  />
+                </button>
+              )}
+
               <p className="text-sm text-zinc-400 mb-2">
                 {post.username}
               </p>
+
               <p>{post.content}</p>
+
             </div>
           ))}
         </div>
