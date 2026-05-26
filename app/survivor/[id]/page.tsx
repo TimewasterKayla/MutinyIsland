@@ -33,7 +33,7 @@ export default function SeasonPage({
   const MAX_PLAYERS = 16
 
   // -----------------------------
-  // INITIAL LOAD
+  // INIT
   // -----------------------------
   useEffect(() => {
     loadLobby()
@@ -48,35 +48,26 @@ export default function SeasonPage({
   }, [lobbyId])
 
   // -----------------------------
-  // LOAD LOBBY
+  // LOBBY
   // -----------------------------
   async function loadLobby() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('lobbies')
       .select('*')
       .eq('id', lobbyId)
       .single()
 
-    if (error) {
-      console.error('LOBBY LOAD ERROR:', error)
-      return
-    }
-
     setLobby(data)
   }
 
   // -----------------------------
-  // LOAD PLAYERS (FIXED + SAFE)
+  // PLAYERS (FIXED - NO BROKEN JOIN)
   // -----------------------------
   async function loadPlayers() {
-    const { data, error } = await supabase
+    // STEP 1: get lobby players
+    const { data: lobbyPlayers, error } = await supabase
       .from('lobby_players')
-      .select(`
-        id,
-        user_id,
-        tribe,
-        profiles:profiles(username)
-      `)
+      .select('id, user_id, tribe')
       .eq('lobby_id', lobbyId)
 
     if (error) {
@@ -84,20 +75,33 @@ export default function SeasonPage({
       return
     }
 
-    const normalized: Player[] = (data || []).map((p: any) => ({
+    if (!lobbyPlayers || lobbyPlayers.length === 0) {
+      setPlayers([])
+      return
+    }
+
+    // STEP 2: get profiles separately
+    const userIds = lobbyPlayers.map((p) => p.user_id)
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, username')
+      .in('id', userIds)
+
+    // STEP 3: merge manually
+    const merged: Player[] = lobbyPlayers.map((p) => ({
       id: p.id,
       user_id: p.user_id,
       tribe: p.tribe ?? null,
-      profiles: Array.isArray(p.profiles)
-        ? p.profiles[0]
-        : p.profiles ?? null,
+      profiles:
+        profiles?.find((x) => x.id === p.user_id) || null,
     }))
 
-    setPlayers(normalized)
+    setPlayers(merged)
   }
 
   // -----------------------------
-  // LOAD MESSAGES
+  // MESSAGES
   // -----------------------------
   async function loadMessages() {
     const { data } = await supabase
@@ -109,47 +113,31 @@ export default function SeasonPage({
     setMessages(data || [])
   }
 
-  // -----------------------------
-  // SEND MESSAGE
-  // -----------------------------
   async function sendMessage() {
     if (!text) return
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { error } = await supabase.from('messages').insert({
+    await supabase.from('messages').insert({
       season_id: lobbyId,
       sender_id: user.id,
       content: text,
     })
 
-    if (error) {
-      console.error('MESSAGE ERROR:', error)
-      return
-    }
-
     setText('')
     loadMessages()
   }
 
-  // -----------------------------
-  // CAST VOTE
-  // -----------------------------
   async function castVote() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || !voteTarget) return
 
-    const { error } = await supabase.from('votes').insert({
+    await supabase.from('votes').insert({
       season_id: lobbyId,
       voter_id: user.id,
       target_id: voteTarget,
     })
-
-    if (error) {
-      console.error('VOTE ERROR:', error)
-      return
-    }
 
     alert('Vote submitted')
   }
