@@ -14,6 +14,7 @@ type Message = {
   content: string
   sender_id: string
   username?: string
+  created_at?: string
 }
 
 export default function SeasonPage({
@@ -22,18 +23,27 @@ export default function SeasonPage({
   params: Promise<{ id: string }>
 }) {
   const [lobbyId, setLobbyId] = useState<string | null>(null)
+
   const [players, setPlayers] = useState<Player[]>([])
   const [messages, setMessages] = useState<Message[]>([])
+
   const [text, setText] = useState('')
   const [voteTarget, setVoteTarget] = useState('')
+
   const [lobby, setLobby] = useState<any>(null)
+
+  const [currentUserId, setCurrentUserId] =
+    useState<string | null>(null)
+
+  const [isPlayerInLobby, setIsPlayerInLobby] =
+    useState(false)
 
   const chatRef = useRef<HTMLDivElement>(null)
 
   const MAX_PLAYERS = 16
 
   // -----------------------------
-  // UNWRAP PARAMS
+  // PARAMS
   // -----------------------------
   useEffect(() => {
     Promise.resolve(params).then((p) => {
@@ -46,6 +56,8 @@ export default function SeasonPage({
   // -----------------------------
   useEffect(() => {
     if (!lobbyId) return
+
+    getCurrentUser()
 
     loadLobby()
     loadPlayers()
@@ -60,7 +72,7 @@ export default function SeasonPage({
   }, [lobbyId])
 
   // -----------------------------
-  // AUTO SCROLL TO BOTTOM
+  // AUTO SCROLL
   // -----------------------------
   useEffect(() => {
     if (chatRef.current) {
@@ -68,6 +80,32 @@ export default function SeasonPage({
         chatRef.current.scrollHeight
     }
   }, [messages])
+
+  // -----------------------------
+  // GET CURRENT USER
+  // -----------------------------
+  async function getCurrentUser() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setCurrentUserId(null)
+      setIsPlayerInLobby(false)
+      return
+    }
+
+    setCurrentUserId(user.id)
+
+    const { data } = await supabase
+      .from('lobby_players')
+      .select('id')
+      .eq('lobby_id', lobbyId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    setIsPlayerInLobby(!!data)
+  }
 
   // -----------------------------
   // LOBBY
@@ -109,16 +147,20 @@ export default function SeasonPage({
       .in('id', userIds)
 
     const profileMap = Object.fromEntries(
-      (profileData || []).map((p) => [p.id, p.username])
+      (profileData || []).map((p) => [
+        p.id,
+        p.username,
+      ])
     )
 
     setPlayers(
       data.map((p) => ({
         id: p.id,
         user_id: p.user_id,
+
+        // ALWAYS username ONLY
         username:
-          profileMap[p.user_id] ??
-          p.user_id.slice(0, 8),
+          profileMap[p.user_id] || 'Unknown User',
       }))
     )
   }
@@ -131,10 +173,15 @@ export default function SeasonPage({
       .from('messages')
       .select('*')
       .eq('season_id', lobbyId)
-      .order('created_at', { ascending: true })
+      .order('created_at', {
+        ascending: true,
+      })
 
     if (error) {
-      console.error('MESSAGE LOAD ERROR:', error)
+      console.error(
+        'MESSAGE LOAD ERROR:',
+        error
+      )
       return
     }
 
@@ -144,24 +191,30 @@ export default function SeasonPage({
     }
 
     const senderIds = [
-      ...new Set(data.map((m) => m.sender_id)),
+      ...new Set(
+        data.map((m) => m.sender_id)
+      ),
     ]
 
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('id, username')
-      .in('id', senderIds)
+    const { data: profileData } =
+      await supabase
+        .from('profiles')
+        .select('id, username')
+        .in('id', senderIds)
 
     const profileMap = Object.fromEntries(
-      (profileData || []).map((p) => [p.id, p.username])
+      (profileData || []).map((p) => [
+        p.id,
+        p.username,
+      ])
     )
 
     setMessages(
       data.map((m) => ({
         ...m,
         username:
-          profileMap[m.sender_id] ??
-          m.sender_id.slice(0, 8),
+          profileMap[m.sender_id] ||
+          'Unknown User',
       }))
     )
   }
@@ -171,6 +224,14 @@ export default function SeasonPage({
   // -----------------------------
   async function sendMessage() {
     if (!text.trim()) return
+
+    // BLOCK NON-PLAYERS
+    if (!isPlayerInLobby) {
+      alert(
+        'You must be in this lobby to chat.'
+      )
+      return
+    }
 
     const {
       data: { user },
@@ -187,7 +248,10 @@ export default function SeasonPage({
       })
 
     if (error) {
-      console.error('MESSAGE ERROR:', error)
+      console.error(
+        'MESSAGE ERROR:',
+        error
+      )
       return
     }
 
@@ -214,7 +278,10 @@ export default function SeasonPage({
       })
 
     if (error) {
-      console.error('VOTE ERROR:', error)
+      console.error(
+        'VOTE ERROR:',
+        error
+      )
       return
     }
 
@@ -234,12 +301,46 @@ export default function SeasonPage({
     const now = Date.now()
 
     const hoursPassed =
-      (now - start) / (1000 * 60 * 60)
+      (now - start) /
+      (1000 * 60 * 60)
 
-    return Math.floor(hoursPassed / 12) + 1
+    return (
+      Math.floor(hoursPassed / 12) + 1
+    )
   }
 
   const day = getDayNumber()
+
+  // -----------------------------
+  // MESSAGE DAY
+  // -----------------------------
+  function getMessageDay(
+    createdAt?: string
+  ) {
+    if (
+      !createdAt ||
+      !lobby?.started_at
+    )
+      return 0
+
+    const start = new Date(
+      lobby.started_at
+    ).getTime()
+
+    const messageTime = new Date(
+      createdAt
+    ).getTime()
+
+    const hoursPassed =
+      (messageTime - start) /
+      (1000 * 60 * 60)
+
+    if (hoursPassed < 0) return 0
+
+    return (
+      Math.floor(hoursPassed / 12) + 1
+    )
+  }
 
   // -----------------------------
   // LOADING
@@ -260,6 +361,7 @@ export default function SeasonPage({
 
       {/* PLAYERS */}
       <div className="bg-zinc-900 rounded-2xl p-6">
+
         <h2 className="text-3xl font-bold mb-4">
           Players
         </h2>
@@ -277,7 +379,8 @@ export default function SeasonPage({
 
         <p className="italic text-zinc-400 mt-4">
           Waiting for players (
-          {players.length}/{MAX_PLAYERS})
+          {players.length}/
+          {MAX_PLAYERS})
         </p>
       </div>
 
@@ -299,13 +402,25 @@ export default function SeasonPage({
                 key={m.id}
                 className="bg-zinc-800 p-3 rounded"
               >
-                <p className="text-yellow-400 font-bold text-sm mb-1">
-                  {m.username}
-                </p>
 
-                <p className="text-white">
+                {/* TOP ROW */}
+                <div className="flex justify-between items-start mb-1">
+
+                  <p className="text-yellow-400 font-bold text-sm">
+                    {m.username}
+                  </p>
+
+                  <p className="text-xs text-zinc-400">
+                    Day {getMessageDay(m.created_at)}
+                  </p>
+
+                </div>
+
+                {/* CONTENT */}
+                <p className="text-white break-words">
                   {m.content}
                 </p>
+
               </div>
             ))}
           </div>
@@ -313,13 +428,19 @@ export default function SeasonPage({
 
         {/* INPUT */}
         <div className="flex gap-2 mt-auto">
+
           <input
             value={text}
             onChange={(e) =>
               setText(e.target.value)
             }
-            className="flex-1 bg-zinc-800 p-3 rounded"
-            placeholder="Type message..."
+            disabled={!isPlayerInLobby}
+            className="flex-1 bg-zinc-800 p-3 rounded disabled:opacity-50"
+            placeholder={
+              isPlayerInLobby
+                ? 'Type message...'
+                : 'Join this lobby to chat'
+            }
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 sendMessage()
@@ -329,10 +450,12 @@ export default function SeasonPage({
 
           <button
             onClick={sendMessage}
-            className="bg-yellow-500 text-black px-4 rounded font-bold"
+            disabled={!isPlayerInLobby}
+            className="bg-yellow-500 text-black px-4 rounded font-bold disabled:opacity-50"
           >
             Send
           </button>
+
         </div>
       </div>
 
@@ -346,7 +469,9 @@ export default function SeasonPage({
         <select
           value={voteTarget}
           onChange={(e) =>
-            setVoteTarget(e.target.value)
+            setVoteTarget(
+              e.target.value
+            )
           }
           className="w-full p-3 rounded mb-4 border"
         >
@@ -373,9 +498,11 @@ export default function SeasonPage({
 
         {/* DAY DISPLAY */}
         <div className="absolute bottom-4 left-0 right-0 text-center">
+
           <p className="font-black text-5xl tracking-[0.3em] uppercase">
             DAY {day}
           </p>
+
         </div>
       </div>
 
