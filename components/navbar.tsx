@@ -14,9 +14,6 @@ export default function Navbar() {
   const [onlineCount, setOnlineCount] = useState(0)
   const [coins, setCoins] = useState(0)
 
-  // -----------------------------
-  // PRESENCE
-  // -----------------------------
   usePresence(userId)
 
   // -----------------------------
@@ -49,9 +46,6 @@ export default function Navbar() {
     }
   }
 
-  // -----------------------------
-  // AUTH LISTENER
-  // -----------------------------
   useEffect(() => {
     getUser()
 
@@ -91,9 +85,6 @@ export default function Navbar() {
     return () => clearInterval(interval)
   }, [])
 
-  // -----------------------------
-  // LOGOUT
-  // -----------------------------
   async function logout() {
     await supabase.auth.signOut()
 
@@ -104,22 +95,26 @@ export default function Navbar() {
     router.push('/')
   }
 
-  // -----------------------------
-  // BUTTON STYLE
-  // -----------------------------
   const btnStyle =
     'px-4 py-2 rounded-lg bg-black/40 border border-yellow-700 hover:bg-yellow-700/40 active:scale-95 transition cursor-pointer text-white shadow-md backdrop-blur-sm'
 
   return (
     <nav
-      className="w-full px-6 py-3 flex items-center justify-between border-b border-yellow-900 text-white"
-      style={{
-        backgroundImage: "url('/wood-texture.jpg')",
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundColor: '#3b2414',
-      }}
+      className="w-full px-6 py-3 flex items-center justify-between border-b border-yellow-900 text-white relative"
     >
+
+      {/* BACKGROUND IMAGE */}
+      <div
+        className="absolute inset-0 -z-10"
+        style={{
+          backgroundImage: "url('/plank.png')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
+
+      {/* DARK OVERLAY (keeps text readable) */}
+      <div className="absolute inset-0 -z-10 bg-black/40" />
 
       {/* LEFT */}
       <div className="w-1/3 flex items-center gap-2 text-sm">
@@ -160,7 +155,6 @@ export default function Navbar() {
       {/* RIGHT */}
       <div className="w-1/3 flex justify-end items-center gap-4">
 
-        {/* COINS (FROM profiles) */}
         {username && (
           <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-lg border border-yellow-700">
 
@@ -178,7 +172,6 @@ export default function Navbar() {
           </div>
         )}
 
-        {/* LOGOUT */}
         {username && (
           <button
             onClick={logout}
