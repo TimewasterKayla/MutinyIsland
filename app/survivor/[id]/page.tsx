@@ -26,24 +26,18 @@ export default function SeasonPage({
   }, [lobbyId])
 
   async function loadPlayers() {
-    console.log('LOBBY ID BEING USED:', lobbyId)
+  console.log("PARAM ID:", params)
+  console.log("LOBBY ID:", lobbyId)
+  console.log("TYPE:", typeof lobbyId)
 
-    const { data, error } = await supabase
-      .from('lobby_players')
-      .select('*')
-      .eq('lobby_id', lobbyId)
+  const { data, error } = await supabase
+    .from('lobby_players')
+    .select('*')
 
-    console.log('RAW SUPABASE RESPONSE:', { data, error })
+  console.log("NO FILTER RAW TABLE:", { data, error })
 
-    setDebug({ data, error })
-
-    if (error) {
-      console.error('SUPABASE ERROR:', error)
-      return
-    }
-
-    setPlayers(data || [])
-  }
+  setPlayers(data || [])
+}
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-6">
