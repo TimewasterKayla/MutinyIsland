@@ -27,13 +27,24 @@ export default function SeasonPage({
   const [text, setText] = useState('')
   const [voteTarget, setVoteTarget] = useState('')
 
+  const MAX_PLAYERS = 16
+
+  // -----------------------------
+  // LOAD EVERYTHING
+  // -----------------------------
   useEffect(() => {
     loadPlayers()
     loadMessages()
+
+    const interval = setInterval(() => {
+      loadPlayers()
+    }, 3000)
+
+    return () => clearInterval(interval)
   }, [])
 
   // -----------------------------
-  // PLAYERS (FIXED + NORMALIZED)
+  // PLAYERS
   // -----------------------------
   async function loadPlayers() {
     const { data, error } = await supabase
@@ -73,68 +84,102 @@ export default function SeasonPage({
       .eq('season_id', params.id)
       .order('created_at', { ascending: true })
 
-    if (error) {
-      console.error(error)
-      return
-    }
-
-    setMessages(data || [])
+    if (!error) setMessages(data || [])
   }
 
   async function sendMessage() {
     if (!text) return
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { error } = await supabase.from('messages').insert([
-      {
-        season_id: params.id,
-        sender_id: user.id,
-        content: text,
-      },
-    ])
-
-    if (error) {
-      console.error(error)
-      return
-    }
+    await supabase.from('messages').insert({
+      season_id: params.id,
+      sender_id: user.id,
+      content: text,
+    })
 
     setText('')
     loadMessages()
   }
 
   async function castVote() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || !voteTarget) return
 
-    if (!user) return
-
-    if (!voteTarget) {
-      alert('Select a player')
-      return
-    }
-
-    const { error } = await supabase.from('votes').insert([
-      {
-        season_id: params.id,
-        voter_id: user.id,
-        target_id: voteTarget,
-      },
-    ])
-
-    if (error) {
-      console.error(error)
-      return
-    }
+    await supabase.from('votes').insert({
+      season_id: params.id,
+      voter_id: user.id,
+      target_id: voteTarget,
+    })
 
     alert('Vote submitted')
   }
 
+  // -----------------------------
+  // DAY SYSTEM
+  // -----------------------------
+  function getDayNumber(lobby: any) {
+    if (!lobby?.started_at) return 0
+
+    const start = new Date(lobby.started_at).getTime()
+    const now = Date.now()
+
+    const hoursPassed = (now - start) / (1000 * 60 * 60)
+    return Math.floor(hoursPassed / 12) + 1
+  }
+
+  // -----------------------------
+  // AUTO START GAME
+  // -----------------------------
+  useEffect(() => {
+    if (players.length >= MAX_PLAYERS) {
+      startGameIfNeeded()
+    }
+  }, [players])
+
+  async function startGameIfNeeded() {
+    const { data: lobby } = await supabase
+      .from('lobbies')
+      .select('*')
+      .eq('id', params.id)
+      .single()
+
+    if (lobby?.status === 'in_progress') return
+
+    await supabase
+      .from('lobbies')
+      .update({
+        status: 'in_progress',
+        started_at: new Date().toISOString(),
+      })
+      .eq('id', params.id)
+  }
+
+  // -----------------------------
+  // OPTIONAL: LOAD LOBBY (for day display)
+  // -----------------------------
+  const [lobby, setLobby] = useState<any>(null)
+
+  async function loadLobby() {
+    const { data } = await supabase
+      .from('lobbies')
+      .select('*')
+      .eq('id', params.id)
+      .single()
+
+    setLobby(data)
+  }
+
+  useEffect(() => {
+    loadLobby()
+  }, [])
+
+  const day = getDayNumber(lobby)
+
+  // -----------------------------
+  // UI
+  // -----------------------------
   return (
     <main className="min-h-screen bg-zinc-950 text-white grid grid-cols-3 gap-6 p-6">
 
@@ -152,6 +197,11 @@ export default function SeasonPage({
             </div>
           ))}
         </div>
+
+        {/* WAITING TEXT */}
+        <p className="italic text-zinc-400 mt-4">
+          Waiting for players ({players.length}/{MAX_PLAYERS})
+        </p>
       </div>
 
       {/* CHAT */}
@@ -186,9 +236,12 @@ export default function SeasonPage({
         </div>
       </div>
 
-      {/* VOTING */}
-      <div className="bg-amber-100 text-black rounded-2xl p-6">
-        <h2 className="text-3xl font-bold mb-4">Voting Parchment</h2>
+      {/* VOTING + DAY */}
+      <div className="bg-amber-100 text-black rounded-2xl p-6 relative">
+
+        <h2 className="text-3xl font-bold mb-4">
+          Voting Parchment
+        </h2>
 
         <select
           value={voteTarget}
@@ -210,6 +263,13 @@ export default function SeasonPage({
         >
           Cast Vote
         </button>
+
+        {/* DAY DISPLAY */}
+        <div className="absolute bottom-4 left-0 right-0 text-center">
+          <p className="font-bold">
+            Day {day}
+          </p>
+        </div>
       </div>
 
     </main>
