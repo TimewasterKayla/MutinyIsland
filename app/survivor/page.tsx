@@ -9,14 +9,16 @@ export default function SurvivorPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  // -----------------------------
-  // LOAD LOBBIES
-  // -----------------------------
   async function fetchLobbies() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('lobbies')
       .select('*')
       .eq('status', 'open')
+
+    if (error) {
+      console.error('LOBBY LOAD ERROR:', error)
+      return
+    }
 
     setLobbies(data || [])
   }
@@ -25,9 +27,6 @@ export default function SurvivorPage() {
     fetchLobbies()
   }, [])
 
-  // -----------------------------
-  // JOIN / CREATE GAME
-  // -----------------------------
   async function joinGame(lobbyId?: string) {
     setLoading(true)
 
@@ -35,14 +34,21 @@ export default function SurvivorPage() {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return
+    if (!user) {
+      setLoading(false)
+      return
+    }
 
     // prevent multiple games per user
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('lobby_players')
       .select('*')
       .eq('user_id', user.id)
       .maybeSingle()
+
+    if (existingError) {
+      console.error('CHECK PLAYER ERROR:', existingError)
+    }
 
     if (existing) {
       alert('You are already in a game')
@@ -54,35 +60,60 @@ export default function SurvivorPage() {
 
     // find or create lobby
     if (!targetLobbyId) {
-      const { data: openLobby } = await supabase
+      const { data: openLobby, error: openError } = await supabase
         .from('lobbies')
-        .select('*')
+        .select('id')
         .eq('status', 'open')
         .limit(1)
         .maybeSingle()
 
-      if (openLobby) {
+      if (openError) {
+        console.error('OPEN LOBBY ERROR:', openError)
+      }
+
+      if (openLobby?.id) {
         targetLobbyId = openLobby.id
       } else {
-        const { data: newLobby } = await supabase
+        const { data: newLobby, error: insertError } = await supabase
           .from('lobbies')
           .insert({ status: 'open' })
-          .select()
+          .select('id')
           .single()
 
-        targetLobbyId = newLobby.id
+        if (insertError) {
+          console.error('CREATE LOBBY ERROR:', insertError)
+          setLoading(false)
+          return
+        }
+
+        targetLobbyId = newLobby?.id
       }
     }
 
-    await supabase.from('lobby_players').insert({
-      lobby_id: targetLobbyId,
-      user_id: user.id,
-    })
+    // FINAL SAFETY CHECK (CRITICAL)
+    if (!targetLobbyId) {
+      console.error('NO LOBBY ID GENERATED')
+      setLoading(false)
+      return
+    }
+
+    // join lobby
+    const { error: joinError } = await supabase
+      .from('lobby_players')
+      .insert({
+        lobby_id: targetLobbyId,
+        user_id: user.id,
+      })
+
+    if (joinError) {
+      console.error('JOIN ERROR:', joinError)
+      setLoading(false)
+      return
+    }
 
     setLoading(false)
     fetchLobbies()
 
-    // go straight into lobby page
     router.push(`/survivor/${targetLobbyId}`)
   }
 
