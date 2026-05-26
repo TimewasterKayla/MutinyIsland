@@ -22,17 +22,21 @@ export default function SeasonPage({
 }: {
   params: { id: string }
 }) {
+  const lobbyId = params.id
+
   const [players, setPlayers] = useState<Player[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [voteTarget, setVoteTarget] = useState('')
+  const [lobby, setLobby] = useState<any>(null)
 
   const MAX_PLAYERS = 16
 
   // -----------------------------
-  // INITIAL LOAD (FORCE REFRESH SAFE)
+  // INITIAL LOAD
   // -----------------------------
   useEffect(() => {
+    loadLobby()
     loadPlayers()
     loadMessages()
 
@@ -41,10 +45,28 @@ export default function SeasonPage({
     }, 3000)
 
     return () => clearInterval(interval)
-  }, [params.id])
+  }, [lobbyId])
 
   // -----------------------------
-  // PLAYERS (FIXED QUERY)
+  // LOAD LOBBY
+  // -----------------------------
+  async function loadLobby() {
+    const { data, error } = await supabase
+      .from('lobbies')
+      .select('*')
+      .eq('id', lobbyId)
+      .single()
+
+    if (error) {
+      console.error('LOBBY LOAD ERROR:', error)
+      return
+    }
+
+    setLobby(data)
+  }
+
+  // -----------------------------
+  // LOAD PLAYERS (FIXED + SAFE)
   // -----------------------------
   async function loadPlayers() {
     const { data, error } = await supabase
@@ -53,10 +75,9 @@ export default function SeasonPage({
         id,
         user_id,
         tribe,
-        lobby_id,
         profiles:profiles(username)
       `)
-      .eq('lobby_id', params.id)
+      .eq('lobby_id', lobbyId)
 
     if (error) {
       console.error('PLAYER LOAD ERROR:', error)
@@ -76,43 +97,59 @@ export default function SeasonPage({
   }
 
   // -----------------------------
-  // MESSAGES
+  // LOAD MESSAGES
   // -----------------------------
   async function loadMessages() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('messages')
       .select('*')
-      .eq('season_id', params.id)
+      .eq('season_id', lobbyId)
       .order('created_at', { ascending: true })
 
-    if (!error) setMessages(data || [])
+    setMessages(data || [])
   }
 
+  // -----------------------------
+  // SEND MESSAGE
+  // -----------------------------
   async function sendMessage() {
     if (!text) return
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    await supabase.from('messages').insert({
-      season_id: params.id,
+    const { error } = await supabase.from('messages').insert({
+      season_id: lobbyId,
       sender_id: user.id,
       content: text,
     })
+
+    if (error) {
+      console.error('MESSAGE ERROR:', error)
+      return
+    }
 
     setText('')
     loadMessages()
   }
 
+  // -----------------------------
+  // CAST VOTE
+  // -----------------------------
   async function castVote() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || !voteTarget) return
 
-    await supabase.from('votes').insert({
-      season_id: params.id,
+    const { error } = await supabase.from('votes').insert({
+      season_id: lobbyId,
       voter_id: user.id,
       target_id: voteTarget,
     })
+
+    if (error) {
+      console.error('VOTE ERROR:', error)
+      return
+    }
 
     alert('Vote submitted')
   }
@@ -120,7 +157,7 @@ export default function SeasonPage({
   // -----------------------------
   // DAY SYSTEM
   // -----------------------------
-  function getDayNumber(lobby: any) {
+  function getDayNumber() {
     if (!lobby?.started_at) return 0
 
     const start = new Date(lobby.started_at).getTime()
@@ -130,23 +167,7 @@ export default function SeasonPage({
     return Math.floor(hoursPassed / 12) + 1
   }
 
-  const [lobby, setLobby] = useState<any>(null)
-
-  async function loadLobby() {
-    const { data } = await supabase
-      .from('lobbies')
-      .select('*')
-      .eq('id', params.id)
-      .single()
-
-    setLobby(data)
-  }
-
-  useEffect(() => {
-    loadLobby()
-  }, [params.id])
-
-  const day = getDayNumber(lobby)
+  const day = getDayNumber()
 
   // -----------------------------
   // UI
@@ -169,7 +190,6 @@ export default function SeasonPage({
           ))}
         </div>
 
-        {/* WAITING TEXT */}
         <p className="italic text-zinc-400 mt-4">
           Waiting for players ({players.length}/{MAX_PLAYERS})
         </p>
@@ -180,12 +200,9 @@ export default function SeasonPage({
         <h2 className="text-3xl font-bold mb-4">Tribe Chat</h2>
 
         <div className="flex-1 overflow-y-auto space-y-2 mb-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className="bg-zinc-800 p-2 rounded"
-            >
-              {message.content}
+          {messages.map((m) => (
+            <div key={m.id} className="bg-zinc-800 p-2 rounded">
+              {m.content}
             </div>
           ))}
         </div>
@@ -221,9 +238,9 @@ export default function SeasonPage({
         >
           <option value="">Select Player</option>
 
-          {players.map((player) => (
-            <option key={player.user_id} value={player.user_id}>
-              {player.profiles?.username || player.user_id}
+          {players.map((p) => (
+            <option key={p.user_id} value={p.user_id}>
+              {p.profiles?.username || p.user_id}
             </option>
           ))}
         </select>
@@ -235,10 +252,10 @@ export default function SeasonPage({
           Cast Vote
         </button>
 
-        {/* DAY DISPLAY FIXED */}
+        {/* DAY DISPLAY */}
         <div className="absolute bottom-4 left-0 right-0 text-center">
           <p className="font-bold text-2xl tracking-widest uppercase">
-            Day {day}
+            DAY {day}
           </p>
         </div>
       </div>
