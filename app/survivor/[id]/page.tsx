@@ -30,7 +30,7 @@ export default function SeasonPage({
   const MAX_PLAYERS = 16
 
   // -----------------------------
-  // LOAD EVERYTHING
+  // INITIAL LOAD (FORCE REFRESH SAFE)
   // -----------------------------
   useEffect(() => {
     loadPlayers()
@@ -41,10 +41,10 @@ export default function SeasonPage({
     }, 3000)
 
     return () => clearInterval(interval)
-  }, [])
+  }, [params.id])
 
   // -----------------------------
-  // PLAYERS
+  // PLAYERS (FIXED QUERY)
   // -----------------------------
   async function loadPlayers() {
     const { data, error } = await supabase
@@ -53,12 +53,13 @@ export default function SeasonPage({
         id,
         user_id,
         tribe,
+        lobby_id,
         profiles:profiles(username)
       `)
       .eq('lobby_id', params.id)
 
     if (error) {
-      console.error(error)
+      console.error('PLAYER LOAD ERROR:', error)
       return
     }
 
@@ -129,36 +130,6 @@ export default function SeasonPage({
     return Math.floor(hoursPassed / 12) + 1
   }
 
-  // -----------------------------
-  // AUTO START GAME
-  // -----------------------------
-  useEffect(() => {
-    if (players.length >= MAX_PLAYERS) {
-      startGameIfNeeded()
-    }
-  }, [players])
-
-  async function startGameIfNeeded() {
-    const { data: lobby } = await supabase
-      .from('lobbies')
-      .select('*')
-      .eq('id', params.id)
-      .single()
-
-    if (lobby?.status === 'in_progress') return
-
-    await supabase
-      .from('lobbies')
-      .update({
-        status: 'in_progress',
-        started_at: new Date().toISOString(),
-      })
-      .eq('id', params.id)
-  }
-
-  // -----------------------------
-  // OPTIONAL: LOAD LOBBY (for day display)
-  // -----------------------------
   const [lobby, setLobby] = useState<any>(null)
 
   async function loadLobby() {
@@ -173,7 +144,7 @@ export default function SeasonPage({
 
   useEffect(() => {
     loadLobby()
-  }, [])
+  }, [params.id])
 
   const day = getDayNumber(lobby)
 
@@ -264,9 +235,9 @@ export default function SeasonPage({
           Cast Vote
         </button>
 
-        {/* DAY DISPLAY */}
+        {/* DAY DISPLAY FIXED */}
         <div className="absolute bottom-4 left-0 right-0 text-center">
-          <p className="font-bold">
+          <p className="font-bold text-2xl tracking-widest uppercase">
             Day {day}
           </p>
         </div>
