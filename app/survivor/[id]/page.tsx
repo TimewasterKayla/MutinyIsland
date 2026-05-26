@@ -69,7 +69,7 @@ export default function SeasonPage({
   }, [lobbyId])
 
   // -----------------------------
-  // AUTO SCROLL
+  // AUTO SCROLL CHAT TO BOTTOM
   // -----------------------------
   useEffect(() => {
     if (chatRef.current) {
@@ -120,13 +120,7 @@ export default function SeasonPage({
   async function loadPlayers() {
     const { data, error } = await supabase
       .from('lobby_players')
-      .select(`
-        id,
-        user_id,
-        profiles (
-          username
-        )
-      `)
+      .select('*')
       .eq('lobby_id', lobbyId)
 
     if (error) {
@@ -139,15 +133,27 @@ export default function SeasonPage({
       return
     }
 
+    const userIds = data.map((p) => p.user_id)
+
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('id, username')
+      .in('id', userIds)
+
+    const usernameMap = Object.fromEntries(
+      (profileData || []).map((p) => [
+        p.id,
+        p.username,
+      ])
+    )
+
     const formattedPlayers: Player[] = data.map(
-      (p: any) => ({
+      (p) => ({
         id: p.id,
         user_id: p.user_id,
-
-        // FIXED USERNAME FETCH
         username:
-          p.profiles?.username ||
-          'Unknown User',
+          usernameMap[p.user_id] ||
+          p.user_id.slice(0, 8),
       })
     )
 
@@ -155,7 +161,7 @@ export default function SeasonPage({
   }
 
   // -----------------------------
-  // MESSAGES
+  // LOAD MESSAGES
   // -----------------------------
   async function loadMessages() {
     const { data, error } = await supabase
@@ -367,8 +373,7 @@ export default function SeasonPage({
 
         <p className="italic text-zinc-400 mt-4">
           Waiting for players (
-          {players.length}/
-          {MAX_PLAYERS})
+          {players.length}/{MAX_PLAYERS})
         </p>
       </div>
 
@@ -382,9 +387,10 @@ export default function SeasonPage({
         {/* CHAT AREA */}
         <div
           ref={chatRef}
-          className="flex-1 overflow-y-auto mb-4 pr-2 flex flex-col justify-end"
+          className="flex-1 overflow-y-auto mb-4 pr-2"
         >
-          <div className="space-y-3">
+          <div className="flex flex-col justify-end min-h-full space-y-3">
+
             {messages.map((m) => (
               <div
                 key={m.id}
@@ -411,6 +417,7 @@ export default function SeasonPage({
 
               </div>
             ))}
+
           </div>
         </div>
 
