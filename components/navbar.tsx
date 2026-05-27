@@ -122,10 +122,13 @@ export default function Navbar() {
       <div className="absolute inset-0 -z-10 bg-black/40" />
 
       {/* LEFT */}
-      <div className="w-1/3 flex items-center gap-2 text-sm">
-        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-        <span>{onlineCount} online</span>
-      </div>
+<div className="w-1/3 flex items-center gap-2 text-sm">
+  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+  <span>{onlineCount} online</span>
+  <button className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center border border-zinc-500 transition cursor-pointer">
+    <Image src="/gear.png" alt="Settings" width={14} height={14} />
+  </button>
+</div>
 
       {/* CENTER */}
       <div className="w-1/3 flex justify-center gap-3 flex-wrap">
