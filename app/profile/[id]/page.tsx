@@ -48,7 +48,6 @@ function buildEmbedUrl(videoId: string, autoplay: boolean): string {
   return `https://www.youtube.com/embed/${videoId}?${params.toString()}`
 }
 
-// Build a wrapper div string that holds the iframe — stored in innerHTML
 function buildYouTubeHTML(
   videoId: string,
   embedUrl: string,
@@ -100,6 +99,11 @@ export default function ProfilePage({
   const [youtubeAlignment, setYoutubeAlignment] = useState<'left' | 'center' | 'right'>('center')
   const [youtubeAutoplay, setYoutubeAutoplay] = useState<boolean>(false)
   const [editYouTubeWrapper, setEditYouTubeWrapper] = useState<HTMLElement | null>(null)
+
+  // Link modal state
+  const [showLinkModal, setShowLinkModal] = useState<boolean>(false)
+  const [linkUrl, setLinkUrl] = useState<string>('')
+  const [editLinkEl, setEditLinkEl] = useState<HTMLAnchorElement | null>(null)
 
   const [selectedImg, setSelectedImg] = useState<HTMLImageElement | null>(null)
   const [charCount, setCharCount] = useState<number>(0)
@@ -171,6 +175,7 @@ export default function ProfilePage({
       setCharCount(editorRef.current.innerText.length)
       attachImageListeners()
       attachYouTubeListeners()
+      attachLinkListeners()
       startMutationObserver()
     }
     if (!editing) {
@@ -285,14 +290,12 @@ export default function ProfilePage({
       const videoId = wrapper.getAttribute('data-video-id') || ''
       const autoplay = wrapper.getAttribute('data-autoplay') === 'true'
 
-      // Detect current size from wrapper width
       const currentWidth = wrapper.style.width
       let size: 'small' | 'medium' | 'large' = 'medium'
       if (currentWidth === '300px') size = 'small'
       else if (currentWidth === '560px') size = 'medium'
       else if (currentWidth === '100%') size = 'large'
 
-      // Detect current alignment
       const marginLeft = wrapper.style.marginLeft
       const marginRight = wrapper.style.marginRight
       let alignment: 'left' | 'center' | 'right' = 'center'
@@ -305,6 +308,26 @@ export default function ProfilePage({
       setYoutubeAlignment(alignment)
       setYoutubeAutoplay(autoplay)
       setShowYouTubeModal(true)
+    }
+  }
+
+  // -----------------------------
+  // ATTACH LISTENERS TO LINKS
+  // -----------------------------
+  function attachLinkListeners() {
+    if (!editorRef.current) return
+    const anchors = editorRef.current.querySelectorAll<HTMLAnchorElement>('a[data-editor-link="1"]')
+    anchors.forEach((a) => addLinkListeners(a))
+  }
+
+  function addLinkListeners(a: HTMLAnchorElement) {
+    a.style.cursor = 'pointer'
+
+    a.oncontextmenu = (e) => {
+      e.preventDefault()
+      setEditLinkEl(a)
+      setLinkUrl(a.href)
+      setShowLinkModal(true)
     }
   }
 
@@ -469,7 +492,6 @@ export default function ProfilePage({
     const width = widthMap[youtubeSize]
     const embedUrl = buildEmbedUrl(videoId, youtubeAutoplay)
 
-    // If editing an existing YouTube embed, replace it in place
     if (editYouTubeWrapper) {
       const html = buildYouTubeHTML(videoId, embedUrl, width, youtubeAlignment, youtubeAutoplay)
       const temp = document.createElement('div')
@@ -519,6 +541,83 @@ export default function ProfilePage({
   }
 
   // -----------------------------
+  // INSERT / UPDATE / REMOVE LINK
+  // -----------------------------
+  function insertLink() {
+    const editor = editorRef.current
+    if (!editor) return
+
+    // Editing an existing link
+    if (editLinkEl) {
+      if (!linkUrl.trim()) {
+        // Empty URL = remove the link, keep the text
+        const text = document.createTextNode(editLinkEl.innerText)
+        editLinkEl.replaceWith(text)
+      } else {
+        editLinkEl.href = linkUrl.trim()
+      }
+      closeLinkModal()
+      return
+    }
+
+    // Inserting a new link from a selection
+    const sel = window.getSelection()
+    const range = savedRangeRef.current
+
+    if (!range || range.collapsed) {
+      alert('Please highlight some text first, then click the link button.')
+      closeLinkModal()
+      return
+    }
+
+    if (!linkUrl.trim()) {
+      closeLinkModal()
+      return
+    }
+
+    // Restore the saved selection
+    sel?.removeAllRanges()
+    sel?.addRange(range)
+
+    const a = document.createElement('a')
+    a.href = linkUrl.trim()
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.style.color = '#22c55e'
+    a.style.textDecoration = 'underline'
+    a.setAttribute('data-editor-link', '1')
+
+    try {
+      range.surroundContents(a)
+    } catch {
+      // surroundContents fails if selection crosses element boundaries — fallback
+      const fragment = range.extractContents()
+      a.appendChild(fragment)
+      range.insertNode(a)
+    }
+
+    addLinkListeners(a)
+
+    // Move cursor after the link
+    const newRange = document.createRange()
+    newRange.setStartAfter(a)
+    newRange.collapse(true)
+    sel?.removeAllRanges()
+    sel?.addRange(newRange)
+
+    editor.focus()
+    setCharCount(editor.innerText.length)
+    closeLinkModal()
+  }
+
+  function closeLinkModal() {
+    setShowLinkModal(false)
+    setLinkUrl('')
+    setEditLinkEl(null)
+    savedRangeRef.current = null
+  }
+
+  // -----------------------------
   // DELETE IMAGE
   // -----------------------------
   function deleteImage(img: HTMLImageElement) {
@@ -553,8 +652,8 @@ export default function ProfilePage({
   }
 
   const tabs = isOwnProfile
-  ? ['about', 'messages', 'posts', 'friends', 'wins', 'inventory']
-  : ['about', 'posts', 'friends', 'wins']
+    ? ['about', 'messages', 'posts', 'friends', 'wins', 'inventory']
+    : ['about', 'posts', 'friends', 'wins']
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-6 pt-16">
@@ -681,7 +780,7 @@ export default function ProfilePage({
                       {/* BOLD */}
                       <button
                         onMouseDown={(e) => { e.preventDefault(); exec('bold') }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold"
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold cursor-pointer"
                       >
                         B
                       </button>
@@ -689,7 +788,7 @@ export default function ProfilePage({
                       {/* ITALIC */}
                       <button
                         onMouseDown={(e) => { e.preventDefault(); exec('italic') }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic"
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic cursor-pointer"
                       >
                         I
                       </button>
@@ -704,16 +803,31 @@ export default function ProfilePage({
                           setImageSize('medium')
                           setShowImageModal(true)
                         }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
                         title="Insert image"
                       >
                         <Image src="/picture.png" alt="img" width={14} height={14} />
                       </button>
 
+                      {/* LINK */}
+                      <button
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          saveCursor()
+                          setEditLinkEl(null)
+                          setLinkUrl('')
+                          setShowLinkModal(true)
+                        }}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
+                        title="Insert link"
+                      >
+                        <Image src="/link.png" alt="Link" width={14} height={14} />
+                      </button>
+
                       {/* ALIGN LEFT */}
                       <button
                         onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
                         title="Align left"
                       >
                         <Image src="/left.png" alt="left" width={14} height={14} />
@@ -722,7 +836,7 @@ export default function ProfilePage({
                       {/* ALIGN CENTER */}
                       <button
                         onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
                         title="Align center"
                       >
                         <Image src="/center.png" alt="center" width={14} height={14} />
@@ -731,7 +845,7 @@ export default function ProfilePage({
                       {/* ALIGN RIGHT */}
                       <button
                         onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
                         title="Align right"
                       >
                         <Image src="/right.png" alt="right" width={14} height={14} />
@@ -749,7 +863,7 @@ export default function ProfilePage({
                           setYoutubeAutoplay(false)
                           setShowYouTubeModal(true)
                         }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
                         title="Insert YouTube video"
                       >
                         <Image src="/youtube.png" alt="YouTube" width={14} height={14} />
@@ -771,14 +885,14 @@ export default function ProfilePage({
                           }
                           setEditing(false)
                         }}
-                        className="bg-zinc-700 px-3 py-1 rounded-lg"
+                        className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded-lg cursor-pointer transition"
                       >
                         Cancel
                       </button>
 
                       <button
                         onClick={saveAboutMe}
-                        className="bg-green-500 text-black px-4 py-1 rounded-lg font-bold"
+                        className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded-lg font-bold cursor-pointer transition"
                       >
                         Save
                       </button>
@@ -802,12 +916,12 @@ export default function ProfilePage({
               </div>
             )}
 
-{activeTab === 'posts' && (
-  <div>
-    <h2 className="text-3xl font-bold mb-4">Posts</h2>
-    <div className="text-zinc-400">Posts coming soon...</div>
-  </div>
-)}
+            {activeTab === 'posts' && (
+              <div>
+                <h2 className="text-3xl font-bold mb-4">Posts</h2>
+                <div className="text-zinc-400">Posts coming soon...</div>
+              </div>
+            )}
 
             {activeTab === 'wins' && (
               <div>
@@ -837,7 +951,7 @@ export default function ProfilePage({
                 <button
                   key={avatar}
                   onClick={() => changeAvatar(avatar)}
-                  className="bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 hover:border-orange-400"
+                  className="bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 hover:border-orange-400 cursor-pointer"
                 >
                   <Image
                     src={avatar}
@@ -851,7 +965,7 @@ export default function ProfilePage({
             </div>
             <button
               onClick={() => setShowAvatarEditor(false)}
-              className="mt-5 w-full bg-zinc-700 hover:bg-zinc-600 rounded-xl py-2"
+              className="mt-5 w-full bg-zinc-700 hover:bg-zinc-600 rounded-xl py-2 cursor-pointer transition"
             >
               Close
             </button>
@@ -881,7 +995,7 @@ export default function ProfilePage({
               <select
                 value={imageSize}
                 onChange={(e) => setImageSize(e.target.value as 'small' | 'medium' | 'large')}
-                className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
+                className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white cursor-pointer"
               >
                 <option value="small">Small (200px)</option>
                 <option value="medium">Medium (400px)</option>
@@ -896,7 +1010,7 @@ export default function ProfilePage({
                   setImageUrl('')
                   setEditImageEl(null)
                 }}
-                className="bg-zinc-700 px-3 py-1 rounded"
+                className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition"
               >
                 Cancel
               </button>
@@ -915,9 +1029,70 @@ export default function ProfilePage({
                     insertImage()
                   }
                 }}
-                className="bg-green-500 text-black px-4 py-1 rounded font-bold"
+                className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition"
               >
                 {editImageEl ? 'Update' : 'Insert'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LINK MODAL */}
+      {showLinkModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[420px]">
+            <h2 className="text-2xl font-bold mb-1 flex items-center gap-2">
+              <Image src="/link.png" alt="Link" width={20} height={20} />
+              {editLinkEl ? 'Edit Link' : 'Insert Link'}
+            </h2>
+
+            {!editLinkEl && (
+              <p className="text-xs text-zinc-400 mb-4">
+                Highlight text in the editor before clicking this button to turn it into a link.
+              </p>
+            )}
+            {editLinkEl && (
+              <p className="text-xs text-zinc-400 mb-4">
+                Update the URL below, or clear it to remove the link.
+              </p>
+            )}
+
+            <input
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') insertLink() }}
+              placeholder="https://example.com"
+              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
+              autoFocus
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={closeLinkModal}
+                className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition"
+              >
+                Cancel
+              </button>
+
+              {editLinkEl && (
+                <button
+                  onClick={() => {
+                    const text = document.createTextNode(editLinkEl.innerText)
+                    editLinkEl.replaceWith(text)
+                    closeLinkModal()
+                  }}
+                  className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition"
+                >
+                  Remove
+                </button>
+              )}
+
+              <button
+                onClick={insertLink}
+                className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition"
+              >
+                {editLinkEl ? 'Update' : 'Insert'}
               </button>
             </div>
           </div>
@@ -947,7 +1122,7 @@ export default function ProfilePage({
               <select
                 value={youtubeSize}
                 onChange={(e) => setYoutubeSize(e.target.value as 'small' | 'medium' | 'large')}
-                className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
+                className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white cursor-pointer"
               >
                 <option value="small">Small (300px)</option>
                 <option value="medium">Medium (560px)</option>
@@ -960,7 +1135,7 @@ export default function ProfilePage({
               <select
                 value={youtubeAlignment}
                 onChange={(e) => setYoutubeAlignment(e.target.value as 'left' | 'center' | 'right')}
-                className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
+                className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white cursor-pointer"
               >
                 <option value="left">Left</option>
                 <option value="center">Center</option>
@@ -977,21 +1152,21 @@ export default function ProfilePage({
                 className="w-4 h-4 accent-green-500 cursor-pointer"
               />
               <label htmlFor="yt-autoplay" className="text-sm text-zinc-300 cursor-pointer select-none">
-                Autoplay when profile is opened{' '}
+                Autoplay when profile is opened
               </label>
             </div>
 
             <div className="flex justify-end gap-2">
               <button
                 onClick={closeYouTubeModal}
-                className="bg-zinc-700 px-3 py-1 rounded"
+                className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition"
               >
                 Cancel
               </button>
 
               <button
                 onClick={insertYouTube}
-                className="bg-green-500 text-black px-4 py-1 rounded font-bold"
+                className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition"
               >
                 {editYouTubeWrapper ? 'Update' : 'Insert'}
               </button>
@@ -1015,7 +1190,7 @@ export default function ProfilePage({
             left: deleteBtn.x,
             zIndex: 9999,
           }}
-          className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-lg flex items-center justify-center shadow-lg"
+          className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-lg flex items-center justify-center shadow-lg cursor-pointer"
         >
           <Image src="/trash.png" alt="Delete" width={14} height={14} />
         </button>
