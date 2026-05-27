@@ -30,7 +30,7 @@ export default function ProfilePage({
     useState(true)
 
   const [activeTab, setActiveTab] =
-    useState<'messages' | 'friends'>('messages')
+    useState<'about' | 'messages' | 'friends' | 'wins'>('about')
 
   const editorRef =
     useRef<HTMLDivElement | null>(null)
@@ -81,7 +81,7 @@ export default function ProfilePage({
   }
 
   // -----------------------------
-  // LOAD EDIT CONTENT ON OPEN
+  // LOAD EDIT CONTENT
   // -----------------------------
   useEffect(() => {
     if (editing && editorRef.current && profile) {
@@ -119,9 +119,6 @@ export default function ProfilePage({
     setEditing(false)
   }
 
-  // -----------------------------
-  // RICH TEXT
-  // -----------------------------
   function exec(command: string) {
     document.execCommand(command)
     editorRef.current?.focus()
@@ -147,7 +144,7 @@ export default function ProfilePage({
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white p-6">
+    <main className="min-h-screen bg-zinc-950 text-white p-6 pt-16">
 
       <div className="max-w-7xl mx-auto grid grid-cols-3 gap-6">
 
@@ -170,142 +167,152 @@ export default function ProfilePage({
 
         </div>
 
-        {/* RIGHT WRAPPER (for tab positioning) */}
+        {/* RIGHT WRAPPER */}
         <div className="col-span-2 relative">
 
-          {/* TAB BUTTONS (FOLDER STYLE) */}
-          <div className="absolute -top-6 right-6 flex gap-2 z-10">
+          {/* TAB BAR (smaller + more compact) */}
+          <div className="absolute -top-7 right-6 flex gap-1 z-10">
 
-            <button
-              onClick={() => setActiveTab('friends')}
-              className={`px-4 py-2 rounded-t-lg border border-zinc-700 transition ${
-                activeTab === 'friends'
-                  ? 'bg-green-500 text-black font-bold'
-                  : 'bg-green-200 text-black hover:bg-green-300'
-              }`}
-            >
-              Friends
-            </button>
-
-            <button
-              onClick={() => setActiveTab('messages')}
-              className={`px-4 py-2 rounded-t-lg border border-zinc-700 transition ${
-                activeTab === 'messages'
-                  ? 'bg-green-500 text-black font-bold'
-                  : 'bg-green-200 text-black hover:bg-green-300'
-              }`}
-            >
-              Messages
-            </button>
+            {[
+              'about',
+              'messages',
+              'friends',
+              'wins',
+            ].map((tab) => (
+              <button
+                key={tab}
+                onClick={() =>
+                  setActiveTab(tab as any)
+                }
+                className={`px-3 py-1 text-xs rounded-t-md border border-zinc-700 transition capitalize ${
+                  activeTab === tab
+                    ? 'bg-green-500 text-black font-bold'
+                    : 'bg-green-200 text-black hover:bg-green-300'
+                }`}
+              >
+                {tab === 'about'
+                  ? 'About Me'
+                  : tab}
+              </button>
+            ))}
 
           </div>
 
           {/* RIGHT PANEL */}
-          <div className="bg-zinc-900 rounded-2xl p-6 min-h-[500px]">
+          <div className="bg-zinc-900 rounded-2xl p-6 min-h-[550px]">
 
-            {/* ABOUT SECTION ALWAYS SHOWN FOR NOW */}
-            <div className="mb-6">
-              <h2 className="text-3xl font-bold mb-4">
-                About Me
-              </h2>
+            {/* ABOUT TAB CONTENT */}
+            {activeTab === 'about' && (
+              <div>
 
-              {!editing ? (
-                <div
-                  className="bg-zinc-900 rounded-xl p-4 min-h-[200px]"
-                  dangerouslySetInnerHTML={{
-                    __html:
-                      profile.about_me?.trim() ||
-                      `<span class="text-zinc-400 italic">This player has not written anything yet.</span>`,
-                  }}
-                />
-              ) : (
-                <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-3xl font-bold">
+                    About Me
+                  </h2>
 
-                  {/* EDITOR */}
+                  {isOwnProfile &&
+                    !editing && (
+                      <button
+                        onClick={() =>
+                          setEditing(true)
+                        }
+                        className="bg-green-500 text-black px-4 py-2 rounded-xl font-bold"
+                      >
+                        Edit
+                      </button>
+                    )}
+                </div>
+
+                {!editing ? (
                   <div
-                    ref={editorRef}
-                    contentEditable
-                    suppressContentEditableWarning
-                    className="w-full min-h-[200px] bg-zinc-800 rounded-xl p-4 text-white outline-none border border-zinc-700 focus:border-green-500"
+                    className="bg-zinc-900 rounded-xl p-4 min-h-[200px]"
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        profile.about_me?.trim() ||
+                        `<span class="text-zinc-400 italic">This player has not written anything yet.</span>`,
+                    }}
                   />
+                ) : (
+                  <div>
 
-                  {/* TOOLBAR */}
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={() =>
-                        exec('bold')
+                    <div
+                      ref={editorRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      className="w-full min-h-[200px] bg-zinc-800 rounded-xl p-4 outline-none border border-zinc-700"
+                    />
+
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() =>
+                          exec('bold')
+                        }
+                        className="w-7 h-7 bg-zinc-700 rounded text-xs font-bold"
+                      >
+                        B
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          exec('italic')
+                        }
+                        className="w-7 h-7 bg-zinc-700 rounded text-xs italic"
+                      >
+                        I
+                      </button>
+                    </div>
+
+                    <div className="mt-2 text-xs text-zinc-400">
+                      {
+                        editorRef.current
+                          ?.innerText
+                          ?.length || 0
                       }
-                      className="w-8 h-8 bg-zinc-700 rounded-md font-bold"
-                    >
-                      B
-                    </button>
+                      /1000
+                    </div>
 
-                    <button
-                      onClick={() =>
-                        exec('italic')
-                      }
-                      className="w-8 h-8 bg-zinc-700 rounded-md italic"
-                    >
-                      I
-                    </button>
+                    <div className="flex justify-end gap-2 mt-3">
+                      <button
+                        onClick={() =>
+                          setEditing(false)
+                        }
+                        className="bg-zinc-700 px-3 py-1 rounded-lg"
+                      >
+                        Cancel
+                      </button>
+
+                      <button
+                        onClick={saveAboutMe}
+                        className="bg-green-500 text-black px-4 py-1 rounded-lg font-bold"
+                      >
+                        Save
+                      </button>
+                    </div>
+
                   </div>
+                )}
 
-                  <div className="mt-2 text-sm text-zinc-400">
-                    {
-                      editorRef.current
-                        ?.innerText?.length ||
-                      0
-                    }
-                    /1000
-                  </div>
+              </div>
+            )}
 
-                  <div className="flex justify-end gap-2 mt-3">
-                    <button
-                      onClick={() =>
-                        setEditing(false)
-                      }
-                      className="bg-zinc-700 px-4 py-2 rounded-xl"
-                    >
-                      Cancel
-                    </button>
+            {/* OTHER TABS */}
+            {activeTab === 'messages' && (
+              <div className="text-zinc-400">
+                Messages coming soon...
+              </div>
+            )}
 
-                    <button
-                      onClick={saveAboutMe}
-                      className="bg-green-500 text-black px-5 py-2 rounded-xl font-bold"
-                    >
-                      Save
-                    </button>
-                  </div>
+            {activeTab === 'friends' && (
+              <div className="text-zinc-400">
+                Friends coming soon...
+              </div>
+            )}
 
-                </div>
-              )}
-
-              {isOwnProfile && !editing && (
-                <button
-                  onClick={() => setEditing(true)}
-                  className="mt-4 bg-green-500 text-black px-4 py-2 rounded-xl font-bold"
-                >
-                  Edit
-                </button>
-              )}
-            </div>
-
-            {/* TAB CONTENT AREA */}
-            <div className="border-t border-zinc-700 pt-4">
-
-              {activeTab === 'messages' && (
-                <div className="text-zinc-300">
-                  Messages tab coming soon...
-                </div>
-              )}
-
-              {activeTab === 'friends' && (
-                <div className="text-zinc-300">
-                  Friends tab coming soon...
-                </div>
-              )}
-
-            </div>
+            {activeTab === 'wins' && (
+              <div className="text-zinc-400">
+                Wins coming soon...
+              </div>
+            )}
 
           </div>
 
