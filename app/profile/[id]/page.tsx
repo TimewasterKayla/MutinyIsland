@@ -48,7 +48,7 @@ export default function ProfilePage({
 
   const [activeTab, setActiveTab] =
     useState<
-      'about' | 'messages' | 'friends' | 'wins'
+      'about' | 'messages' | 'friends' | 'wins' | 'inventory'
     >('about')
 
   const editorRef =
@@ -89,11 +89,7 @@ export default function ProfilePage({
     // assign avatar if missing
     if (!data.avatar) {
       const randomAvatar =
-        avatars[
-          Math.floor(
-            Math.random() * avatars.length
-          )
-        ]
+        avatars[Math.floor(Math.random() * avatars.length)]
 
       await supabase
         .from('profiles')
@@ -111,16 +107,14 @@ export default function ProfilePage({
       data: { user },
     } = await supabase.auth.getUser()
 
-    const own =
-      !!user && user.id === data.id
+    const own = !!user && user.id === data.id
 
     setIsOwnProfile(own)
 
     setActiveTab((prev) => {
-      if (!own && prev === 'messages') {
+      if (!own && (prev === 'messages' || prev === 'inventory')) {
         return 'about'
       }
-
       return prev
     })
 
@@ -131,13 +125,8 @@ export default function ProfilePage({
   // LOAD EDIT CONTENT
   // -----------------------------
   useEffect(() => {
-    if (
-      editing &&
-      editorRef.current &&
-      profile
-    ) {
-      editorRef.current.innerHTML =
-        profile.about_me || ''
+    if (editing && editorRef.current && profile) {
+      editorRef.current.innerHTML = profile.about_me || ''
     }
   }, [editing, profile])
 
@@ -145,14 +134,9 @@ export default function ProfilePage({
   // SAVE ABOUT ME
   // -----------------------------
   async function saveAboutMe() {
-    if (
-      !profile ||
-      !editorRef.current
-    )
-      return
+    if (!profile || !editorRef.current) return
 
-    const html =
-      editorRef.current.innerHTML
+    const html = editorRef.current.innerHTML
 
     const { error } = await supabase
       .from('profiles')
@@ -178,9 +162,7 @@ export default function ProfilePage({
   // -----------------------------
   // CHANGE AVATAR
   // -----------------------------
-  async function changeAvatar(
-    avatar: string
-  ) {
+  async function changeAvatar(avatar: string) {
     if (!profile) return
 
     const { error } = await supabase
@@ -234,12 +216,7 @@ export default function ProfilePage({
   // TABS
   // -----------------------------
   const tabs = isOwnProfile
-    ? [
-        'about',
-        'messages',
-        'friends',
-        'wins',
-      ]
+    ? ['about', 'messages', 'friends', 'wins', 'inventory']
     : ['about', 'friends', 'wins']
 
   // -----------------------------
@@ -259,10 +236,7 @@ export default function ProfilePage({
             <div className="w-full aspect-square rounded-2xl overflow-hidden bg-zinc-800 border border-zinc-700">
 
               <Image
-                src={
-                  profile.avatar ||
-                  '/avatars/jess.png'
-                }
+                src={profile.avatar || '/avatars/jess.png'}
                 alt="Avatar"
                 width={500}
                 height={500}
@@ -271,12 +245,9 @@ export default function ProfilePage({
 
             </div>
 
-            {/* EDIT AVATAR BUTTON */}
             {isOwnProfile && (
               <button
-                onClick={() =>
-                  setShowAvatarEditor(true)
-                }
+                onClick={() => setShowAvatarEditor(true)}
                 className="absolute bottom-3 right-3 bg-orange-500 hover:bg-orange-600 transition text-white text-xs font-bold px-3 py-2 rounded-lg shadow-lg cursor-pointer"
               >
                 Edit
@@ -296,48 +267,35 @@ export default function ProfilePage({
           <div className="mt-6 space-y-3 text-sm">
 
             <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
-              <span className="text-zinc-400">
-                Rank:
-              </span>{' '}
+              <span className="text-zinc-400">Rank:</span>{' '}
               <span className="font-semibold text-white">
                 {profile.rank || 'Peasant'}
               </span>
             </div>
 
             <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
-              <span className="text-zinc-400">
-                Doubloons:
-              </span>{' '}
+              <span className="text-zinc-400">Doubloons:</span>{' '}
               <span className="font-semibold text-yellow-400">
                 {profile.coins || 0}
               </span>
             </div>
 
             <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
-              <span className="text-zinc-400">
-                Crowns:
-              </span>{' '}
+              <span className="text-zinc-400">Crowns:</span>{' '}
               <span className="font-semibold text-amber-300">
                 {profile.crowns || 0}
               </span>
             </div>
 
             <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
-              <span className="text-zinc-400">
-                Date Joined:
-              </span>{' '}
+              <span className="text-zinc-400">Date Joined:</span>{' '}
               <span className="font-semibold text-white">
                 {profile.created_at
-                  ? new Date(
-                      profile.created_at
-                    ).toLocaleDateString(
-                      'en-US',
-                      {
-                        month: '2-digit',
-                        day: '2-digit',
-                        year: 'numeric',
-                      }
-                    )
+                  ? new Date(profile.created_at).toLocaleDateString('en-US', {
+                      month: '2-digit',
+                      day: '2-digit',
+                      year: 'numeric',
+                    })
                   : 'Unknown'}
               </span>
             </div>
@@ -346,7 +304,7 @@ export default function ProfilePage({
 
         </div>
 
-        {/* RIGHT WRAPPER */}
+        {/* RIGHT */}
         <div className="col-span-2 relative">
 
           {/* TAB BAR */}
@@ -355,51 +313,39 @@ export default function ProfilePage({
             {tabs.map((tab) => (
               <button
                 key={tab}
-                onClick={() =>
-                  setActiveTab(tab as any)
-                }
+                onClick={() => setActiveTab(tab as any)}
                 className={`px-3 py-1 text-xs rounded-t-md border border-zinc-700 transition capitalize cursor-pointer ${
                   activeTab === tab
                     ? 'bg-green-500 text-black font-bold'
                     : 'bg-green-200 text-black hover:bg-green-300'
                 }`}
               >
-                {tab === 'about'
-                  ? 'About Me'
-                  : tab}
+                {tab}
               </button>
             ))}
 
           </div>
 
-          {/* RIGHT PANEL */}
+          {/* PANEL */}
           <div className="bg-zinc-900 rounded-2xl p-6 min-h-[550px]">
 
-            {/* ABOUT TAB */}
+            {/* ABOUT */}
             {activeTab === 'about' && (
               <div>
 
                 <div className="flex items-center justify-between mb-4 pl-4">
+                  <h2 className="text-3xl font-bold">About Me</h2>
 
-                  <h2 className="text-3xl font-bold">
-                    About Me
-                  </h2>
-
-                  {isOwnProfile &&
-                    !editing && (
-                      <button
-                        onClick={() =>
-                          setEditing(true)
-                        }
-                        className="bg-green-500 text-black px-4 py-2 rounded-xl font-bold cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                    )}
-
+                  {isOwnProfile && !editing && (
+                    <button
+                      onClick={() => setEditing(true)}
+                      className="bg-green-500 text-black px-4 py-2 rounded-xl font-bold cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                  )}
                 </div>
 
-                {/* DISPLAY MODE */}
                 {!editing ? (
                   <div
                     className="bg-zinc-900 rounded-xl p-4 min-h-[200px]"
@@ -411,8 +357,6 @@ export default function ProfilePage({
                   />
                 ) : (
                   <div>
-
-                    {/* EDITOR */}
                     <div
                       ref={editorRef}
                       contentEditable
@@ -420,85 +364,75 @@ export default function ProfilePage({
                       className="w-full min-h-[200px] bg-zinc-800 rounded-xl p-4 outline-none border border-zinc-700"
                     />
 
-                    {/* FORMAT BUTTONS */}
                     <div className="flex gap-2 mt-2">
-
                       <button
-                        onClick={() =>
-                          exec('bold')
-                        }
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 transition rounded text-xs font-bold cursor-pointer"
+                        onClick={() => exec('bold')}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold"
                       >
                         B
                       </button>
 
                       <button
-                        onClick={() =>
-                          exec('italic')
-                        }
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 transition rounded text-xs italic cursor-pointer"
+                        onClick={() => exec('italic')}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic"
                       >
                         I
                       </button>
-
                     </div>
 
-                    {/* CHARACTER COUNT */}
                     <div className="mt-2 text-xs text-zinc-400">
-                      {
-                        editorRef.current
-                          ?.innerText
-                          ?.length || 0
-                      }
-                      /1000
+                      {editorRef.current?.innerText?.length || 0}/1000
                     </div>
 
-                    {/* ACTIONS */}
                     <div className="flex justify-end gap-2 mt-3">
-
                       <button
-                        onClick={() =>
-                          setEditing(false)
-                        }
-                        className="bg-zinc-700 hover:bg-zinc-600 transition px-3 py-1 rounded-lg cursor-pointer"
+                        onClick={() => setEditing(false)}
+                        className="bg-zinc-700 px-3 py-1 rounded-lg"
                       >
                         Cancel
                       </button>
 
                       <button
                         onClick={saveAboutMe}
-                        className="bg-green-500 hover:bg-green-600 transition text-black px-4 py-1 rounded-lg font-bold cursor-pointer"
+                        className="bg-green-500 text-black px-4 py-1 rounded-lg font-bold"
                       >
                         Save
                       </button>
-
                     </div>
-
                   </div>
                 )}
-
               </div>
             )}
 
-            {/* MESSAGES TAB */}
-            {activeTab === 'messages' &&
-              isOwnProfile && (
-                <div className="text-zinc-400">
-                  Messages coming soon...
-                </div>
-              )}
+            {/* MESSAGES */}
+            {activeTab === 'messages' && isOwnProfile && (
+              <div>
+                <h2 className="text-3xl font-bold mb-4">Messages</h2>
+                <div className="text-zinc-400">Messages coming soon...</div>
+              </div>
+            )}
 
-            {/* FRIENDS TAB */}
+            {/* FRIENDS */}
             {activeTab === 'friends' && (
-              <div className="text-zinc-400">
-                Friends coming soon...
+              <div>
+                <h2 className="text-3xl font-bold mb-4">Friends</h2>
+                <div className="text-zinc-400">Friends coming soon...</div>
               </div>
             )}
 
-            {/* WINS TAB */}
+            {/* WINS */}
             {activeTab === 'wins' && (
-              <div className="text-zinc-400">
-                Wins coming soon...
+              <div>
+                <h2 className="text-3xl font-bold mb-4">Wins</h2>
+                <div className="text-zinc-400">Wins coming soon...</div>
+              </div>
+            )}
+
+            {/* INVENTORY */}
+            {activeTab === 'inventory' && isOwnProfile && (
+              <div>
+                <h2 className="text-3xl font-bold mb-4">Inventory</h2>
+                <div className="text-zinc-400">Inventory coming soon...</div>
               </div>
             )}
 
@@ -508,25 +442,20 @@ export default function ProfilePage({
 
       </div>
 
-      {/* AVATAR POPUP */}
+      {/* AVATAR MODAL */}
       {showAvatarEditor && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
 
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[420px]">
 
-            <h2 className="text-2xl font-bold mb-4">
-              Select Avatar
-            </h2>
+            <h2 className="text-2xl font-bold mb-4">Select Avatar</h2>
 
             <div className="grid grid-cols-3 gap-4">
-
               {avatars.map((avatar) => (
                 <button
                   key={avatar}
-                  onClick={() =>
-                    changeAvatar(avatar)
-                  }
-                  className="bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 hover:border-orange-400 transition cursor-pointer"
+                  onClick={() => changeAvatar(avatar)}
+                  className="bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 hover:border-orange-400"
                 >
                   <Image
                     src={avatar}
@@ -537,14 +466,11 @@ export default function ProfilePage({
                   />
                 </button>
               ))}
-
             </div>
 
             <button
-              onClick={() =>
-                setShowAvatarEditor(false)
-              }
-              className="mt-5 w-full bg-zinc-700 hover:bg-zinc-600 transition rounded-xl py-2 cursor-pointer"
+              onClick={() => setShowAvatarEditor(false)}
+              className="mt-5 w-full bg-zinc-700 hover:bg-zinc-600 rounded-xl py-2"
             >
               Close
             </button>
