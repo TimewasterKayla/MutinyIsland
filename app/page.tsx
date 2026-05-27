@@ -156,86 +156,103 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
+    <main className="min-h-screen flex items-center justify-center relative overflow-hidden">
 
-      {/* BACKGROUND */}
+      {/* PAGE BACKGROUND */}
       <div className="ocean-bg" />
 
-      <div className="w-full max-w-md space-y-6 text-center relative z-10">
+      {/* PARCHMENT CARD */}
+      <div className="relative w-full max-w-md">
 
-        <h1 className="text-4xl font-bold">Mutiny Island</h1>
+        {/* PARCHMENT IMAGE */}
+        <img
+          src="/parchment.png"
+          alt=""
+          className="absolute inset-0 w-full h-full object-fill"
+        />
 
-        <p className="text-sm italic text-zinc-300">Welcome aboard!</p>
+        {/* CONTENT ON TOP OF PARCHMENT */}
+        <div className="relative z-10 flex flex-col items-center text-center px-10 py-14 space-y-6">
 
-        <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
+          <h1 className="text-4xl font-bold text-amber-900 drop-shadow-sm">
+            Mutiny Island
+          </h1>
 
-          {/* EMAIL — signup only */}
-          {mode === 'signup' && (
+          <p className="text-sm italic text-amber-800">
+            Welcome aboard!
+          </p>
+
+          <div className="w-full space-y-4">
+
+            {/* EMAIL — signup only */}
+            {mode === 'signup' && (
+              <input
+                className="w-full p-3 rounded bg-amber-50/80 border border-amber-800/30 text-amber-900 placeholder-amber-700/60 outline-none focus:ring-2 focus:ring-amber-700/40"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            )}
+
             <input
-              className="w-full p-3 rounded bg-zinc-800"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              className="w-full p-3 rounded bg-amber-50/80 border border-amber-800/30 text-amber-900 placeholder-amber-700/60 outline-none focus:ring-2 focus:ring-amber-700/40"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
             />
-          )}
 
-          <input
-            className="w-full p-3 rounded bg-zinc-800"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
+            <input
+              className="w-full p-3 rounded bg-amber-50/80 border border-amber-800/30 text-amber-900 placeholder-amber-700/60 outline-none focus:ring-2 focus:ring-amber-700/40"
+              placeholder="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
 
-          <input
-            className="w-full p-3 rounded bg-zinc-800"
-            placeholder="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+            {errorMessage && (
+              <p className="text-red-700 italic text-sm">{errorMessage}</p>
+            )}
 
-          {errorMessage && (
-            <p className="text-red-400 italic text-sm">{errorMessage}</p>
-          )}
+            {mode === 'login' ? (
+              <>
+                <p
+                  onClick={() => switchMode('signup')}
+                  className="text-sm text-amber-800 hover:text-amber-950 transition cursor-pointer underline underline-offset-2"
+                >
+                  Click here to sign up
+                </p>
 
-          {mode === 'login' ? (
-            <>
-              <p
-                onClick={() => switchMode('signup')}
-                className="text-sm text-zinc-400 hover:text-white transition cursor-pointer underline underline-offset-2"
-              >
-                Click here to sign up
-              </p>
+                <button
+                  onClick={login}
+                  disabled={loading}
+                  className="w-full bg-amber-800 hover:bg-amber-900 text-amber-50 p-3 rounded font-bold active:scale-95 transition disabled:opacity-50"
+                >
+                  {loading ? 'Loading...' : 'Login'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p
+                  onClick={() => switchMode('login')}
+                  className="text-sm text-amber-800 hover:text-amber-950 transition cursor-pointer underline underline-offset-2"
+                >
+                  Back to login
+                </p>
 
-              <button
-                onClick={login}
-                disabled={loading}
-                className="w-full bg-white text-black p-3 rounded font-bold hover:bg-gray-200 active:scale-95 transition disabled:opacity-50"
-              >
-                {loading ? 'Loading...' : 'Login'}
-              </button>
-            </>
-          ) : (
-            <>
-              <p
-                onClick={() => switchMode('login')}
-                className="text-sm text-zinc-400 hover:text-white transition cursor-pointer underline underline-offset-2"
-              >
-                Back to login
-              </p>
+                <button
+                  onClick={signUp}
+                  disabled={loading}
+                  className="w-full bg-amber-800 hover:bg-amber-900 text-amber-50 p-3 rounded font-bold active:scale-95 transition disabled:opacity-50"
+                >
+                  {loading ? 'Loading...' : 'Sign Up'}
+                </button>
+              </>
+            )}
 
-              <button
-                onClick={signUp}
-                disabled={loading}
-                className="w-full bg-yellow-500 text-black p-3 rounded font-bold hover:bg-yellow-400 active:scale-95 transition disabled:opacity-50"
-              >
-                {loading ? 'Loading...' : 'Sign Up'}
-              </button>
-            </>
-          )}
-
+          </div>
         </div>
       </div>
+
     </main>
   )
 }
