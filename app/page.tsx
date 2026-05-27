@@ -1,15 +1,38 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 export default function HomePage() {
+  const router = useRouter()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
 
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+
+  const [checkingAuth, setCheckingAuth] = useState(true)
+
+  // -----------------------------
+  // AUTO REDIRECT IF LOGGED IN
+  // -----------------------------
+  useEffect(() => {
+    async function checkUser() {
+      const { data } = await supabase.auth.getUser()
+
+      if (data.user) {
+        router.replace('/home')
+        return
+      }
+
+      setCheckingAuth(false)
+    }
+
+    checkUser()
+  }, [router])
 
   // -----------------------------
   // SIGN UP (EDGE FUNCTION VERSION)
@@ -71,9 +94,6 @@ export default function HomePage() {
       return
     }
 
-    // ---------------------------------
-    // SIGN IN WITH EMAIL/PASSWORD
-    // ---------------------------------
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -85,9 +105,6 @@ export default function HomePage() {
       return
     }
 
-    // ---------------------------------
-    // FETCH PROFILE
-    // ---------------------------------
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('username, coins')
@@ -102,12 +119,8 @@ export default function HomePage() {
       return
     }
 
-    // ---------------------------------
-    // VERIFY USERNAME MATCH
-    // ---------------------------------
     if (
-      profile.username.toLowerCase() !==
-      username.toLowerCase()
+      profile.username.toLowerCase() !== username.toLowerCase()
     ) {
       await supabase.auth.signOut()
 
@@ -116,10 +129,18 @@ export default function HomePage() {
       return
     }
 
-    // ---------------------------------
-    // SUCCESSS
-    // ---------------------------------
     window.location.href = '/games'
+  }
+
+  // -----------------------------
+  // LOADING GATE (prevents flicker)
+  // -----------------------------
+  if (checkingAuth) {
+    return (
+      <main className="min-h-screen flex items-center justify-center text-white bg-black">
+        <p className="opacity-70">Checking session...</p>
+      </main>
+    )
   }
 
   return (
