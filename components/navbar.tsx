@@ -183,11 +183,11 @@ export default function Navbar() {
           </button>
         ) : (
           <button
-            onClick={() => router.push('/login')}
-            className="bg-zinc-600 px-3 py-1 rounded-lg hover:bg-zinc-500 active:scale-95 transition cursor-pointer text-white shadow-md"
-          >
-            Login
-          </button>
+  onClick={() => router.push('/')}
+  className="bg-zinc-600 px-3 py-1 rounded-lg hover:bg-zinc-500 active:scale-95 transition cursor-pointer text-white shadow-md"
+>
+  Login
+</button>
         )}
 
       </div>
