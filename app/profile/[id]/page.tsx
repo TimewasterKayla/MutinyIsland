@@ -48,6 +48,7 @@ export default function ProfilePage({
   const editorRef = useRef<HTMLDivElement | null>(null)
   const savedRangeRef = useRef<Range | null>(null)
   const deleteBtnImgRef = useRef<HTMLImageElement | null>(null)
+  const mutationObserverRef = useRef<MutationObserver | null>(null)
 
   // -----------------------------
   // PARAMS
@@ -121,8 +122,40 @@ export default function ProfilePage({
       editorRef.current.innerHTML = profile.about_me || ''
       setCharCount(editorRef.current.innerText.length)
       attachImageListeners()
+      startMutationObserver()
+    }
+
+    // Cleanup observer when editing stops
+    if (!editing) {
+      mutationObserverRef.current?.disconnect()
+      mutationObserverRef.current = null
     }
   }, [editing, profile])
+
+  // -----------------------------
+  // MUTATION OBSERVER — clears trash icon when image removed via backspace
+  // -----------------------------
+  function startMutationObserver() {
+    if (!editorRef.current) return
+
+    mutationObserverRef.current?.disconnect()
+
+    const observer = new MutationObserver(() => {
+      if (!deleteBtnImgRef.current) return
+      // If the tracked image is no longer in the editor DOM, clear the delete button
+      if (!editorRef.current?.contains(deleteBtnImgRef.current)) {
+        deleteBtnImgRef.current = null
+        setDeleteBtn(null)
+      }
+    })
+
+    observer.observe(editorRef.current, {
+      childList: true,
+      subtree: true,
+    })
+
+    mutationObserverRef.current = observer
+  }
 
   // -----------------------------
   // SCROLL: keep delete btn in sync
@@ -184,7 +217,7 @@ export default function ProfilePage({
 
     // Left click: select image for alignment
     img.onclick = () => {
-      // deselect previous
+      // Deselect previous
       if (selectedImg && selectedImg !== img) {
         selectedImg.style.outline = 'none'
       }
@@ -192,7 +225,7 @@ export default function ProfilePage({
       setSelectedImg(img)
       img.style.outline = '2px solid #22c55e'
 
-      // select the image node so execCommand alignment works on it
+      // Select the image node so alignment commands work on its wrapper
       const range = document.createRange()
       range.selectNode(img)
       const sel = window.getSelection()
@@ -215,12 +248,61 @@ export default function ProfilePage({
   }
 
   // -----------------------------
+  // ALIGN IMAGE — applies text-align to the wrapper div
+  // -----------------------------
+  function alignImage(alignment: 'left' | 'center' | 'right') {
+    if (!selectedImg) return
+
+    const wrapper = selectedImg.parentElement
+    if (!wrapper) return
+
+    // Make image block so margin auto works
+    selectedImg.style.display = 'block'
+
+    if (alignment === 'left') {
+      selectedImg.style.marginLeft = '0'
+      selectedImg.style.marginRight = 'auto'
+      wrapper.style.textAlign = 'left'
+    } else if (alignment === 'center') {
+      selectedImg.style.marginLeft = 'auto'
+      selectedImg.style.marginRight = 'auto'
+      wrapper.style.textAlign = 'center'
+    } else if (alignment === 'right') {
+      selectedImg.style.marginLeft = 'auto'
+      selectedImg.style.marginRight = '0'
+      wrapper.style.textAlign = 'right'
+    }
+
+    editorRef.current?.focus()
+  }
+
+  // -----------------------------
+  // EXEC (text commands only)
+  // -----------------------------
+  function exec(command: string, value?: string) {
+    document.execCommand(command, false, value)
+    editorRef.current?.focus()
+  }
+
+  // -----------------------------
+  // ALIGN HANDLER — uses image alignment if an image is selected, text alignment otherwise
+  // -----------------------------
+  function handleAlign(direction: 'left' | 'center' | 'right') {
+    if (selectedImg) {
+      alignImage(direction)
+    } else {
+      const cmdMap = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight' }
+      exec(cmdMap[direction])
+    }
+  }
+
+  // -----------------------------
   // SAVE ABOUT ME
   // -----------------------------
   async function saveAboutMe() {
     if (!profile || !editorRef.current) return
 
-    // clean up any leftover outlines before saving
+    // Clean up any leftover outlines before saving
     const imgs = editorRef.current.querySelectorAll('img')
     imgs.forEach((img) => ((img as HTMLImageElement).style.outline = 'none'))
 
@@ -263,14 +345,6 @@ export default function ProfilePage({
   }
 
   // -----------------------------
-  // RICH TEXT
-  // -----------------------------
-  function exec(command: string, value?: string) {
-    document.execCommand(command, false, value)
-    editorRef.current?.focus()
-  }
-
-  // -----------------------------
   // INSERT IMAGE
   // -----------------------------
   function insertImage() {
@@ -281,23 +355,27 @@ export default function ProfilePage({
 
     const widthMap = { small: '200px', medium: '400px', large: '100%' }
 
+    // Wrap image in a block div so text-align / margin alignment works correctly
+    const wrapper = document.createElement('div')
+    wrapper.style.margin = '10px 0'
+
     const img = document.createElement('img')
     img.src = imageUrl.trim()
     img.style.maxWidth = widthMap[imageSize]
     img.style.width = widthMap[imageSize]
     img.style.borderRadius = '12px'
-    img.style.margin = '10px 0'
     img.style.display = 'block'
 
+    wrapper.appendChild(img)
     addImageListeners(img)
 
     if (savedRangeRef.current) {
       const range = savedRangeRef.current
       range.deleteContents()
-      range.insertNode(img)
+      range.insertNode(wrapper)
 
       const br = document.createElement('br')
-      img.insertAdjacentElement('afterend', br)
+      wrapper.insertAdjacentElement('afterend', br)
 
       const newRange = document.createRange()
       newRange.setStartAfter(br)
@@ -307,7 +385,7 @@ export default function ProfilePage({
       sel?.removeAllRanges()
       sel?.addRange(newRange)
     } else {
-      editor.appendChild(img)
+      editor.appendChild(wrapper)
       const br = document.createElement('br')
       editor.appendChild(br)
     }
@@ -326,7 +404,13 @@ export default function ProfilePage({
   // DELETE IMAGE
   // -----------------------------
   function deleteImage(img: HTMLImageElement) {
-    img.remove()
+    // Remove wrapper div if img is the only child, otherwise just remove img
+    const parent = img.parentElement
+    if (parent && parent !== editorRef.current && parent.children.length === 1) {
+      parent.remove()
+    } else {
+      img.remove()
+    }
     deleteBtnImgRef.current = null
     setDeleteBtn(null)
     if (editorRef.current) setCharCount(editorRef.current.innerText.length)
@@ -523,8 +607,10 @@ export default function ProfilePage({
 
                       {/* ALIGN LEFT */}
                       <button
-                        onMouseDown={(e) => { e.preventDefault(); exec('justifyLeft') }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }}
+                        className={`w-7 h-7 rounded flex items-center justify-center ${
+                          selectedImg ? 'bg-green-700 hover:bg-green-600' : 'bg-zinc-700 hover:bg-zinc-600'
+                        }`}
                         title="Align left"
                       >
                         <Image src="/left.png" alt="left" width={14} height={14} />
@@ -532,8 +618,10 @@ export default function ProfilePage({
 
                       {/* ALIGN CENTER */}
                       <button
-                        onMouseDown={(e) => { e.preventDefault(); exec('justifyCenter') }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
+                        className={`w-7 h-7 rounded flex items-center justify-center ${
+                          selectedImg ? 'bg-green-700 hover:bg-green-600' : 'bg-zinc-700 hover:bg-zinc-600'
+                        }`}
                         title="Align center"
                       >
                         <Image src="/center.png" alt="center" width={14} height={14} />
@@ -541,8 +629,10 @@ export default function ProfilePage({
 
                       {/* ALIGN RIGHT */}
                       <button
-                        onMouseDown={(e) => { e.preventDefault(); exec('justifyRight') }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
+                        className={`w-7 h-7 rounded flex items-center justify-center ${
+                          selectedImg ? 'bg-green-700 hover:bg-green-600' : 'bg-zinc-700 hover:bg-zinc-600'
+                        }`}
                         title="Align right"
                       >
                         <Image src="/right.png" alt="right" width={14} height={14} />
