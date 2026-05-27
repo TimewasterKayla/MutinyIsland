@@ -15,7 +15,7 @@ type Profile = {
   created_at: string | null
 }
 
-type TabType = 'about' | 'messages' | 'friends' | 'wins' | 'inventory'
+type TabType = 'about' | 'messages' | 'posts' | 'friends' | 'wins' | 'inventory'
 
 const avatars = [
   '/avatars/jess.png',
@@ -553,8 +553,8 @@ export default function ProfilePage({
   }
 
   const tabs = isOwnProfile
-    ? ['about', 'messages', 'friends', 'wins', 'inventory']
-    : ['about', 'friends', 'wins']
+  ? ['about', 'messages', 'posts', 'friends', 'wins', 'inventory']
+  : ['about', 'posts', 'friends', 'wins']
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-6 pt-16">
@@ -801,6 +801,13 @@ export default function ProfilePage({
                 <div className="text-zinc-400">Friends coming soon...</div>
               </div>
             )}
+
+{activeTab === 'posts' && (
+  <div>
+    <h2 className="text-3xl font-bold mb-4">Posts</h2>
+    <div className="text-zinc-400">Posts coming soon...</div>
+  </div>
+)}
 
             {activeTab === 'wins' && (
               <div>
