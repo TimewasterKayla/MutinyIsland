@@ -25,6 +25,55 @@ const avatars = [
   '/avatars/read.png',
 ]
 
+// -----------------------------
+// YOUTUBE HELPERS
+// -----------------------------
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ]
+  for (const pattern of patterns) {
+    const match = url.match(pattern)
+    if (match) return match[1]
+  }
+  return null
+}
+
+function buildEmbedUrl(videoId: string, autoplay: boolean): string {
+  const params = new URLSearchParams({
+    rel: '0',
+    ...(autoplay ? { autoplay: '1', mute: '1' } : {}),
+  })
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`
+}
+
+// Build a wrapper div string that holds the iframe — stored in innerHTML
+function buildYouTubeHTML(
+  videoId: string,
+  embedUrl: string,
+  width: string,
+  alignment: 'left' | 'center' | 'right',
+  autoplay: boolean
+): string {
+  const marginMap = {
+    left: 'margin: 10px auto 10px 0;',
+    center: 'margin: 10px auto;',
+    right: 'margin: 10px 0 10px auto;',
+  }
+  return `<div
+    data-yt-wrapper="1"
+    data-video-id="${videoId}"
+    data-autoplay="${autoplay}"
+    style="display:block; width:${width}; max-width:${width}; ${marginMap[alignment]}"
+  ><div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:12px;"><iframe
+    src="${embedUrl}"
+    style="position:absolute; top:0; left:0; width:100%; height:100%; border:0; border-radius:12px;"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowfullscreen
+  ></iframe></div></div>`
+}
+
 export default function ProfilePage({
   params,
 }: {
@@ -37,10 +86,21 @@ export default function ProfilePage({
   const [loading, setLoading] = useState<boolean>(true)
   const [showAvatarEditor, setShowAvatarEditor] = useState<boolean>(false)
   const [activeTab, setActiveTab] = useState<TabType>('about')
+
+  // Image modal state
   const [showImageModal, setShowImageModal] = useState<boolean>(false)
   const [imageUrl, setImageUrl] = useState<string>('')
   const [imageSize, setImageSize] = useState<'small' | 'medium' | 'large'>('medium')
   const [editImageEl, setEditImageEl] = useState<HTMLImageElement | null>(null)
+
+  // YouTube modal state
+  const [showYouTubeModal, setShowYouTubeModal] = useState<boolean>(false)
+  const [youtubeUrl, setYoutubeUrl] = useState<string>('')
+  const [youtubeSize, setYoutubeSize] = useState<'small' | 'medium' | 'large'>('medium')
+  const [youtubeAlignment, setYoutubeAlignment] = useState<'left' | 'center' | 'right'>('center')
+  const [youtubeAutoplay, setYoutubeAutoplay] = useState<boolean>(false)
+  const [editYouTubeWrapper, setEditYouTubeWrapper] = useState<HTMLElement | null>(null)
+
   const [selectedImg, setSelectedImg] = useState<HTMLImageElement | null>(null)
   const [charCount, setCharCount] = useState<number>(0)
   const [deleteBtn, setDeleteBtn] = useState<{ x: number; y: number; img: HTMLImageElement } | null>(null)
@@ -83,31 +143,19 @@ export default function ProfilePage({
     }
 
     if (!data.avatar) {
-      const randomAvatar =
-        avatars[Math.floor(Math.random() * avatars.length)]
-
-      await supabase
-        .from('profiles')
-        .update({ avatar: randomAvatar })
-        .eq('id', data.id)
-
+      const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)]
+      await supabase.from('profiles').update({ avatar: randomAvatar }).eq('id', data.id)
       data.avatar = randomAvatar
     }
 
     setProfile(data)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const { data: { user } } = await supabase.auth.getUser()
     const own = !!user && user.id === data.id
-
     setIsOwnProfile(own)
 
     setActiveTab((prev: TabType) => {
-      if (!own && (prev === 'messages' || prev === 'inventory')) {
-        return 'about'
-      }
+      if (!own && (prev === 'messages' || prev === 'inventory')) return 'about'
       return prev
     })
 
@@ -122,10 +170,9 @@ export default function ProfilePage({
       editorRef.current.innerHTML = profile.about_me || ''
       setCharCount(editorRef.current.innerText.length)
       attachImageListeners()
+      attachYouTubeListeners()
       startMutationObserver()
     }
-
-    // Cleanup observer when editing stops
     if (!editing) {
       mutationObserverRef.current?.disconnect()
       mutationObserverRef.current = null
@@ -133,27 +180,21 @@ export default function ProfilePage({
   }, [editing, profile])
 
   // -----------------------------
-  // MUTATION OBSERVER — clears trash icon when image removed via backspace
+  // MUTATION OBSERVER
   // -----------------------------
   function startMutationObserver() {
     if (!editorRef.current) return
-
     mutationObserverRef.current?.disconnect()
 
     const observer = new MutationObserver(() => {
       if (!deleteBtnImgRef.current) return
-      // If the tracked image is no longer in the editor DOM, clear the delete button
       if (!editorRef.current?.contains(deleteBtnImgRef.current)) {
         deleteBtnImgRef.current = null
         setDeleteBtn(null)
       }
     })
 
-    observer.observe(editorRef.current, {
-      childList: true,
-      subtree: true,
-    })
-
+    observer.observe(editorRef.current, { childList: true, subtree: true })
     mutationObserverRef.current = observer
   }
 
@@ -162,13 +203,11 @@ export default function ProfilePage({
   // -----------------------------
   useEffect(() => {
     if (!editing) return
-
     function handleScroll() {
       if (!deleteBtnImgRef.current) return
       const rect = deleteBtnImgRef.current.getBoundingClientRect()
       setDeleteBtn({ x: rect.right - 36, y: rect.top + 4, img: deleteBtnImgRef.current })
     }
-
     window.addEventListener('scroll', handleScroll, true)
     return () => window.removeEventListener('scroll', handleScroll, true)
   }, [editing])
@@ -215,23 +254,57 @@ export default function ProfilePage({
       setShowImageModal(true)
     }
 
-    // Left click: select image for alignment
     img.onclick = () => {
-      // Deselect previous
-      if (selectedImg && selectedImg !== img) {
-        selectedImg.style.outline = 'none'
-      }
-
+      if (selectedImg && selectedImg !== img) selectedImg.style.outline = 'none'
       setSelectedImg(img)
       img.style.outline = '2px solid #22c55e'
 
-      // Select the image node so alignment commands work on its wrapper
       const range = document.createRange()
       range.selectNode(img)
       const sel = window.getSelection()
       sel?.removeAllRanges()
       sel?.addRange(range)
       savedRangeRef.current = range.cloneRange()
+    }
+  }
+
+  // -----------------------------
+  // ATTACH LISTENERS TO YOUTUBE WRAPPERS
+  // -----------------------------
+  function attachYouTubeListeners() {
+    if (!editorRef.current) return
+    const wrappers = editorRef.current.querySelectorAll<HTMLElement>('[data-yt-wrapper="1"]')
+    wrappers.forEach((wrapper) => addYouTubeListeners(wrapper))
+  }
+
+  function addYouTubeListeners(wrapper: HTMLElement) {
+    wrapper.style.cursor = 'default'
+
+    wrapper.oncontextmenu = (e) => {
+      e.preventDefault()
+      const videoId = wrapper.getAttribute('data-video-id') || ''
+      const autoplay = wrapper.getAttribute('data-autoplay') === 'true'
+
+      // Detect current size from wrapper width
+      const currentWidth = wrapper.style.width
+      let size: 'small' | 'medium' | 'large' = 'medium'
+      if (currentWidth === '300px') size = 'small'
+      else if (currentWidth === '560px') size = 'medium'
+      else if (currentWidth === '100%') size = 'large'
+
+      // Detect current alignment
+      const marginLeft = wrapper.style.marginLeft
+      const marginRight = wrapper.style.marginRight
+      let alignment: 'left' | 'center' | 'right' = 'center'
+      if (marginLeft === '0px' || marginLeft === '0') alignment = 'left'
+      else if (marginRight === '0px' || marginRight === '0') alignment = 'right'
+
+      setEditYouTubeWrapper(wrapper)
+      setYoutubeUrl(`https://www.youtube.com/watch?v=${videoId}`)
+      setYoutubeSize(size)
+      setYoutubeAlignment(alignment)
+      setYoutubeAutoplay(autoplay)
+      setShowYouTubeModal(true)
     }
   }
 
@@ -248,17 +321,13 @@ export default function ProfilePage({
   }
 
   // -----------------------------
-  // ALIGN IMAGE — applies text-align to the wrapper div
+  // ALIGN IMAGE
   // -----------------------------
   function alignImage(alignment: 'left' | 'center' | 'right') {
     if (!selectedImg) return
-
     const wrapper = selectedImg.parentElement
     if (!wrapper) return
-
-    // Make image block so margin auto works
     selectedImg.style.display = 'block'
-
     if (alignment === 'left') {
       selectedImg.style.marginLeft = '0'
       selectedImg.style.marginRight = 'auto'
@@ -272,7 +341,6 @@ export default function ProfilePage({
       selectedImg.style.marginRight = '0'
       wrapper.style.textAlign = 'right'
     }
-
     editorRef.current?.focus()
   }
 
@@ -285,7 +353,7 @@ export default function ProfilePage({
   }
 
   // -----------------------------
-  // ALIGN HANDLER — uses image alignment if an image is selected, text alignment otherwise
+  // ALIGN HANDLER
   // -----------------------------
   function handleAlign(direction: 'left' | 'center' | 'right') {
     if (selectedImg) {
@@ -302,7 +370,6 @@ export default function ProfilePage({
   async function saveAboutMe() {
     if (!profile || !editorRef.current) return
 
-    // Clean up any leftover outlines before saving
     const imgs = editorRef.current.querySelectorAll('img')
     imgs.forEach((img) => ((img as HTMLImageElement).style.outline = 'none'))
 
@@ -329,17 +396,8 @@ export default function ProfilePage({
   // -----------------------------
   async function changeAvatar(avatar: string) {
     if (!profile) return
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({ avatar })
-      .eq('id', profile.id)
-
-    if (error) {
-      console.error(error)
-      return
-    }
-
+    const { error } = await supabase.from('profiles').update({ avatar }).eq('id', profile.id)
+    if (error) { console.error(error); return }
     setProfile({ ...profile, avatar })
     setShowAvatarEditor(false)
   }
@@ -349,13 +407,10 @@ export default function ProfilePage({
   // -----------------------------
   function insertImage() {
     if (!imageUrl.trim()) return
-
     const editor = editorRef.current
     if (!editor) return
 
     const widthMap = { small: '200px', medium: '400px', large: '100%' }
-
-    // Wrap image in a block div so text-align / margin alignment works correctly
     const wrapper = document.createElement('div')
     wrapper.style.margin = '10px 0'
 
@@ -373,14 +428,11 @@ export default function ProfilePage({
       const range = savedRangeRef.current
       range.deleteContents()
       range.insertNode(wrapper)
-
       const br = document.createElement('br')
       wrapper.insertAdjacentElement('afterend', br)
-
       const newRange = document.createRange()
       newRange.setStartAfter(br)
       newRange.collapse(true)
-
       const sel = window.getSelection()
       sel?.removeAllRanges()
       sel?.addRange(newRange)
@@ -392,7 +444,6 @@ export default function ProfilePage({
 
     editor.focus()
     setCharCount(editor.innerText.length)
-
     setShowImageModal(false)
     setImageUrl('')
     setImageSize('medium')
@@ -401,10 +452,76 @@ export default function ProfilePage({
   }
 
   // -----------------------------
+  // INSERT / UPDATE YOUTUBE
+  // -----------------------------
+  function insertYouTube() {
+    if (!youtubeUrl.trim()) return
+    const editor = editorRef.current
+    if (!editor) return
+
+    const videoId = extractYouTubeId(youtubeUrl.trim())
+    if (!videoId) {
+      alert('Could not detect a YouTube video ID from that URL. Please use a standard YouTube link.')
+      return
+    }
+
+    const widthMap = { small: '300px', medium: '560px', large: '100%' }
+    const width = widthMap[youtubeSize]
+    const embedUrl = buildEmbedUrl(videoId, youtubeAutoplay)
+
+    // If editing an existing YouTube embed, replace it in place
+    if (editYouTubeWrapper) {
+      const html = buildYouTubeHTML(videoId, embedUrl, width, youtubeAlignment, youtubeAutoplay)
+      const temp = document.createElement('div')
+      temp.innerHTML = html
+      const newWrapper = temp.firstElementChild as HTMLElement
+      editYouTubeWrapper.replaceWith(newWrapper)
+      addYouTubeListeners(newWrapper)
+    } else {
+      const html = buildYouTubeHTML(videoId, embedUrl, width, youtubeAlignment, youtubeAutoplay)
+      const temp = document.createElement('div')
+      temp.innerHTML = html
+      const newWrapper = temp.firstElementChild as HTMLElement
+      addYouTubeListeners(newWrapper)
+
+      if (savedRangeRef.current) {
+        const range = savedRangeRef.current
+        range.deleteContents()
+        range.insertNode(newWrapper)
+        const br = document.createElement('br')
+        newWrapper.insertAdjacentElement('afterend', br)
+        const newRange = document.createRange()
+        newRange.setStartAfter(br)
+        newRange.collapse(true)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(newRange)
+      } else {
+        editor.appendChild(newWrapper)
+        const br = document.createElement('br')
+        editor.appendChild(br)
+      }
+    }
+
+    editor.focus()
+    setCharCount(editor.innerText.length)
+    closeYouTubeModal()
+  }
+
+  function closeYouTubeModal() {
+    setShowYouTubeModal(false)
+    setYoutubeUrl('')
+    setYoutubeSize('medium')
+    setYoutubeAlignment('center')
+    setYoutubeAutoplay(false)
+    setEditYouTubeWrapper(null)
+    savedRangeRef.current = null
+  }
+
+  // -----------------------------
   // DELETE IMAGE
   // -----------------------------
   function deleteImage(img: HTMLImageElement) {
-    // Remove wrapper div if img is the only child, otherwise just remove img
     const parent = img.parentElement
     if (parent && parent !== editorRef.current && parent.children.length === 1) {
       parent.remove()
@@ -469,33 +586,22 @@ export default function ProfilePage({
           </div>
 
           <div className="mt-6 text-center">
-            <h1 className="text-3xl font-bold">
-              {profile.username}
-            </h1>
+            <h1 className="text-3xl font-bold">{profile.username}</h1>
           </div>
 
           <div className="mt-6 space-y-3 text-sm">
             <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
               <span className="text-zinc-400">Rank:</span>{' '}
-              <span className="font-semibold text-white">
-                {profile.rank || 'Peasant'}
-              </span>
+              <span className="font-semibold text-white">{profile.rank || 'Peasant'}</span>
             </div>
-
             <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
               <span className="text-zinc-400">Doubloons:</span>{' '}
-              <span className="font-semibold text-yellow-400">
-                {profile.coins || 0}
-              </span>
+              <span className="font-semibold text-yellow-400">{profile.coins || 0}</span>
             </div>
-
             <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
               <span className="text-zinc-400">Crowns:</span>{' '}
-              <span className="font-semibold text-amber-300">
-                {profile.crowns || 0}
-              </span>
+              <span className="font-semibold text-amber-300">{profile.crowns || 0}</span>
             </div>
-
             <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
               <span className="text-zinc-400">Date Joined:</span>{' '}
               <span className="font-semibold text-white">
@@ -536,7 +642,6 @@ export default function ProfilePage({
               <div>
                 <div className="flex items-center justify-between mb-4 pl-4">
                   <h2 className="text-3xl font-bold">About Me</h2>
-
                   {isOwnProfile && !editing && (
                     <button
                       onClick={() => setEditing(true)}
@@ -615,22 +720,40 @@ export default function ProfilePage({
                       </button>
 
                       {/* ALIGN CENTER */}
-<button
-  onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
-  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
-  title="Align center"
->
-  <Image src="/center.png" alt="center" width={14} height={14} />
-</button>
+                      <button
+                        onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        title="Align center"
+                      >
+                        <Image src="/center.png" alt="center" width={14} height={14} />
+                      </button>
 
-{/* ALIGN RIGHT */}
-<button
-  onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
-  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
-  title="Align right"
->
-  <Image src="/right.png" alt="right" width={14} height={14} />
-</button>
+                      {/* ALIGN RIGHT */}
+                      <button
+                        onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        title="Align right"
+                      >
+                        <Image src="/right.png" alt="right" width={14} height={14} />
+                      </button>
+
+                      {/* YOUTUBE */}
+                      <button
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          saveCursor()
+                          setEditYouTubeWrapper(null)
+                          setYoutubeUrl('')
+                          setYoutubeSize('medium')
+                          setYoutubeAlignment('center')
+                          setYoutubeAutoplay(false)
+                          setShowYouTubeModal(true)
+                        }}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        title="Insert YouTube video"
+                      >
+                        <Image src="/youtube.png" alt="YouTube" width={14} height={14} />
+                      </button>
 
                     </div>
 
@@ -701,9 +824,7 @@ export default function ProfilePage({
       {showAvatarEditor && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[420px]">
-
             <h2 className="text-2xl font-bold mb-4">Select Avatar</h2>
-
             <div className="grid grid-cols-3 gap-4">
               {avatars.map((avatar) => (
                 <button
@@ -721,14 +842,12 @@ export default function ProfilePage({
                 </button>
               ))}
             </div>
-
             <button
               onClick={() => setShowAvatarEditor(false)}
               className="mt-5 w-full bg-zinc-700 hover:bg-zinc-600 rounded-xl py-2"
             >
               Close
             </button>
-
           </div>
         </div>
       )}
@@ -737,7 +856,6 @@ export default function ProfilePage({
       {showImageModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[420px]">
-
             <h2 className="text-2xl font-bold mb-4">
               {editImageEl ? 'Edit Image' : 'Insert Image'}
             </h2>
@@ -795,7 +913,83 @@ export default function ProfilePage({
                 {editImageEl ? 'Update' : 'Insert'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
 
+      {/* YOUTUBE MODAL */}
+      {showYouTubeModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[440px]">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <Image src="/youtube.png" alt="YouTube" width={22} height={22} />
+              {editYouTubeWrapper ? 'Edit YouTube Video' : 'Insert YouTube Video'}
+            </h2>
+
+            <input
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') insertYouTube() }}
+              placeholder="Paste YouTube URL (e.g. https://youtu.be/...)"
+              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
+              autoFocus
+            />
+
+            <div className="mb-4">
+              <label className="text-sm text-zinc-400 mb-1 block">Size</label>
+              <select
+                value={youtubeSize}
+                onChange={(e) => setYoutubeSize(e.target.value as 'small' | 'medium' | 'large')}
+                className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
+              >
+                <option value="small">Small (300px)</option>
+                <option value="medium">Medium (560px)</option>
+                <option value="large">Large (Full width)</option>
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-sm text-zinc-400 mb-1 block">Alignment</label>
+              <select
+                value={youtubeAlignment}
+                onChange={(e) => setYoutubeAlignment(e.target.value as 'left' | 'center' | 'right')}
+                className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
+              >
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+
+            <div className="mb-5 flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="yt-autoplay"
+                checked={youtubeAutoplay}
+                onChange={(e) => setYoutubeAutoplay(e.target.checked)}
+                className="w-4 h-4 accent-green-500 cursor-pointer"
+              />
+              <label htmlFor="yt-autoplay" className="text-sm text-zinc-300 cursor-pointer select-none">
+                Autoplay when profile is opened{' '}
+                <span className="text-zinc-500">(muted)</span>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={closeYouTubeModal}
+                className="bg-zinc-700 px-3 py-1 rounded"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={insertYouTube}
+                className="bg-green-500 text-black px-4 py-1 rounded font-bold"
+              >
+                {editYouTubeWrapper ? 'Update' : 'Insert'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -135,7 +135,7 @@ export default function HomePage() {
 
       await supabase.auth.setSession(data.session)
 
-      window.location.href = '/games'
+      window.location.href = '/home'
     } catch (err) {
       console.error(err)
       setErrorMessage('Something went wrong')
