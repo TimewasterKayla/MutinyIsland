@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
 type Profile = {
@@ -31,6 +31,8 @@ export default function ProfilePage({
 
   const [loading, setLoading] =
     useState(true)
+
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     Promise.resolve(params).then((p) => {
@@ -96,6 +98,41 @@ export default function ProfilePage({
     setEditing(false)
   }
 
+  // -----------------------------
+  // TEXT FORMATTING HELPERS
+  // -----------------------------
+  function wrapSelection(before: string, after: string) {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const selected = aboutMe.substring(start, end)
+
+    const newText =
+      aboutMe.substring(0, start) +
+      before +
+      selected +
+      after +
+      aboutMe.substring(end)
+
+    setAboutMe(newText)
+
+    setTimeout(() => {
+      textarea.focus()
+      textarea.selectionStart = start + before.length
+      textarea.selectionEnd = end + before.length
+    }, 0)
+  }
+
+  function makeBold() {
+    wrapSelection('**', '**')
+  }
+
+  function makeItalic() {
+    wrapSelection('_', '_')
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
@@ -135,7 +172,7 @@ export default function ProfilePage({
           </div>
         </div>
 
-        {/* RIGHT PANEL (UNCHANGED) */}
+        {/* RIGHT */}
         <div className="col-span-2 bg-zinc-900 rounded-2xl p-6">
 
           <div className="flex items-center justify-between mb-6">
@@ -153,7 +190,7 @@ export default function ProfilePage({
             )}
           </div>
 
-          {/* VIEW MODE = MATCH OUTER PANEL */}
+          {/* VIEW MODE */}
           {!editing ? (
             <div className="bg-zinc-900 rounded-xl p-4 min-h-[300px]">
               {profile.about_me?.trim() ? (
@@ -167,9 +204,10 @@ export default function ProfilePage({
               )}
             </div>
           ) : (
-            /* EDIT MODE = LIGHTER SHADE */
-            <div>
+            /* EDIT MODE */
+            <div className="relative">
               <textarea
+                ref={textareaRef}
                 value={aboutMe}
                 onChange={(e) =>
                   setAboutMe(e.target.value)
@@ -177,6 +215,23 @@ export default function ProfilePage({
                 className="w-full h-64 bg-zinc-800 rounded-xl p-4 text-white resize-none outline-none border border-zinc-700 focus:border-green-500"
                 maxLength={1000}
               />
+
+              {/* FORMAT BUTTONS */}
+              <div className="absolute bottom-3 left-3 flex gap-2">
+                <button
+                  onClick={makeBold}
+                  className="w-8 h-8 bg-zinc-700 rounded-md flex items-center justify-center font-bold text-white hover:bg-zinc-600 transition"
+                >
+                  B
+                </button>
+
+                <button
+                  onClick={makeItalic}
+                  className="w-8 h-8 bg-zinc-700 rounded-md flex items-center justify-center italic text-white hover:bg-zinc-600 transition"
+                >
+                  I
+                </button>
+              </div>
 
               <div className="flex justify-between items-center mt-3">
                 <p className="text-zinc-400 text-sm">
