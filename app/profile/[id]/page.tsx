@@ -617,26 +617,22 @@ export default function ProfilePage({
                       </button>
 
                       {/* ALIGN CENTER */}
-                      <button
-                        onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
-                        className={`w-7 h-7 rounded flex items-center justify-center ${
-                          selectedImg ? 'bg-green-700 hover:bg-green-600' : 'bg-zinc-700 hover:bg-zinc-600'
-                        }`}
-                        title="Align center"
-                      >
-                        <Image src="/center.png" alt="center" width={14} height={14} />
-                      </button>
+<button
+  onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
+  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+  title="Align center"
+>
+  <Image src="/center.png" alt="center" width={14} height={14} />
+</button>
 
-                      {/* ALIGN RIGHT */}
-                      <button
-                        onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
-                        className={`w-7 h-7 rounded flex items-center justify-center ${
-                          selectedImg ? 'bg-green-700 hover:bg-green-600' : 'bg-zinc-700 hover:bg-zinc-600'
-                        }`}
-                        title="Align right"
-                      >
-                        <Image src="/right.png" alt="right" width={14} height={14} />
-                      </button>
+{/* ALIGN RIGHT */}
+<button
+  onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
+  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+  title="Align right"
+>
+  <Image src="/right.png" alt="right" width={14} height={14} />
+</button>
 
                     </div>
 
