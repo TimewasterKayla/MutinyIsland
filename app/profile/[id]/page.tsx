@@ -20,9 +20,6 @@ export default function ProfilePage({
   const [profile, setProfile] =
     useState<Profile | null>(null)
 
-  const [aboutMe, setAboutMe] =
-    useState('')
-
   const [isOwnProfile, setIsOwnProfile] =
     useState(false)
 
@@ -35,12 +32,18 @@ export default function ProfilePage({
   const editorRef =
     useRef<HTMLDivElement | null>(null)
 
+  // -----------------------------
+  // PARAMS
+  // -----------------------------
   useEffect(() => {
     Promise.resolve(params).then((p) => {
       setUsernameParam(p.id)
     })
   }, [params])
 
+  // -----------------------------
+  // LOAD PROFILE
+  // -----------------------------
   useEffect(() => {
     if (!usernameParam) return
     loadProfile()
@@ -62,7 +65,6 @@ export default function ProfilePage({
     }
 
     setProfile(data)
-    setAboutMe(data.about_me || '')
 
     const {
       data: { user },
@@ -75,10 +77,23 @@ export default function ProfilePage({
     setLoading(false)
   }
 
-  async function saveAboutMe() {
-    if (!profile) return
+  // -----------------------------
+  // ENTER EDIT MODE (IMPORTANT FIX)
+  // -----------------------------
+  useEffect(() => {
+    if (editing && editorRef.current && profile) {
+      editorRef.current.innerHTML =
+        profile.about_me || ''
+    }
+  }, [editing, profile])
 
-    const html = editorRef.current?.innerHTML || ''
+  // -----------------------------
+  // SAVE
+  // -----------------------------
+  async function saveAboutMe() {
+    if (!profile || !editorRef.current) return
+
+    const html = editorRef.current.innerHTML
 
     const { error } = await supabase
       .from('profiles')
@@ -102,7 +117,7 @@ export default function ProfilePage({
   }
 
   // -----------------------------
-  // FORMATTING HELPERS (REAL DOM)
+  // RICH TEXT CONTROLS
   // -----------------------------
   function exec(command: string) {
     document.execCommand(command)
@@ -117,6 +132,9 @@ export default function ProfilePage({
     exec('italic')
   }
 
+  // -----------------------------
+  // LOADING / NOT FOUND
+  // -----------------------------
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
@@ -175,22 +193,30 @@ export default function ProfilePage({
             )}
           </div>
 
-          {/* VIEW MODE (renders saved HTML) */}
+          {/* VIEW MODE */}
           {!editing ? (
             <div
               className="bg-zinc-900 rounded-xl p-4 min-h-[300px]"
               dangerouslySetInnerHTML={{
-                __html: profile.about_me?.trim()
-                  ? profile.about_me
-                  : `<span class="text-zinc-400 italic">This player has not written anything yet.</span>`
+                __html:
+                  profile.about_me?.trim() ||
+                  `<span class="text-zinc-400 italic">This player has not written anything yet.</span>`,
               }}
             />
           ) : (
-            /* EDIT MODE (REAL RICH TEXT) */
+            /* EDIT MODE */
             <div>
 
-              {/* TOOLBAR */}
-              <div className="flex gap-2 mb-2">
+              {/* EDITOR */}
+              <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                className="w-full min-h-[250px] bg-zinc-800 rounded-xl p-4 text-white outline-none border border-zinc-700 focus:border-green-500"
+              />
+
+              {/* TOOLBAR (NOW BELOW EDITOR) */}
+              <div className="flex gap-2 mt-2">
                 <button
                   onClick={toggleBold}
                   className="w-8 h-8 bg-zinc-700 rounded-md font-bold text-white hover:bg-zinc-600 transition"
@@ -206,29 +232,20 @@ export default function ProfilePage({
                 </button>
               </div>
 
-              {/* EDITOR */}
-              <div
-                ref={editorRef}
-                contentEditable
-                suppressContentEditableWarning
-                className="w-full min-h-[250px] bg-zinc-800 rounded-xl p-4 text-white outline-none border border-zinc-700 focus:border-green-500"
-                dangerouslySetInnerHTML={{
-                  __html: aboutMe,
-                }}
-              />
-
-              {/* COUNTER */}
-              <div className="mt-3 text-zinc-400 text-sm">
-                {(editorRef.current?.innerText?.length || 0)}/1000
+              {/* COUNTER (BELOW TOOLBAR) */}
+              <div className="mt-2 text-zinc-400 text-sm">
+                {
+                  editorRef.current?.innerText
+                    ?.length || 0
+                }
+                /1000
               </div>
 
               {/* ACTIONS */}
               <div className="flex justify-end gap-2 mt-3">
 
                 <button
-                  onClick={() => {
-                    setEditing(false)
-                  }}
+                  onClick={() => setEditing(false)}
                   className="bg-zinc-700 text-white px-4 py-2 rounded-xl"
                 >
                   Cancel
