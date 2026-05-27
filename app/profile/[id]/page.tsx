@@ -207,8 +207,8 @@ export default function ProfilePage({
   // -----------------------------
   // RICH TEXT
   // -----------------------------
-  function exec(command: string) {
-    document.execCommand(command)
+  function exec(command: string, value?: string) {
+    document.execCommand(command, false, value)
     editorRef.current?.focus()
   }
 
@@ -233,7 +233,6 @@ export default function ProfilePage({
 
     addImageListeners(img)
 
-    // Insert at saved cursor position
     if (savedRangeRef.current) {
       const range = savedRangeRef.current
       range.deleteContents()
@@ -424,24 +423,26 @@ export default function ProfilePage({
                     />
 
                     <div className="flex gap-2 mt-2 items-center">
+
+                      {/* BOLD */}
                       <button
-                        onClick={() => exec('bold')}
+                        onMouseDown={(e) => { e.preventDefault(); exec('bold') }}
                         className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold"
                       >
                         B
                       </button>
 
+                      {/* ITALIC */}
                       <button
-                        onClick={() => exec('italic')}
+                        onMouseDown={(e) => { e.preventDefault(); exec('italic') }}
                         className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic"
                       >
                         I
                       </button>
 
-                      {/* IMAGE BUTTON - right of B and I */}
+                      {/* IMAGE */}
                       <button
                         onMouseDown={(e) => {
-                          // prevent editor losing focus so cursor position is preserved
                           e.preventDefault()
                           saveCursor()
                           setEditImageEl(null)
@@ -454,6 +455,34 @@ export default function ProfilePage({
                       >
                         <Image src="/picture.png" alt="img" width={14} height={14} />
                       </button>
+
+                      {/* ALIGN LEFT */}
+                      <button
+                        onMouseDown={(e) => { e.preventDefault(); exec('justifyLeft') }}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        title="Align left"
+                      >
+                        <Image src="/left.png" alt="left" width={14} height={14} />
+                      </button>
+
+                      {/* ALIGN CENTER */}
+                      <button
+                        onMouseDown={(e) => { e.preventDefault(); exec('justifyCenter') }}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        title="Align center"
+                      >
+                        <Image src="/center.png" alt="center" width={14} height={14} />
+                      </button>
+
+                      {/* ALIGN RIGHT */}
+                      <button
+                        onMouseDown={(e) => { e.preventDefault(); exec('justifyRight') }}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        title="Align right"
+                      >
+                        <Image src="/right.png" alt="right" width={14} height={14} />
+                      </button>
+
                     </div>
 
                     <div className="mt-2 text-xs text-zinc-400">
