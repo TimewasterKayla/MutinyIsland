@@ -159,7 +159,17 @@ export default function HomePage() {
     <main className="min-h-screen flex items-center justify-center relative overflow-hidden">
 
       {/* PAGE BACKGROUND */}
-      <div className="ocean-bg" />
+<div
+  className="absolute inset-0 -z-10"
+  style={{
+    backgroundImage: "url('/loginscreen.jpg')",
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+  }}
+/>
+
+{/* SHIMMER OVERLAY */}
+<div className="ocean-bg absolute inset-0 -z-10 opacity-40" />
 
       {/* PARCHMENT CARD */}
       <div className="relative w-full max-w-md">
