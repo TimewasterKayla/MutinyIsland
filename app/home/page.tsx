@@ -114,7 +114,7 @@ export default function HomePage() {
   }
 
   // Top posts sorted by likes
-  const topPosts = [...posts].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 5)
+  const topPosts = [...posts].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 10)
 
   // -----------------------------
   // FETCH USER LIKES
@@ -486,14 +486,15 @@ export default function HomePage() {
                       {post.title && (
                         <h2
                           onClick={(e) => { e.stopPropagation(); router.push(`/posts/${post.id}`) }}
-                          className="text-sm font-bold text-white underline underline-offset-2 decoration-zinc-500 leading-snug mt-0.5 cursor-pointer hover:text-zinc-200 transition-colors inline-block w-full"
+                          className="font-bold text-white underline underline-offset-2 decoration-zinc-500 leading-snug cursor-pointer hover:text-zinc-200 transition-colors inline-block w-full"
                           style={{
                             display: '-webkit-box',
                             WebkitLineClamp: 2,
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
                             paddingRight: '4px',
-                            fontSize: '0.875rem',
+                            fontSize: '0.95rem',
+                            marginTop: '1px',
                           }}
                         >
                           {post.title}
@@ -542,27 +543,31 @@ export default function HomePage() {
               ) : (
                 <div className="space-y-2">
                   {topPosts.map((post, i) => (
-                    <button
-                      key={post.id}
-                      onClick={() => router.push(`/posts/${post.id}`)}
-                      className="w-full text-left group"
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="text-sm font-bold text-zinc-500 w-4 flex-shrink-0 mt-0.5">
-                          {i + 1}.
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-zinc-200 group-hover:text-white leading-snug truncate">
+                    <div key={post.id} className="flex items-start gap-2">
+                      <span className="text-sm font-bold text-zinc-500 w-4 flex-shrink-0 mt-0.5">
+                        {i + 1}.
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <button
+                          onClick={() => router.push(`/posts/${post.id}`)}
+                          className="text-left w-full group"
+                        >
+                          <p className="text-sm font-semibold text-zinc-200 group-hover:text-white leading-snug truncate underline underline-offset-2 decoration-zinc-600">
                             {post.title || 'Untitled'}
                           </p>
-                          <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-1">
-                            <span>❤️ {post.likes || 0}</span>
-                            <span className="text-zinc-700">·</span>
-                            <span className="truncate">{post.username}</span>
-                          </p>
-                        </div>
+                        </button>
+                        <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-1">
+                          <span>❤️ {post.likes || 0}</span>
+                          <span className="text-zinc-700">·</span>
+                          <button
+                            onClick={() => router.push(`/profile/${post.username}`)}
+                            className="truncate hover:text-zinc-300 cursor-pointer transition-colors"
+                          >
+                            {post.username}
+                          </button>
+                        </p>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
