@@ -100,7 +100,7 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // LOGIN
+  // LOGIN (username + password only, via edge function)
   // -----------------------------
   async function login() {
     setLoading(true)
@@ -112,54 +112,36 @@ export default function HomePage() {
       return
     }
 
-    // Look up email by username
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id')
-      .ilike('username', username)
-      .single()
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/login`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ username, password }),
+        }
+      )
 
-    if (profileError || !profile) {
-      setErrorMessage('Username not found')
-      setLoading(false)
-      return
+      const data = await res.json()
+
+      if (!res.ok) {
+        setErrorMessage(data.error || 'Login failed')
+        setLoading(false)
+        return
+      }
+
+      await supabase.auth.setSession(data.session)
+
+      window.location.href = '/games'
+    } catch (err) {
+      console.error(err)
+      setErrorMessage('Something went wrong')
     }
 
-    // We need the email — fetch from auth via profile id isn't possible client-side,
-    // so require email only at login if username lookup isn't wired server-side.
-    // For now, sign in requires email. Show email field at login too but labelled clearly.
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error || !data.user) {
-      setErrorMessage('Invalid credentials')
-      setLoading(false)
-      return
-    }
-
-    const { data: profileCheck, error: profileCheckError } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('id', data.user.id)
-      .single()
-
-    if (profileCheckError || !profileCheck) {
-      await supabase.auth.signOut()
-      setErrorMessage('Profile not found')
-      setLoading(false)
-      return
-    }
-
-    if (profileCheck.username.toLowerCase() !== username.toLowerCase()) {
-      await supabase.auth.signOut()
-      setErrorMessage('Incorrect username')
-      setLoading(false)
-      return
-    }
-
-    window.location.href = '/games'
+    setLoading(false)
   }
 
   // -----------------------------
@@ -187,7 +169,7 @@ export default function HomePage() {
 
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
-          {/* EMAIL — login always needs it to auth, signup needs it too */}
+          {/* EMAIL — signup only */}
           {mode === 'signup' && (
             <input
               className="w-full p-3 rounded bg-zinc-800"
@@ -203,15 +185,6 @@ export default function HomePage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
-
-          {mode === 'login' && (
-            <input
-              className="w-full p-3 rounded bg-zinc-800"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          )}
 
           <input
             className="w-full p-3 rounded bg-zinc-800"
