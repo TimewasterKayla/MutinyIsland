@@ -324,25 +324,25 @@ export default function ProfilePage({
             {activeTab === 'about' && (
               <div>
 
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-4 pl-4">
 
-                  <h2 className="text-3xl font-bold">
-                    About Me
-                  </h2>
+  <h2 className="text-3xl font-bold">
+    About Me
+  </h2>
 
-                  {isOwnProfile &&
-                    !editing && (
-                      <button
-                        onClick={() =>
-                          setEditing(true)
-                        }
-                        className="bg-green-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-green-600 transition cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                    )}
+  {isOwnProfile &&
+    !editing && (
+      <button
+        onClick={() =>
+          setEditing(true)
+        }
+        className="bg-green-500 text-black px-4 py-2 rounded-xl font-bold"
+      >
+        Edit
+      </button>
+    )}
 
-                </div>
+</div>
 
                 {/* DISPLAY MODE */}
                 {!editing ? (
