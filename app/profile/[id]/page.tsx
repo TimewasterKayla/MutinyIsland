@@ -15,6 +15,8 @@ type Profile = {
   created_at: string | null
 }
 
+type TabType = 'about' | 'messages' | 'friends' | 'wins' | 'inventory'
+
 const avatars = [
   '/avatars/jess.png',
   '/avatars/laffite.png',
@@ -28,36 +30,21 @@ export default function ProfilePage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const [usernameParam, setUsernameParam] =
-    useState<string>('')
-
-  const [profile, setProfile] =
-    useState<Profile | null>(null)
-
-  const [isOwnProfile, setIsOwnProfile] =
-    useState(false)
-
-  const [editing, setEditing] =
-    useState(false)
-
-  const [loading, setLoading] =
-    useState(true)
-
-  const [showAvatarEditor, setShowAvatarEditor] =
-    useState(false)
-
-  const [activeTab, setActiveTab] =
-    useState<
-      'about' | 'messages' | 'friends' | 'wins' | 'inventory'
-    >('about')
-
-  const editorRef =
-    useRef<HTMLDivElement | null>(null)
-
-  // ✅ IMAGE TOOL STATE (ADDED)
-  const [showImageModal, setShowImageModal] = useState(false)
-  const [imageUrl, setImageUrl] = useState('')
+  const [usernameParam, setUsernameParam] = useState<string>('')
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [isOwnProfile, setIsOwnProfile] = useState<boolean>(false)
+  const [editing, setEditing] = useState<boolean>(false)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [showAvatarEditor, setShowAvatarEditor] = useState<boolean>(false)
+  const [activeTab, setActiveTab] = useState<TabType>('about')
+  const [showImageModal, setShowImageModal] = useState<boolean>(false)
+  const [imageUrl, setImageUrl] = useState<string>('')
+  const [imageSize, setImageSize] = useState<'small' | 'medium' | 'large'>('medium')
   const [editImageEl, setEditImageEl] = useState<HTMLImageElement | null>(null)
+  const [hoveredImg, setHoveredImg] = useState<HTMLImageElement | null>(null)
+  const [deleteBtn, setDeleteBtn] = useState<{ x: number; y: number; img: HTMLImageElement } | null>(null)
+
+  const editorRef = useRef<HTMLDivElement | null>(null)
 
   // -----------------------------
   // PARAMS
@@ -91,16 +78,13 @@ export default function ProfilePage({
       return
     }
 
-    // assign avatar if missing
     if (!data.avatar) {
       const randomAvatar =
         avatars[Math.floor(Math.random() * avatars.length)]
 
       await supabase
         .from('profiles')
-        .update({
-          avatar: randomAvatar,
-        })
+        .update({ avatar: randomAvatar })
         .eq('id', data.id)
 
       data.avatar = randomAvatar
@@ -116,7 +100,7 @@ export default function ProfilePage({
 
     setIsOwnProfile(own)
 
-    setActiveTab((prev) => {
+    setActiveTab((prev: TabType) => {
       if (!own && (prev === 'messages' || prev === 'inventory')) {
         return 'about'
       }
@@ -132,8 +116,42 @@ export default function ProfilePage({
   useEffect(() => {
     if (editing && editorRef.current && profile) {
       editorRef.current.innerHTML = profile.about_me || ''
+      attachImageListeners()
     }
   }, [editing, profile])
+
+  // -----------------------------
+  // ATTACH LISTENERS TO IMAGES
+  // -----------------------------
+  function attachImageListeners() {
+    if (!editorRef.current) return
+    const imgs = editorRef.current.querySelectorAll('img')
+    imgs.forEach((img) => addImageListeners(img as HTMLImageElement))
+  }
+
+  function addImageListeners(img: HTMLImageElement) {
+    img.style.cursor = 'pointer'
+
+    img.onmouseenter = () => {
+      const rect = img.getBoundingClientRect()
+      setDeleteBtn({ x: rect.right - 36, y: rect.top + 4, img })
+      setHoveredImg(img)
+    }
+
+    img.onmouseleave = (e) => {
+      const related = e.relatedTarget as HTMLElement
+      if (related?.id === 'img-delete-btn') return
+      setDeleteBtn(null)
+      setHoveredImg(null)
+    }
+
+    img.oncontextmenu = (e) => {
+      e.preventDefault()
+      setEditImageEl(img)
+      setImageUrl(img.src)
+      setShowImageModal(true)
+    }
+  }
 
   // -----------------------------
   // SAVE ABOUT ME
@@ -145,9 +163,7 @@ export default function ProfilePage({
 
     const { error } = await supabase
       .from('profiles')
-      .update({
-        about_me: html,
-      })
+      .update({ about_me: html })
       .eq('id', profile.id)
 
     if (error) {
@@ -156,11 +172,7 @@ export default function ProfilePage({
       return
     }
 
-    setProfile({
-      ...profile,
-      about_me: html,
-    })
-
+    setProfile({ ...profile, about_me: html })
     setEditing(false)
   }
 
@@ -172,9 +184,7 @@ export default function ProfilePage({
 
     const { error } = await supabase
       .from('profiles')
-      .update({
-        avatar,
-      })
+      .update({ avatar })
       .eq('id', profile.id)
 
     if (error) {
@@ -182,11 +192,7 @@ export default function ProfilePage({
       return
     }
 
-    setProfile({
-      ...profile,
-      avatar,
-    })
-
+    setProfile({ ...profile, avatar })
     setShowAvatarEditor(false)
   }
 
@@ -198,27 +204,59 @@ export default function ProfilePage({
     editorRef.current?.focus()
   }
 
-  // ✅ IMAGE INSERT FUNCTION (ADDED)
+  // -----------------------------
+  // INSERT IMAGE
+  // -----------------------------
   function insertImage(url: string) {
-    if (!editorRef.current) return
+    if (!editorRef.current || !url.trim()) return
+
+    const editor = editorRef.current
+    const widthMap = { small: '200px', medium: '400px', large: '100%' }
 
     const img = document.createElement('img')
-    img.src = url
-    img.style.maxWidth = '100%'
+    img.src = url.trim()
+    img.style.maxWidth = widthMap[imageSize]
+    img.style.width = widthMap[imageSize]
     img.style.borderRadius = '12px'
     img.style.margin = '10px 0'
+    img.style.display = 'block'
 
-    img.addEventListener('contextmenu', (e) => {
-      e.preventDefault()
-      setEditImageEl(img)
-      setImageUrl(img.src)
-      setShowImageModal(true)
-    })
+    addImageListeners(img)
 
-    editorRef.current.appendChild(img)
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0)
+      range.deleteContents()
+      range.insertNode(img)
+
+      const br = document.createElement('br')
+      img.insertAdjacentElement('afterend', br)
+
+      const newRange = document.createRange()
+      newRange.setStartAfter(br)
+      newRange.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(newRange)
+    } else {
+      editor.appendChild(img)
+      const br = document.createElement('br')
+      editor.appendChild(br)
+      editor.focus()
+    }
 
     setShowImageModal(false)
     setImageUrl('')
+    setImageSize('medium')
+    setEditImageEl(null)
+  }
+
+  // -----------------------------
+  // DELETE IMAGE
+  // -----------------------------
+  function deleteImage(img: HTMLImageElement) {
+    img.remove()
+    setDeleteBtn(null)
+    setHoveredImg(null)
   }
 
   // -----------------------------
@@ -254,7 +292,6 @@ export default function ProfilePage({
 
           <div className="relative">
             <div className="w-full aspect-square rounded-2xl overflow-hidden bg-zinc-800 border border-zinc-700">
-
               <Image
                 src={profile.avatar || '/avatars/jess.png'}
                 alt="Avatar"
@@ -262,7 +299,6 @@ export default function ProfilePage({
                 height={500}
                 className="w-full h-full object-cover"
               />
-
             </div>
 
             {isOwnProfile && (
@@ -325,7 +361,7 @@ export default function ProfilePage({
             {tabs.map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab as any)}
+                onClick={() => setActiveTab(tab as TabType)}
                 className={`px-3 py-1 text-xs rounded-t-md border border-zinc-700 transition capitalize cursor-pointer ${
                   activeTab === tab
                     ? 'bg-green-500 text-black font-bold'
@@ -341,7 +377,6 @@ export default function ProfilePage({
 
             {activeTab === 'about' && (
               <div>
-
                 <div className="flex items-center justify-between mb-4 pl-4">
                   <h2 className="text-3xl font-bold">About Me</h2>
 
@@ -366,7 +401,6 @@ export default function ProfilePage({
                   />
                 ) : (
                   <div>
-
                     <div
                       ref={editorRef}
                       contentEditable
@@ -375,18 +409,16 @@ export default function ProfilePage({
                     />
 
                     <div className="flex gap-2 mt-2">
-
-                      {/* IMAGE BUTTON (ADDED) */}
                       <button
-                        onClick={() => setShowImageModal(true)}
+                        onClick={() => {
+                          setEditImageEl(null)
+                          setImageUrl('')
+                          setImageSize('medium')
+                          setShowImageModal(true)
+                        }}
                         className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
                       >
-                        <Image
-                          src="/picture.png"
-                          alt="img"
-                          width={14}
-                          height={14}
-                        />
+                        <Image src="/picture.png" alt="img" width={14} height={14} />
                       </button>
 
                       <button
@@ -402,7 +434,6 @@ export default function ProfilePage({
                       >
                         I
                       </button>
-
                     </div>
 
                     <div className="mt-2 text-xs text-zinc-400">
@@ -461,30 +492,92 @@ export default function ProfilePage({
         </div>
       </div>
 
-      {/* (your existing avatar modal unchanged) */}
+      {/* AVATAR MODAL */}
+      {showAvatarEditor && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[420px]">
 
-      {/* IMAGE MODAL (ADDED) */}
+            <h2 className="text-2xl font-bold mb-4">Select Avatar</h2>
+
+            <div className="grid grid-cols-3 gap-4">
+              {avatars.map((avatar) => (
+                <button
+                  key={avatar}
+                  onClick={() => changeAvatar(avatar)}
+                  className="bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 hover:border-orange-400"
+                >
+                  <Image
+                    src={avatar}
+                    alt="Avatar"
+                    width={120}
+                    height={120}
+                    className="w-full aspect-square object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowAvatarEditor(false)}
+              className="mt-5 w-full bg-zinc-700 hover:bg-zinc-600 rounded-xl py-2"
+            >
+              Close
+            </button>
+
+          </div>
+        </div>
+      )}
+
+      {/* IMAGE MODAL */}
       {showImageModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[420px]">
 
             <h2 className="text-2xl font-bold mb-4">
-              Insert Image
+              {editImageEl ? 'Edit Image' : 'Insert Image'}
             </h2>
 
             <input
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
               placeholder="Enter image URL"
-              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
+              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
+              autoFocus
             />
 
-            <div className="flex justify-end gap-2 mt-4">
+            <div className="mb-4">
+              <label className="text-sm text-zinc-400 mb-1 block">Size</label>
+              <select
+                value={imageSize}
+                onChange={(e) => setImageSize(e.target.value as 'small' | 'medium' | 'large')}
+                className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
+              >
+                <option value="small">Small (200px)</option>
+                <option value="medium">Medium (400px)</option>
+                <option value="large">Large (Full width)</option>
+              </select>
+            </div>
 
+            {imageUrl.trim() && (
+              <div className="mb-4 rounded-xl overflow-hidden border border-zinc-700 max-h-40 flex items-center justify-center bg-zinc-800">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageUrl.trim()}
+                  alt="Preview"
+                  className="max-h-40 max-w-full object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
               <button
                 onClick={() => {
                   setShowImageModal(false)
                   setImageUrl('')
+                  setEditImageEl(null)
                 }}
                 className="bg-zinc-700 px-3 py-1 rounded"
               >
@@ -492,16 +585,48 @@ export default function ProfilePage({
               </button>
 
               <button
-                onClick={() => insertImage(imageUrl)}
+                onClick={() => {
+                  if (editImageEl) {
+                    const widthMap = { small: '200px', medium: '400px', large: '100%' }
+                    editImageEl.src = imageUrl.trim()
+                    editImageEl.style.width = widthMap[imageSize]
+                    editImageEl.style.maxWidth = widthMap[imageSize]
+                    setShowImageModal(false)
+                    setImageUrl('')
+                    setEditImageEl(null)
+                  } else {
+                    insertImage(imageUrl)
+                  }
+                }}
                 className="bg-green-500 text-black px-4 py-1 rounded font-bold"
               >
-                Insert
+                {editImageEl ? 'Update' : 'Insert'}
               </button>
-
             </div>
 
           </div>
         </div>
+      )}
+
+      {/* FLOATING DELETE BUTTON */}
+      {editing && deleteBtn && (
+        <button
+          id="img-delete-btn"
+          onMouseLeave={() => {
+            setDeleteBtn(null)
+            setHoveredImg(null)
+          }}
+          onClick={() => deleteImage(deleteBtn.img)}
+          style={{
+            position: 'fixed',
+            top: deleteBtn.y,
+            left: deleteBtn.x,
+            zIndex: 9999,
+          }}
+          className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-lg flex items-center justify-center shadow-lg"
+        >
+          <Image src="/trash.png" alt="Delete" width={14} height={14} />
+        </button>
       )}
 
     </main>
