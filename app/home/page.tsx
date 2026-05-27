@@ -136,7 +136,6 @@ export default function HomePage() {
     if (typeof window === 'undefined') return ''
     const tmp = document.createElement('div')
     tmp.innerHTML = html
-    // Remove all images and YouTube wrappers from preview
     tmp.querySelectorAll('img, [data-yt-wrapper]').forEach((el) => el.remove())
     const text = tmp.innerText || tmp.textContent || ''
     return text.length > 150 ? text.slice(0, 150).trimEnd() + '…' : text
@@ -397,156 +396,179 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen flex justify-center text-white bg-zinc-950">
-      {/* OUTER WRAPPER — two columns */}
-      <div className="w-full max-w-5xl px-4 py-8 flex gap-6 items-start">
+    <main
+      className="min-h-screen flex justify-center text-white"
+      style={{
+        backgroundImage: 'url(/homepage.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+      }}
+    >
+      {/* dark overlay so text stays readable */}
+      <div className="w-full min-h-screen" style={{ background: 'rgba(0,0,0,0.55)' }}>
+        {/* OUTER WRAPPER — two columns */}
+        <div className="w-full max-w-5xl mx-auto px-4 py-8 flex gap-6 items-start">
 
-        {/* LEFT: MAIN FEED */}
-        <div className="flex-1 min-w-0">
+          {/* LEFT: MAIN FEED */}
+          <div className="flex-1 min-w-0">
 
-          {/* TOP BAR */}
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold">Mutiny Island</h1>
-            <button
-              onClick={() => setShowModal(true)}
-              className="bg-green-500 hover:bg-green-400 text-black font-bold px-4 py-2 rounded cursor-pointer"
-            >
-              New Post
-            </button>
-          </div>
-
-          {/* POSTS */}
-          <div className="space-y-3">
-            {posts.map((post) => (
-              <div
-                key={post.id}
-                onClick={() => router.push(`/posts/${post.id}`)}
-                className="bg-zinc-900 hover:bg-zinc-800 transition-colors rounded-xl border border-zinc-800 cursor-pointer p-4"
+            {/* TOP BAR */}
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-3xl font-bold">Mutiny Island</h1>
+              <button
+                onClick={() => setShowModal(true)}
+                className="bg-green-500 hover:bg-green-400 text-black font-bold px-4 py-2 rounded cursor-pointer"
               >
-                <div className="flex gap-3">
+                New Post
+              </button>
+            </div>
 
-                  {/* AVATAR — left column, no text above or below */}
-                  <div className="flex-shrink-0 self-start">
-                    <div className="w-14 h-20 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600">
-                      {post.avatar ? (
-                        <Image
-                          src={post.avatar}
-                          alt={post.username}
-                          width={56}
-                          height={80}
-                          className="w-full h-full object-cover"
-                          unoptimized
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-zinc-600" />
+            {/* POSTS */}
+            <div className="space-y-3">
+              {posts.map((post) => (
+                <div
+                  key={post.id}
+                  className="bg-zinc-900/80 backdrop-blur-sm rounded-xl border border-zinc-800 p-4"
+                >
+                  <div className="flex gap-3">
+
+                    {/* AVATAR — clickable to profile, no text above or below */}
+                    <div
+                      className="flex-shrink-0 self-start cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.user_id}`) }}
+                      title={`View ${post.username}'s profile`}
+                    >
+                      <div className="w-14 h-20 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 hover:border-zinc-400 transition-colors">
+                        {post.avatar ? (
+                          <Image
+                            src={post.avatar}
+                            alt={post.username}
+                            width={56}
+                            height={80}
+                            className="w-full h-full object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-zinc-600" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* RIGHT CONTENT */}
+                    <div className="flex-1 min-w-0" style={{ maxHeight: '80px', overflow: 'hidden' }}>
+
+                      {/* ROW 1: username · date + like button */}
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs text-zinc-400 leading-tight truncate">
+                          {/* USERNAME — clickable to profile */}
+                          <span
+                            className="font-semibold text-zinc-300 hover:text-white cursor-pointer transition-colors"
+                            onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.user_id}`) }}
+                          >
+                            {post.username}
+                          </span>
+                          <span className="mx-1 text-zinc-600">·</span>
+                          <span>{new Date(post.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </p>
+                        {/* LIKE — top right, extra top padding to avoid clipping */}
+                        <button
+                          onClick={(e) => toggleLike(e, post)}
+                          className="flex-shrink-0 flex flex-col items-center gap-0 cursor-pointer leading-none"
+                          style={{ paddingTop: '2px' }}
+                        >
+                          <span className="text-base leading-none">{likedPosts[post.id] ? '❤️' : '🤍'}</span>
+                          <span className="text-[10px] text-zinc-400 leading-tight">{post.likes || 0}</span>
+                        </button>
+                      </div>
+
+                      {/* ROW 2: TITLE — clickable to open post */}
+                      {post.title && (
+                        <h2
+                          onClick={(e) => { e.stopPropagation(); router.push(`/posts/${post.id}`) }}
+                          className="text-sm font-bold text-white underline underline-offset-2 decoration-zinc-500 leading-snug mt-0.5 cursor-pointer hover:text-zinc-200 transition-colors inline-block w-full"
+                          style={{
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            paddingRight: '4px',
+                            fontSize: '0.875rem',
+                          }}
+                        >
+                          {post.title}
+                        </h2>
                       )}
-                    </div>
-                  </div>
 
-                  {/* RIGHT CONTENT — fills remaining space, max height matches avatar */}
-                  <div className="flex-1 min-w-0" style={{ maxHeight: '80px', overflow: 'hidden' }}>
-
-                    {/* ROW 1: username · date + like button */}
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs text-zinc-400 leading-tight truncate">
-                        <span className="font-semibold text-zinc-300">{post.username}</span>
-                        <span className="mx-1 text-zinc-600">·</span>
-                        <span>{new Date(post.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                      </p>
-                      {/* LIKE — top right */}
-                      <button
-                        onClick={(e) => toggleLike(e, post)}
-                        className="flex-shrink-0 flex flex-col items-center gap-0 cursor-pointer leading-none"
-                        style={{ marginTop: '-2px' }}
-                      >
-                        <span className="text-base leading-none">{likedPosts[post.id] ? '❤️' : '🤍'}</span>
-                        <span className="text-[10px] text-zinc-400 leading-tight">{post.likes || 0}</span>
-                      </button>
-                    </div>
-
-                    {/* ROW 2: TITLE */}
-                    {post.title && (
-                      <h2
-                        className="text-sm font-bold text-white underline underline-offset-2 decoration-zinc-500 leading-snug mt-0.5"
+                      {/* ROW 3: PREVIEW TEXT */}
+                      <p
+                        className="text-zinc-400 leading-snug mt-0.5"
                         style={{
                           display: '-webkit-box',
                           WebkitLineClamp: 2,
                           WebkitBoxOrient: 'vertical',
                           overflow: 'hidden',
-                          paddingRight: '4px',
+                          fontSize: '0.8rem',
                         }}
                       >
-                        {post.title}
-                      </h2>
-                    )}
-
-                    {/* ROW 3: PREVIEW TEXT — remaining space, max 2 lines */}
-                    <p
-                      className="text-zinc-400 text-xs leading-snug mt-0.5"
-                      style={{
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      {getPreviewText(post.content)}
-                    </p>
-                  </div>
-
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* RIGHT SIDEBAR */}
-        <div className="w-64 flex-shrink-0 space-y-4 sticky top-8">
-
-          {/* ANNOUNCEMENTS */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
-              <span className="text-yellow-400">📢</span> Announcements
-            </h2>
-            <p className="text-zinc-500 text-xs italic">No announcements yet.</p>
-          </div>
-
-          {/* TOP POSTS */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
-              <span className="text-green-400">🏆</span> Top Posts
-            </h2>
-            {topPosts.length === 0 ? (
-              <p className="text-zinc-500 text-xs italic">No posts yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {topPosts.map((post, i) => (
-                  <button
-                    key={post.id}
-                    onClick={() => router.push(`/posts/${post.id}`)}
-                    className="w-full text-left group"
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="text-xs font-bold text-zinc-600 w-4 flex-shrink-0 mt-0.5">
-                        {i + 1}.
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-zinc-200 group-hover:text-white leading-snug truncate">
-                          {post.title || 'Untitled'}
-                        </p>
-                        <p className="text-[10px] text-zinc-500 mt-0.5 flex items-center gap-1">
-                          <span>❤️ {post.likes || 0}</span>
-                          <span className="text-zinc-700">·</span>
-                          <span className="truncate">{post.username}</span>
-                        </p>
-                      </div>
+                        {getPreviewText(post.content)}
+                      </p>
                     </div>
-                  </button>
-                ))}
-              </div>
-            )}
+
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
+          {/* RIGHT SIDEBAR */}
+          <div className="w-64 flex-shrink-0 space-y-4 sticky top-8">
+
+            {/* ANNOUNCEMENTS */}
+            <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl p-4">
+              <h2 className="text-base font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="text-yellow-400">📢</span> Announcements
+              </h2>
+              <p className="text-zinc-400 text-sm italic">No announcements yet.</p>
+            </div>
+
+            {/* TOP POSTS */}
+            <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl p-4">
+              <h2 className="text-base font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="text-green-400">🏆</span> Top Posts
+              </h2>
+              {topPosts.length === 0 ? (
+                <p className="text-zinc-400 text-sm italic">No posts yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {topPosts.map((post, i) => (
+                    <button
+                      key={post.id}
+                      onClick={() => router.push(`/posts/${post.id}`)}
+                      className="w-full text-left group"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-sm font-bold text-zinc-500 w-4 flex-shrink-0 mt-0.5">
+                          {i + 1}.
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-zinc-200 group-hover:text-white leading-snug truncate">
+                            {post.title || 'Untitled'}
+                          </p>
+                          <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-1">
+                            <span>❤️ {post.likes || 0}</span>
+                            <span className="text-zinc-700">·</span>
+                            <span className="truncate">{post.username}</span>
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
         </div>
       </div>
 

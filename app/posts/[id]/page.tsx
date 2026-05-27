@@ -1,9 +1,57 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
+
+// -----------------------------
+// YOUTUBE HELPERS
+// -----------------------------
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ]
+  for (const pattern of patterns) {
+    const match = url.match(pattern)
+    if (match) return match[1]
+  }
+  return null
+}
+
+function buildEmbedUrl(videoId: string, autoplay: boolean): string {
+  const params = new URLSearchParams({
+    rel: '0',
+    ...(autoplay ? { autoplay: '1' } : {}),
+  })
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`
+}
+
+function buildYouTubeHTML(
+  videoId: string,
+  embedUrl: string,
+  width: string,
+  alignment: 'left' | 'center' | 'right',
+  autoplay: boolean
+): string {
+  const marginMap = {
+    left: 'margin: 10px auto 10px 0;',
+    center: 'margin: 10px auto;',
+    right: 'margin: 10px 0 10px auto;',
+  }
+  return `<div
+    data-yt-wrapper="1"
+    data-video-id="${videoId}"
+    data-autoplay="${autoplay}"
+    style="display:block; width:${width}; max-width:${width}; ${marginMap[alignment]}"
+  ><div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:12px;"><iframe
+    src="${embedUrl}"
+    style="position:absolute; top:0; left:0; width:100%; height:100%; border:0; border-radius:12px;"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowfullscreen
+  ></iframe></div></div>`
+}
 
 export default function PostPage({
   params,
@@ -19,8 +67,27 @@ export default function PostPage({
   const [isLiked, setIsLiked] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
-  const [editContent, setEditContent] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Image modal
+  const [showImageModal, setShowImageModal] = useState(false)
+  const [imageUrl, setImageUrl] = useState('')
+  const [imageSize, setImageSize] = useState<'small' | 'medium' | 'large'>('medium')
+  const [editImageEl, setEditImageEl] = useState<HTMLImageElement | null>(null)
+
+  // YouTube modal
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false)
+  const [youtubeUrl, setYoutubeUrl] = useState('')
+  const [youtubeSize, setYoutubeSize] = useState<'small' | 'medium' | 'large'>('medium')
+  const [youtubeAlignment, setYoutubeAlignment] = useState<'left' | 'center' | 'right'>('center')
+  const [youtubeAutoplay, setYoutubeAutoplay] = useState(false)
+  const [editYouTubeWrapper, setEditYouTubeWrapper] = useState<HTMLElement | null>(null)
+  const [selectedImg, setSelectedImg] = useState<HTMLImageElement | null>(null)
+
+  const editorRef = useRef<HTMLDivElement | null>(null)
+  const savedRangeRef = useRef<Range | null>(null)
+
+  const MAX_CHARS = 1000
 
   // -----------------------------
   // PARAMS
@@ -78,6 +145,13 @@ export default function PostPage({
     setIsLiked(!!data)
   }
 
+  // Seed editor with post content when editing starts
+  useEffect(() => {
+    if (editing && editorRef.current && post) {
+      editorRef.current.innerHTML = post.content || ''
+    }
+  }, [editing])
+
   // -----------------------------
   // TOGGLE LIKE
   // -----------------------------
@@ -106,20 +180,215 @@ export default function PostPage({
   }
 
   // -----------------------------
-  // SAVE EDIT
+  // SAVE EDIT — reads from contentEditable editor
   // -----------------------------
   async function saveEdit() {
-    if (!editTitle.trim()) return
+    if (!editTitle.trim() || !editorRef.current) return
     setSaving(true)
+    const newContent = editorRef.current.innerHTML
     const { error } = await supabase
       .from('posts')
-      .update({ title: editTitle, content: editContent })
+      .update({ title: editTitle, content: newContent })
       .eq('id', post.id)
     if (!error) {
-      setPost({ ...post, title: editTitle, content: editContent })
+      setPost({ ...post, title: editTitle, content: newContent })
       setEditing(false)
     }
     setSaving(false)
+  }
+
+  // -----------------------------
+  // EDITOR HELPERS
+  // -----------------------------
+  function saveCursor() {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange()
+    }
+  }
+
+  function exec(command: string, value?: string) {
+    document.execCommand(command, false, value)
+    editorRef.current?.focus()
+  }
+
+  function handleAlign(direction: 'left' | 'center' | 'right') {
+    if (selectedImg) {
+      alignImage(direction)
+    } else {
+      const cmdMap = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight' }
+      exec(cmdMap[direction])
+    }
+  }
+
+  function alignImage(alignment: 'left' | 'center' | 'right') {
+    if (!selectedImg) return
+    const wrapper = selectedImg.parentElement
+    if (!wrapper) return
+    selectedImg.style.display = 'block'
+    if (alignment === 'left') {
+      selectedImg.style.marginLeft = '0'; selectedImg.style.marginRight = 'auto'
+      wrapper.style.textAlign = 'left'
+    } else if (alignment === 'center') {
+      selectedImg.style.marginLeft = 'auto'; selectedImg.style.marginRight = 'auto'
+      wrapper.style.textAlign = 'center'
+    } else {
+      selectedImg.style.marginLeft = 'auto'; selectedImg.style.marginRight = '0'
+      wrapper.style.textAlign = 'right'
+    }
+    editorRef.current?.focus()
+  }
+
+  function handleEditorClick(e: React.MouseEvent) {
+    const target = e.target as HTMLElement
+    if (target.tagName !== 'IMG' && selectedImg) {
+      selectedImg.style.outline = 'none'
+      setSelectedImg(null)
+    }
+    saveCursor()
+  }
+
+  function attachImageListeners(img: HTMLImageElement) {
+    img.style.cursor = 'pointer'
+    img.oncontextmenu = (e) => {
+      e.preventDefault()
+      setEditImageEl(img)
+      setImageUrl(img.src)
+      setShowImageModal(true)
+    }
+    img.onclick = () => {
+      if (selectedImg && selectedImg !== img) selectedImg.style.outline = 'none'
+      setSelectedImg(img)
+      img.style.outline = '2px solid #22c55e'
+      const range = document.createRange()
+      range.selectNode(img)
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+      savedRangeRef.current = range.cloneRange()
+    }
+  }
+
+  function attachYouTubeListeners(wrapper: HTMLElement) {
+    wrapper.oncontextmenu = (e) => {
+      e.preventDefault()
+      const videoId = wrapper.getAttribute('data-video-id') || ''
+      const autoplay = wrapper.getAttribute('data-autoplay') === 'true'
+      const currentWidth = wrapper.style.width
+      let size: 'small' | 'medium' | 'large' = 'medium'
+      if (currentWidth === '300px') size = 'small'
+      else if (currentWidth === '100%') size = 'large'
+      const marginLeft = wrapper.style.marginLeft
+      const marginRight = wrapper.style.marginRight
+      let alignment: 'left' | 'center' | 'right' = 'center'
+      if (marginLeft === '0px' || marginLeft === '0') alignment = 'left'
+      else if (marginRight === '0px' || marginRight === '0') alignment = 'right'
+      setEditYouTubeWrapper(wrapper)
+      setYoutubeUrl(`https://www.youtube.com/watch?v=${videoId}`)
+      setYoutubeSize(size)
+      setYoutubeAlignment(alignment)
+      setYoutubeAutoplay(autoplay)
+      setShowYouTubeModal(true)
+    }
+  }
+
+  // -----------------------------
+  // INSERT IMAGE (into edit editor)
+  // -----------------------------
+  function insertImage() {
+    if (!imageUrl.trim()) return
+    const editor = editorRef.current
+    if (!editor) return
+    const widthMap = { small: '200px', medium: '400px', large: '100%' }
+    const wrapper = document.createElement('div')
+    wrapper.style.margin = '10px 0'
+    const img = document.createElement('img')
+    img.src = imageUrl.trim()
+    img.style.maxWidth = widthMap[imageSize]
+    img.style.width = widthMap[imageSize]
+    img.style.borderRadius = '12px'
+    img.style.display = 'block'
+    wrapper.appendChild(img)
+    attachImageListeners(img)
+    if (savedRangeRef.current) {
+      const range = savedRangeRef.current
+      range.deleteContents()
+      range.insertNode(wrapper)
+      const br = document.createElement('br')
+      wrapper.insertAdjacentElement('afterend', br)
+      const newRange = document.createRange()
+      newRange.setStartAfter(br)
+      newRange.collapse(true)
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(newRange)
+    } else {
+      editor.appendChild(wrapper)
+    }
+    editor.focus()
+    setShowImageModal(false)
+    setImageUrl('')
+    setImageSize('medium')
+    setEditImageEl(null)
+    savedRangeRef.current = null
+  }
+
+  // -----------------------------
+  // INSERT / UPDATE YOUTUBE (into edit editor)
+  // -----------------------------
+  function insertYouTube() {
+    if (!youtubeUrl.trim()) return
+    const editor = editorRef.current
+    if (!editor) return
+    const videoId = extractYouTubeId(youtubeUrl.trim())
+    if (!videoId) {
+      alert('Could not detect a YouTube video ID. Please use a standard YouTube link.')
+      return
+    }
+    const widthMap = { small: '300px', medium: '560px', large: '100%' }
+    const width = widthMap[youtubeSize]
+    const embedUrl = buildEmbedUrl(videoId, youtubeAutoplay)
+    if (editYouTubeWrapper) {
+      const html = buildYouTubeHTML(videoId, embedUrl, width, youtubeAlignment, youtubeAutoplay)
+      const temp = document.createElement('div')
+      temp.innerHTML = html
+      const newWrapper = temp.firstElementChild as HTMLElement
+      editYouTubeWrapper.replaceWith(newWrapper)
+      attachYouTubeListeners(newWrapper)
+    } else {
+      const html = buildYouTubeHTML(videoId, embedUrl, width, youtubeAlignment, youtubeAutoplay)
+      const temp = document.createElement('div')
+      temp.innerHTML = html
+      const newWrapper = temp.firstElementChild as HTMLElement
+      attachYouTubeListeners(newWrapper)
+      if (savedRangeRef.current) {
+        const range = savedRangeRef.current
+        range.deleteContents()
+        range.insertNode(newWrapper)
+        const br = document.createElement('br')
+        newWrapper.insertAdjacentElement('afterend', br)
+        const newRange = document.createRange()
+        newRange.setStartAfter(br)
+        newRange.collapse(true)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(newRange)
+      } else {
+        editor.appendChild(newWrapper)
+      }
+    }
+    editor.focus()
+    closeYouTubeModal()
+  }
+
+  function closeYouTubeModal() {
+    setShowYouTubeModal(false)
+    setYoutubeUrl('')
+    setYoutubeSize('medium')
+    setYoutubeAlignment('center')
+    setYoutubeAutoplay(false)
+    setEditYouTubeWrapper(null)
+    savedRangeRef.current = null
   }
 
   // -----------------------------
@@ -202,7 +471,6 @@ export default function PostPage({
                   <button
                     onClick={() => {
                       setEditTitle(post.title || '')
-                      setEditContent(post.content || '')
                       setEditing(true)
                     }}
                     className="bg-orange-500 hover:bg-orange-400 px-3 py-1.5 rounded text-sm font-semibold cursor-pointer transition-colors text-white"
@@ -258,9 +526,10 @@ export default function PostPage({
             </>
           )}
 
-          {/* EDIT MODE */}
+          {/* EDIT MODE — rich contentEditable editor */}
           {editing && (
             <div className="space-y-4">
+              {/* TITLE INPUT */}
               <div>
                 <input
                   className="w-full p-3 bg-zinc-800 rounded-xl border border-zinc-700 text-white text-xl font-bold placeholder-zinc-500"
@@ -270,20 +539,122 @@ export default function PostPage({
                 />
                 <div className="text-right text-xs text-zinc-500 mt-1">{editTitle.length}/80</div>
               </div>
-              <textarea
-                className="w-full p-3 bg-zinc-800 rounded-xl border border-zinc-700 text-white placeholder-zinc-500 min-h-[300px] resize-y"
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                placeholder="Post content..."
+
+              {/* TOOLBAR */}
+              <div className="flex gap-2 items-center flex-wrap">
+                <button onMouseDown={(e) => { e.preventDefault(); exec('bold') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold text-white" title="Bold">B</button>
+                <button onMouseDown={(e) => { e.preventDefault(); exec('italic') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic text-white" title="Italic">I</button>
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditImageEl(null); setImageUrl(''); setImageSize('medium'); setShowImageModal(true) }}
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Insert image"
+                >
+                  <Image src="/picture.png" alt="img" width={14} height={14} />
+                </button>
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Align left">
+                  <Image src="/left.png" alt="left" width={14} height={14} />
+                </button>
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Align center">
+                  <Image src="/center.png" alt="center" width={14} height={14} />
+                </button>
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Align right">
+                  <Image src="/right.png" alt="right" width={14} height={14} />
+                </button>
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditYouTubeWrapper(null); setYoutubeUrl(''); setYoutubeSize('medium'); setYoutubeAlignment('center'); setYoutubeAutoplay(false); setShowYouTubeModal(true) }}
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Insert YouTube video"
+                >
+                  <Image src="/youtube.png" alt="YouTube" width={14} height={14} />
+                </button>
+              </div>
+
+              {/* RICH CONTENT EDITOR */}
+              <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                onKeyUp={saveCursor}
+                onMouseUp={handleEditorClick}
+                onClick={handleEditorClick}
+                className="w-full min-h-[300px] bg-zinc-800 rounded-xl p-4 outline-none border border-zinc-700 text-white"
               />
-              <p className="text-xs text-zinc-500">
-                Note: editing replaces rich content with plain text.
-              </p>
             </div>
           )}
 
         </div>
       </div>
+
+      {/* IMAGE MODAL */}
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[420px]">
+            <h2 className="text-2xl font-bold mb-4">{editImageEl ? 'Edit Image' : 'Insert Image'}</h2>
+            <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') insertImage() }} placeholder="Enter image URL" className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4" autoFocus />
+            <div className="mb-4">
+              <label className="text-sm text-zinc-400 mb-1 block">Size</label>
+              <select value={imageSize} onChange={(e) => setImageSize(e.target.value as 'small' | 'medium' | 'large')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white">
+                <option value="small">Small (200px)</option>
+                <option value="medium">Medium (400px)</option>
+                <option value="large">Large (Full width)</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setShowImageModal(false); setImageUrl(''); setEditImageEl(null) }} className="bg-zinc-700 px-3 py-1 rounded">Cancel</button>
+              <button
+                onClick={() => {
+                  if (editImageEl) {
+                    const widthMap = { small: '200px', medium: '400px', large: '100%' }
+                    editImageEl.src = imageUrl.trim()
+                    editImageEl.style.width = widthMap[imageSize]
+                    editImageEl.style.maxWidth = widthMap[imageSize]
+                    setShowImageModal(false); setImageUrl(''); setEditImageEl(null)
+                  } else { insertImage() }
+                }}
+                className="bg-green-500 text-black px-4 py-1 rounded font-bold"
+              >
+                {editImageEl ? 'Update' : 'Insert'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* YOUTUBE MODAL */}
+      {showYouTubeModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[440px]">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <Image src="/youtube.png" alt="YouTube" width={22} height={22} />
+              {editYouTubeWrapper ? 'Edit YouTube Video' : 'Insert YouTube Video'}
+            </h2>
+            <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') insertYouTube() }} placeholder="Paste YouTube URL" className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4" autoFocus />
+            <div className="mb-4">
+              <label className="text-sm text-zinc-400 mb-1 block">Size</label>
+              <select value={youtubeSize} onChange={(e) => setYoutubeSize(e.target.value as 'small' | 'medium' | 'large')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white">
+                <option value="small">Small (300px)</option>
+                <option value="medium">Medium (560px)</option>
+                <option value="large">Large (Full width)</option>
+              </select>
+            </div>
+            <div className="mb-4">
+              <label className="text-sm text-zinc-400 mb-1 block">Alignment</label>
+              <select value={youtubeAlignment} onChange={(e) => setYoutubeAlignment(e.target.value as 'left' | 'center' | 'right')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white">
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+            <div className="mb-5 flex items-center gap-3">
+              <input type="checkbox" id="yt-autoplay-edit" checked={youtubeAutoplay} onChange={(e) => setYoutubeAutoplay(e.target.checked)} className="w-4 h-4 accent-green-500 cursor-pointer" />
+              <label htmlFor="yt-autoplay-edit" className="text-sm text-zinc-300 cursor-pointer select-none">Autoplay when post is opened</label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={closeYouTubeModal} className="bg-zinc-700 px-3 py-1 rounded">Cancel</button>
+              <button onClick={insertYouTube} className="bg-green-500 text-black px-4 py-1 rounded font-bold">{editYouTubeWrapper ? 'Update' : 'Insert'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   )
 }
