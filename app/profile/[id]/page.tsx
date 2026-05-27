@@ -43,7 +43,7 @@ function extractYouTubeId(url: string): string | null {
 function buildEmbedUrl(videoId: string, autoplay: boolean): string {
   const params = new URLSearchParams({
     rel: '0',
-    ...(autoplay ? { autoplay: '1', mute: '1' } : {}),
+    ...(autoplay ? { autoplay: '1' } : {}),
   })
   return `https://www.youtube.com/embed/${videoId}?${params.toString()}`
 }
@@ -971,7 +971,6 @@ export default function ProfilePage({
               />
               <label htmlFor="yt-autoplay" className="text-sm text-zinc-300 cursor-pointer select-none">
                 Autoplay when profile is opened{' '}
-                <span className="text-zinc-500">(muted)</span>
               </label>
             </div>
 
