@@ -41,10 +41,10 @@ export default function ProfilePage({
   const [imageUrl, setImageUrl] = useState<string>('')
   const [imageSize, setImageSize] = useState<'small' | 'medium' | 'large'>('medium')
   const [editImageEl, setEditImageEl] = useState<HTMLImageElement | null>(null)
-  const [hoveredImg, setHoveredImg] = useState<HTMLImageElement | null>(null)
   const [deleteBtn, setDeleteBtn] = useState<{ x: number; y: number; img: HTMLImageElement } | null>(null)
 
   const editorRef = useRef<HTMLDivElement | null>(null)
+  const savedRangeRef = useRef<Range | null>(null)
 
   // -----------------------------
   // PARAMS
@@ -121,6 +121,16 @@ export default function ProfilePage({
   }, [editing, profile])
 
   // -----------------------------
+  // SAVE CURSOR POSITION
+  // -----------------------------
+  function saveCursor() {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange()
+    }
+  }
+
+  // -----------------------------
   // ATTACH LISTENERS TO IMAGES
   // -----------------------------
   function attachImageListeners() {
@@ -135,14 +145,12 @@ export default function ProfilePage({
     img.onmouseenter = () => {
       const rect = img.getBoundingClientRect()
       setDeleteBtn({ x: rect.right - 36, y: rect.top + 4, img })
-      setHoveredImg(img)
     }
 
     img.onmouseleave = (e) => {
       const related = e.relatedTarget as HTMLElement
       if (related?.id === 'img-delete-btn') return
       setDeleteBtn(null)
-      setHoveredImg(null)
     }
 
     img.oncontextmenu = (e) => {
@@ -207,14 +215,16 @@ export default function ProfilePage({
   // -----------------------------
   // INSERT IMAGE
   // -----------------------------
-  function insertImage(url: string) {
-    if (!editorRef.current || !url.trim()) return
+  function insertImage() {
+    if (!imageUrl.trim()) return
 
     const editor = editorRef.current
+    if (!editor) return
+
     const widthMap = { small: '200px', medium: '400px', large: '100%' }
 
     const img = document.createElement('img')
-    img.src = url.trim()
+    img.src = imageUrl.trim()
     img.style.maxWidth = widthMap[imageSize]
     img.style.width = widthMap[imageSize]
     img.style.borderRadius = '12px'
@@ -223,9 +233,9 @@ export default function ProfilePage({
 
     addImageListeners(img)
 
-    const sel = window.getSelection()
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0)
+    // Insert at saved cursor position
+    if (savedRangeRef.current) {
+      const range = savedRangeRef.current
       range.deleteContents()
       range.insertNode(img)
 
@@ -235,19 +245,23 @@ export default function ProfilePage({
       const newRange = document.createRange()
       newRange.setStartAfter(br)
       newRange.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(newRange)
+
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(newRange)
     } else {
       editor.appendChild(img)
       const br = document.createElement('br')
       editor.appendChild(br)
-      editor.focus()
     }
+
+    editor.focus()
 
     setShowImageModal(false)
     setImageUrl('')
     setImageSize('medium')
     setEditImageEl(null)
+    savedRangeRef.current = null
   }
 
   // -----------------------------
@@ -256,7 +270,6 @@ export default function ProfilePage({
   function deleteImage(img: HTMLImageElement) {
     img.remove()
     setDeleteBtn(null)
-    setHoveredImg(null)
   }
 
   // -----------------------------
@@ -405,22 +418,12 @@ export default function ProfilePage({
                       ref={editorRef}
                       contentEditable
                       suppressContentEditableWarning
+                      onKeyUp={saveCursor}
+                      onMouseUp={saveCursor}
                       className="w-full min-h-[200px] bg-zinc-800 rounded-xl p-4 outline-none border border-zinc-700"
                     />
 
-                    <div className="flex gap-2 mt-2">
-                      <button
-                        onClick={() => {
-                          setEditImageEl(null)
-                          setImageUrl('')
-                          setImageSize('medium')
-                          setShowImageModal(true)
-                        }}
-                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
-                      >
-                        <Image src="/picture.png" alt="img" width={14} height={14} />
-                      </button>
-
+                    <div className="flex gap-2 mt-2 items-center">
                       <button
                         onClick={() => exec('bold')}
                         className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold"
@@ -433,6 +436,23 @@ export default function ProfilePage({
                         className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic"
                       >
                         I
+                      </button>
+
+                      {/* IMAGE BUTTON - right of B and I */}
+                      <button
+                        onMouseDown={(e) => {
+                          // prevent editor losing focus so cursor position is preserved
+                          e.preventDefault()
+                          saveCursor()
+                          setEditImageEl(null)
+                          setImageUrl('')
+                          setImageSize('medium')
+                          setShowImageModal(true)
+                        }}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
+                        title="Insert image"
+                      >
+                        <Image src="/picture.png" alt="img" width={14} height={14} />
                       </button>
                     </div>
 
@@ -540,6 +560,7 @@ export default function ProfilePage({
             <input
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') insertImage() }}
               placeholder="Enter image URL"
               className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
               autoFocus
@@ -557,20 +578,6 @@ export default function ProfilePage({
                 <option value="large">Large (Full width)</option>
               </select>
             </div>
-
-            {imageUrl.trim() && (
-              <div className="mb-4 rounded-xl overflow-hidden border border-zinc-700 max-h-40 flex items-center justify-center bg-zinc-800">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageUrl.trim()}
-                  alt="Preview"
-                  className="max-h-40 max-w-full object-contain"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none'
-                  }}
-                />
-              </div>
-            )}
 
             <div className="flex justify-end gap-2 mt-4">
               <button
@@ -595,7 +602,7 @@ export default function ProfilePage({
                     setImageUrl('')
                     setEditImageEl(null)
                   } else {
-                    insertImage(imageUrl)
+                    insertImage()
                   }
                 }}
                 className="bg-green-500 text-black px-4 py-1 rounded font-bold"
@@ -612,10 +619,7 @@ export default function ProfilePage({
       {editing && deleteBtn && (
         <button
           id="img-delete-btn"
-          onMouseLeave={() => {
-            setDeleteBtn(null)
-            setHoveredImg(null)
-          }}
+          onMouseLeave={() => setDeleteBtn(null)}
           onClick={() => deleteImage(deleteBtn.img)}
           style={{
             position: 'fixed',
