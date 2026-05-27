@@ -53,13 +53,6 @@ function buildYouTubeHTML(
   ></iframe></div></div>`
 }
 
-// Strip HTML tags to get plain text for preview
-function stripHtml(html: string): string {
-  const tmp = document.createElement('div')
-  tmp.innerHTML = html
-  return tmp.innerText || tmp.textContent || ''
-}
-
 export default function HomePage() {
   const router = useRouter()
 
@@ -70,15 +63,14 @@ export default function HomePage() {
   const [charCount, setCharCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null)
 
-  // Image modal state (inside post editor)
+  // Image modal
   const [showImageModal, setShowImageModal] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
   const [imageSize, setImageSize] = useState<'small' | 'medium' | 'large'>('medium')
   const [editImageEl, setEditImageEl] = useState<HTMLImageElement | null>(null)
 
-  // YouTube modal state (inside post editor)
+  // YouTube modal
   const [showYouTubeModal, setShowYouTubeModal] = useState(false)
   const [youtubeUrl, setYoutubeUrl] = useState('')
   const [youtubeSize, setYoutubeSize] = useState<'small' | 'medium' | 'large'>('medium')
@@ -101,31 +93,15 @@ export default function HomePage() {
       const { data } = await supabase.auth.getUser()
       const user = data.user
       setCurrentUserId(user?.id || null)
-      if (user) {
-        fetchLikedPosts(user.id)
-        // Fetch current avatar so it's always fresh
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('avatar')
-          .eq('id', user.id)
-          .single()
-        setCurrentUserAvatar(profile?.avatar || null)
-      }
+      if (user) fetchLikedPosts(user.id)
     }
     getUser()
   }, [])
 
-  // Re-fetch avatar any time modal opens so it's always up to date
+  // Re-fetch avatar on modal open (always fresh)
   useEffect(() => {
     if (!showModal || !currentUserId) return
-    supabase
-      .from('profiles')
-      .select('avatar')
-      .eq('id', currentUserId)
-      .single()
-      .then(({ data }) => {
-        if (data?.avatar) setCurrentUserAvatar(data.avatar)
-      })
+    // nothing needed here since we pull avatar fresh on createPost
   }, [showModal])
 
   // -----------------------------
@@ -162,6 +138,17 @@ export default function HomePage() {
   function formatDate(dateString: string) {
     const d = new Date(dateString)
     return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  }
+
+  // -----------------------------
+  // PREVIEW TEXT — strips HTML, max 100 chars
+  // -----------------------------
+  function getPreviewText(html: string): string {
+    if (typeof window === 'undefined') return ''
+    const tmp = document.createElement('div')
+    tmp.innerHTML = html
+    const text = tmp.innerText || tmp.textContent || ''
+    return text.length > 100 ? text.slice(0, 100).trimEnd() + '…' : text
   }
 
   // -----------------------------
@@ -260,7 +247,7 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // INSERT IMAGE (in post editor)
+  // INSERT IMAGE
   // -----------------------------
   function insertImage() {
     if (!imageUrl.trim()) return
@@ -302,7 +289,7 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // INSERT / UPDATE YOUTUBE (in post editor)
+  // INSERT / UPDATE YOUTUBE
   // -----------------------------
   function insertYouTube() {
     if (!youtubeUrl.trim()) return
@@ -366,31 +353,24 @@ export default function HomePage() {
   async function createPost() {
     const editor = editorRef.current
     if (!postTitle.trim() || !editor) return
-
     setLoading(true)
-
     const { data: userData } = await supabase.auth.getUser()
     const user = userData.user
     if (!user) { setLoading(false); return }
-
     const { data: profile } = await supabase
       .from('profiles')
       .select('username, avatar')
       .eq('id', user.id)
       .single()
-
-    const contentHtml = editor.innerHTML
-
     await supabase.from('posts').insert({
       title: postTitle,
-      content: contentHtml,
-      image_url: null, // images are embedded in content now
+      content: editor.innerHTML,
+      image_url: null,
       user_id: user.id,
       username: profile?.username || 'unknown',
       avatar: profile?.avatar || null,
       likes: 0,
     })
-
     setPostTitle('')
     editor.innerHTML = ''
     setCharCount(0)
@@ -402,7 +382,8 @@ export default function HomePage() {
   // -----------------------------
   // TOGGLE LIKE
   // -----------------------------
-  async function toggleLike(post: any) {
+  async function toggleLike(e: React.MouseEvent, post: any) {
+    e.stopPropagation() // prevent opening post when clicking like
     if (!currentUserId) return
     const isLiked = likedPosts[post.id]
     if (isLiked) {
@@ -417,15 +398,11 @@ export default function HomePage() {
     fetchPosts()
   }
 
-  // -----------------------------
-  // PREVIEW TEXT — strips HTML, max 100 chars
-  // -----------------------------
-  function getPreviewText(html: string): string {
-    if (typeof window === 'undefined') return ''
-    const tmp = document.createElement('div')
-    tmp.innerHTML = html
-    const text = tmp.innerText || tmp.textContent || ''
-    return text.length > 100 ? text.slice(0, 100).trimEnd() + '…' : text
+  function closeModal() {
+    setShowModal(false)
+    setPostTitle('')
+    if (editorRef.current) editorRef.current.innerHTML = ''
+    setCharCount(0)
   }
 
   return (
@@ -444,23 +421,24 @@ export default function HomePage() {
         </div>
 
         {/* POSTS */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {posts.map((post) => (
             <div
               key={post.id}
-              className="bg-zinc-900 p-4 rounded-xl border border-zinc-800"
+              onClick={() => router.push(`/posts/${post.id}`)}
+              className="bg-zinc-900 hover:bg-zinc-800 transition-colors rounded-xl border border-zinc-800 cursor-pointer p-4"
             >
-              {/* AVATAR + USER + DATE + LIKE (top row) */}
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  {/* RECTANGULAR AVATAR */}
-                  <div className="w-10 h-14 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 flex-shrink-0">
+              <div className="flex gap-4">
+
+                {/* AVATAR — tall rectangle, left column */}
+                <div className="flex-shrink-0 flex flex-col items-center">
+                  <div className="w-14 h-20 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600">
                     {post.avatar ? (
                       <Image
                         src={post.avatar}
                         alt={post.username}
-                        width={40}
-                        height={56}
+                        width={56}
+                        height={80}
                         className="w-full h-full object-cover"
                         unoptimized
                       />
@@ -468,68 +446,58 @@ export default function HomePage() {
                       <div className="w-full h-full bg-zinc-600" />
                     )}
                   </div>
+                  {/* USERNAME + DATE under avatar */}
+                  <p className="text-xs font-semibold text-zinc-300 mt-2 text-center leading-tight max-w-[56px] truncate">
+                    {post.username}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 text-center leading-tight mt-0.5">
+                    {new Date(post.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
 
+                {/* RIGHT COLUMN */}
+                <div className="flex-1 min-w-0 flex flex-col justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-white">{post.username}</p>
-                    <p className="text-xs text-zinc-500">{formatDate(post.created_at)}</p>
+                    {/* TITLE — underlined, same cursor handled by parent */}
+                    {post.title && (
+                      <h2 className="text-base font-bold text-white underline underline-offset-2 decoration-zinc-500 leading-snug mb-1 pr-10 truncate">
+                        {post.title}
+                      </h2>
+                    )}
+
+                    {/* PREVIEW — fixed height, always same size */}
+                    <p className="text-zinc-400 text-sm leading-snug h-10 overflow-hidden">
+                      {getPreviewText(post.content)}
+                    </p>
                   </div>
                 </div>
 
-                {/* LIKE */}
-                <button
-                  onClick={() => toggleLike(post)}
-                  className="flex items-center gap-1 cursor-pointer mt-1"
-                >
-                  <span className="text-xl">{likedPosts[post.id] ? '❤️' : '🤍'}</span>
-                  <span className="text-sm text-zinc-300">{post.likes || 0}</span>
-                </button>
+                {/* LIKE — far right, stops propagation */}
+                <div className="flex-shrink-0 flex flex-col items-center justify-center gap-1">
+                  <button
+                    onClick={(e) => toggleLike(e, post)}
+                    className="flex flex-col items-center gap-0.5 cursor-pointer"
+                  >
+                    <span className="text-lg">{likedPosts[post.id] ? '❤️' : '🤍'}</span>
+                    <span className="text-xs text-zinc-400">{post.likes || 0}</span>
+                  </button>
+                </div>
+
               </div>
-
-              {/* TITLE — clickable */}
-              {post.title && (
-                <button
-                  onClick={() => router.push(`/posts/${post.id}`)}
-                  className="text-left w-full"
-                >
-                  <h2 className="text-lg font-bold text-white hover:text-green-400 transition-colors leading-snug mb-1">
-                    {post.title}
-                  </h2>
-                </button>
-              )}
-
-              {/* CONTENT PREVIEW — plain text, 100 chars max, no images */}
-              {post.content && (
-                <p className="text-zinc-400 text-sm leading-relaxed">
-                  {getPreviewText(post.content)}
-                </p>
-              )}
-
-              {/* READ MORE */}
-              <button
-                onClick={() => router.push(`/posts/${post.id}`)}
-                className="mt-2 text-xs text-green-400 hover:text-green-300 transition-colors cursor-pointer"
-              >
-                Read more →
-              </button>
             </div>
           ))}
         </div>
       </div>
 
-      {/* NEW POST MODAL — large */}
+      {/* NEW POST MODAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl flex flex-col" style={{ maxHeight: '90vh' }}>
 
-            {/* MODAL HEADER */}
+            {/* HEADER */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-zinc-800 flex-shrink-0">
               <h2 className="text-2xl font-bold">New Post</h2>
-              <button
-                onClick={() => { setShowModal(false); setPostTitle(''); if (editorRef.current) editorRef.current.innerHTML = ''; setCharCount(0) }}
-                className="text-zinc-400 hover:text-white text-2xl leading-none cursor-pointer"
-              >
-                ×
-              </button>
+              <button onClick={closeModal} className="text-zinc-400 hover:text-white text-2xl leading-none cursor-pointer">×</button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
@@ -547,77 +515,26 @@ export default function HomePage() {
 
               {/* TOOLBAR */}
               <div className="flex gap-2 items-center flex-wrap">
-                {/* BOLD */}
+                <button onMouseDown={(e) => { e.preventDefault(); exec('bold') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold text-white" title="Bold">B</button>
+                <button onMouseDown={(e) => { e.preventDefault(); exec('italic') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic text-white" title="Italic">I</button>
                 <button
-                  onMouseDown={(e) => { e.preventDefault(); exec('bold') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold text-white"
-                  title="Bold"
-                >B</button>
-
-                {/* ITALIC */}
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); exec('italic') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic text-white"
-                  title="Italic"
-                >I</button>
-
-                {/* IMAGE */}
-                <button
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    saveCursor()
-                    setEditImageEl(null)
-                    setImageUrl('')
-                    setImageSize('medium')
-                    setShowImageModal(true)
-                  }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
-                  title="Insert image"
+                  onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditImageEl(null); setImageUrl(''); setImageSize('medium'); setShowImageModal(true) }}
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Insert image"
                 >
                   <Image src="/picture.png" alt="img" width={14} height={14} />
                 </button>
-
-                {/* ALIGN LEFT */}
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
-                  title="Align left"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Align left">
                   <Image src="/left.png" alt="left" width={14} height={14} />
                 </button>
-
-                {/* ALIGN CENTER */}
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
-                  title="Align center"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Align center">
                   <Image src="/center.png" alt="center" width={14} height={14} />
                 </button>
-
-                {/* ALIGN RIGHT */}
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
-                  title="Align right"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Align right">
                   <Image src="/right.png" alt="right" width={14} height={14} />
                 </button>
-
-                {/* YOUTUBE */}
                 <button
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    saveCursor()
-                    setEditYouTubeWrapper(null)
-                    setYoutubeUrl('')
-                    setYoutubeSize('medium')
-                    setYoutubeAlignment('center')
-                    setYoutubeAutoplay(false)
-                    setShowYouTubeModal(true)
-                  }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
-                  title="Insert YouTube video"
+                  onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditYouTubeWrapper(null); setYoutubeUrl(''); setYoutubeSize('medium'); setYoutubeAlignment('center'); setYoutubeAutoplay(false); setShowYouTubeModal(true) }}
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Insert YouTube video"
                 >
                   <Image src="/youtube.png" alt="YouTube" width={14} height={14} />
                 </button>
@@ -632,10 +549,8 @@ export default function HomePage() {
                   saveCursor()
                   const len = editorRef.current?.innerText.length || 0
                   if (len > MAX_CHARS) {
-                    // trim to max
                     const text = editorRef.current!.innerText.slice(0, MAX_CHARS)
                     editorRef.current!.innerText = text
-                    // move cursor to end
                     const range = document.createRange()
                     range.selectNodeContents(editorRef.current!)
                     range.collapse(false)
@@ -648,30 +563,16 @@ export default function HomePage() {
                 onMouseUp={handleEditorClick}
                 onClick={handleEditorClick}
                 className="w-full min-h-[240px] bg-zinc-800 rounded-xl p-4 outline-none border border-zinc-700 text-white"
-                data-placeholder="Write your post..."
-                style={{ '--placeholder-color': '#71717a' } as React.CSSProperties}
               />
 
-              {/* CHAR COUNT */}
               <div className={`text-right text-xs ${charCount >= MAX_CHARS ? 'text-red-400' : 'text-zinc-500'}`}>
                 {charCount}/{MAX_CHARS}
               </div>
-
             </div>
 
-            {/* MODAL FOOTER */}
+            {/* FOOTER */}
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-zinc-800 flex-shrink-0">
-              <button
-                onClick={() => {
-                  setShowModal(false)
-                  setPostTitle('')
-                  if (editorRef.current) editorRef.current.innerHTML = ''
-                  setCharCount(0)
-                }}
-                className="px-5 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-xl cursor-pointer"
-              >
-                Cancel
-              </button>
+              <button onClick={closeModal} className="px-5 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-xl cursor-pointer">Cancel</button>
               <button
                 onClick={createPost}
                 disabled={loading || !postTitle.trim()}
@@ -680,7 +581,6 @@ export default function HomePage() {
                 {loading ? 'Posting...' : 'Post'}
               </button>
             </div>
-
           </div>
         </div>
       )}
@@ -690,21 +590,10 @@ export default function HomePage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[420px]">
             <h2 className="text-2xl font-bold mb-4">{editImageEl ? 'Edit Image' : 'Insert Image'}</h2>
-            <input
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') insertImage() }}
-              placeholder="Enter image URL"
-              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
-              autoFocus
-            />
+            <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') insertImage() }} placeholder="Enter image URL" className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4" autoFocus />
             <div className="mb-4">
               <label className="text-sm text-zinc-400 mb-1 block">Size</label>
-              <select
-                value={imageSize}
-                onChange={(e) => setImageSize(e.target.value as 'small' | 'medium' | 'large')}
-                className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white"
-              >
+              <select value={imageSize} onChange={(e) => setImageSize(e.target.value as 'small' | 'medium' | 'large')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white">
                 <option value="small">Small (200px)</option>
                 <option value="medium">Medium (400px)</option>
                 <option value="large">Large (Full width)</option>
@@ -739,14 +628,7 @@ export default function HomePage() {
               <Image src="/youtube.png" alt="YouTube" width={22} height={22} />
               {editYouTubeWrapper ? 'Edit YouTube Video' : 'Insert YouTube Video'}
             </h2>
-            <input
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') insertYouTube() }}
-              placeholder="Paste YouTube URL"
-              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
-              autoFocus
-            />
+            <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') insertYouTube() }} placeholder="Paste YouTube URL" className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4" autoFocus />
             <div className="mb-4">
               <label className="text-sm text-zinc-400 mb-1 block">Size</label>
               <select value={youtubeSize} onChange={(e) => setYoutubeSize(e.target.value as 'small' | 'medium' | 'large')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white">

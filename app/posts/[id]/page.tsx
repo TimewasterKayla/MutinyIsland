@@ -17,6 +17,10 @@ export default function PostPage({
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [isLiked, setIsLiked] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editContent, setEditContent] = useState('')
+  const [saving, setSaving] = useState(false)
 
   // -----------------------------
   // PARAMS
@@ -46,18 +50,12 @@ export default function PostPage({
 
   async function fetchPost() {
     setLoading(true)
-
     const { data, error } = await supabase
       .from('posts')
       .select('*')
       .eq('id', postId)
       .maybeSingle()
-
-    if (error || !data) {
-      setLoading(false)
-      return
-    }
-
+    if (error || !data) { setLoading(false); return }
     setPost(data)
     setLoading(false)
   }
@@ -77,7 +75,6 @@ export default function PostPage({
       .eq('post_id', postId)
       .eq('user_id', currentUserId!)
       .maybeSingle()
-
     setIsLiked(!!data)
   }
 
@@ -86,7 +83,6 @@ export default function PostPage({
   // -----------------------------
   async function toggleLike() {
     if (!currentUserId || !post) return
-
     if (isLiked) {
       await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', currentUserId)
       await supabase.from('posts').update({ likes: (post.likes || 1) - 1 }).eq('id', post.id)
@@ -104,8 +100,26 @@ export default function PostPage({
   // DELETE POST
   // -----------------------------
   async function deletePost() {
+    if (!confirm('Delete this post?')) return
     await supabase.from('posts').delete().eq('id', post.id)
     router.push('/')
+  }
+
+  // -----------------------------
+  // SAVE EDIT
+  // -----------------------------
+  async function saveEdit() {
+    if (!editTitle.trim()) return
+    setSaving(true)
+    const { error } = await supabase
+      .from('posts')
+      .update({ title: editTitle, content: editContent })
+      .eq('id', post.id)
+    if (!error) {
+      setPost({ ...post, title: editTitle, content: editContent })
+      setEditing(false)
+    }
+    setSaving(false)
   }
 
   // -----------------------------
@@ -113,11 +127,7 @@ export default function PostPage({
   // -----------------------------
   function formatDate(dateString: string) {
     const d = new Date(dateString)
-    return d.toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
   }
 
   // -----------------------------
@@ -139,9 +149,11 @@ export default function PostPage({
     )
   }
 
+  const isOwner = currentUserId === post.user_id
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-6 py-8">
 
         {/* BACK BUTTON */}
         <button
@@ -153,10 +165,10 @@ export default function PostPage({
         </button>
 
         {/* POST CARD */}
-        <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-6">
+        <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-8">
 
           {/* AUTHOR ROW */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-700 border border-zinc-600 flex-shrink-0">
                 {post.avatar ? (
@@ -166,6 +178,7 @@ export default function PostPage({
                     width={40}
                     height={40}
                     className="w-full h-full object-cover"
+                    unoptimized
                   />
                 ) : (
                   <div className="w-full h-full bg-zinc-600" />
@@ -177,50 +190,96 @@ export default function PostPage({
               </div>
             </div>
 
-            {/* LIKE + DELETE */}
+            {/* LIKE + OWNER BUTTONS */}
             <div className="flex items-center gap-3">
-              <button
-                onClick={toggleLike}
-                className="flex items-center gap-1 cursor-pointer"
-              >
+              <button onClick={toggleLike} className="flex items-center gap-1 cursor-pointer">
                 <span className="text-xl">{isLiked ? '❤️' : '🤍'}</span>
                 <span className="text-sm text-zinc-300">{post.likes || 0}</span>
               </button>
 
-              {currentUserId === post.user_id && (
-                <button
-                  onClick={deletePost}
-                  className="bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded text-sm font-semibold cursor-pointer transition-colors"
-                >
-                  Delete
-                </button>
+              {isOwner && !editing && (
+                <>
+                  <button
+                    onClick={() => {
+                      setEditTitle(post.title || '')
+                      setEditContent(post.content || '')
+                      setEditing(true)
+                    }}
+                    className="bg-orange-500 hover:bg-orange-400 px-3 py-1.5 rounded text-sm font-semibold cursor-pointer transition-colors text-white"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={deletePost}
+                    className="bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded text-sm font-semibold cursor-pointer transition-colors"
+                  >
+                    Delete
+                  </button>
+                </>
+              )}
+
+              {isOwner && editing && (
+                <>
+                  <button
+                    onClick={() => setEditing(false)}
+                    className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1.5 rounded text-sm font-semibold cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveEdit}
+                    disabled={saving || !editTitle.trim()}
+                    className="bg-green-500 hover:bg-green-400 text-black px-3 py-1.5 rounded text-sm font-semibold cursor-pointer transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                </>
               )}
             </div>
           </div>
 
           {/* DIVIDER */}
-          <div className="border-t border-zinc-800 mb-4" />
+          <div className="border-t border-zinc-800 mb-6" />
 
-          {/* TITLE */}
-          {post.title && (
-            <h1 className="text-2xl font-bold text-white mb-4 leading-snug">
-              {post.title}
-            </h1>
+          {/* VIEW MODE */}
+          {!editing && (
+            <>
+              {post.title && (
+                <h1 className="text-3xl font-bold text-white mb-5 leading-snug">
+                  {post.title}
+                </h1>
+              )}
+              {post.content && (
+                <div
+                  className="text-zinc-200 leading-relaxed prose-invert"
+                  dangerouslySetInnerHTML={{ __html: post.content }}
+                />
+              )}
+            </>
           )}
 
-          {/* CONTENT */}
-          {post.content && (
-            <p className="text-zinc-200 leading-relaxed whitespace-pre-wrap mb-4">
-              {post.content}
-            </p>
-          )}
-
-          {/* IMAGE */}
-          {post.image_url && (
-            <img
-              src={post.image_url}
-              className="rounded-xl border border-zinc-700 w-full object-cover mt-2"
-            />
+          {/* EDIT MODE */}
+          {editing && (
+            <div className="space-y-4">
+              <div>
+                <input
+                  className="w-full p-3 bg-zinc-800 rounded-xl border border-zinc-700 text-white text-xl font-bold placeholder-zinc-500"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value.slice(0, 80))}
+                  placeholder="Post title..."
+                />
+                <div className="text-right text-xs text-zinc-500 mt-1">{editTitle.length}/80</div>
+              </div>
+              <textarea
+                className="w-full p-3 bg-zinc-800 rounded-xl border border-zinc-700 text-white placeholder-zinc-500 min-h-[300px] resize-y"
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                placeholder="Post content..."
+              />
+              <p className="text-xs text-zinc-500">
+                Note: editing replaces rich content with plain text.
+              </p>
+            </div>
           )}
 
         </div>
