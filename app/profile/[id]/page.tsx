@@ -41,10 +41,13 @@ export default function ProfilePage({
   const [imageUrl, setImageUrl] = useState<string>('')
   const [imageSize, setImageSize] = useState<'small' | 'medium' | 'large'>('medium')
   const [editImageEl, setEditImageEl] = useState<HTMLImageElement | null>(null)
+  const [selectedImg, setSelectedImg] = useState<HTMLImageElement | null>(null)
+  const [charCount, setCharCount] = useState<number>(0)
   const [deleteBtn, setDeleteBtn] = useState<{ x: number; y: number; img: HTMLImageElement } | null>(null)
 
   const editorRef = useRef<HTMLDivElement | null>(null)
   const savedRangeRef = useRef<Range | null>(null)
+  const deleteBtnImgRef = useRef<HTMLImageElement | null>(null)
 
   // -----------------------------
   // PARAMS
@@ -116,9 +119,26 @@ export default function ProfilePage({
   useEffect(() => {
     if (editing && editorRef.current && profile) {
       editorRef.current.innerHTML = profile.about_me || ''
+      setCharCount(editorRef.current.innerText.length)
       attachImageListeners()
     }
   }, [editing, profile])
+
+  // -----------------------------
+  // SCROLL: keep delete btn in sync
+  // -----------------------------
+  useEffect(() => {
+    if (!editing) return
+
+    function handleScroll() {
+      if (!deleteBtnImgRef.current) return
+      const rect = deleteBtnImgRef.current.getBoundingClientRect()
+      setDeleteBtn({ x: rect.right - 36, y: rect.top + 4, img: deleteBtnImgRef.current })
+    }
+
+    window.addEventListener('scroll', handleScroll, true)
+    return () => window.removeEventListener('scroll', handleScroll, true)
+  }, [editing])
 
   // -----------------------------
   // SAVE CURSOR POSITION
@@ -144,12 +164,14 @@ export default function ProfilePage({
 
     img.onmouseenter = () => {
       const rect = img.getBoundingClientRect()
+      deleteBtnImgRef.current = img
       setDeleteBtn({ x: rect.right - 36, y: rect.top + 4, img })
     }
 
     img.onmouseleave = (e) => {
       const related = e.relatedTarget as HTMLElement
       if (related?.id === 'img-delete-btn') return
+      deleteBtnImgRef.current = null
       setDeleteBtn(null)
     }
 
@@ -159,6 +181,37 @@ export default function ProfilePage({
       setImageUrl(img.src)
       setShowImageModal(true)
     }
+
+    // Left click: select image for alignment
+    img.onclick = () => {
+      // deselect previous
+      if (selectedImg && selectedImg !== img) {
+        selectedImg.style.outline = 'none'
+      }
+
+      setSelectedImg(img)
+      img.style.outline = '2px solid #22c55e'
+
+      // select the image node so execCommand alignment works on it
+      const range = document.createRange()
+      range.selectNode(img)
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+      savedRangeRef.current = range.cloneRange()
+    }
+  }
+
+  // -----------------------------
+  // DESELECT IMAGE on click outside
+  // -----------------------------
+  function handleEditorClick(e: React.MouseEvent) {
+    const target = e.target as HTMLElement
+    if (target.tagName !== 'IMG' && selectedImg) {
+      selectedImg.style.outline = 'none'
+      setSelectedImg(null)
+    }
+    saveCursor()
   }
 
   // -----------------------------
@@ -166,6 +219,10 @@ export default function ProfilePage({
   // -----------------------------
   async function saveAboutMe() {
     if (!profile || !editorRef.current) return
+
+    // clean up any leftover outlines before saving
+    const imgs = editorRef.current.querySelectorAll('img')
+    imgs.forEach((img) => ((img as HTMLImageElement).style.outline = 'none'))
 
     const html = editorRef.current.innerHTML
 
@@ -181,6 +238,7 @@ export default function ProfilePage({
     }
 
     setProfile({ ...profile, about_me: html })
+    setSelectedImg(null)
     setEditing(false)
   }
 
@@ -255,6 +313,7 @@ export default function ProfilePage({
     }
 
     editor.focus()
+    setCharCount(editor.innerText.length)
 
     setShowImageModal(false)
     setImageUrl('')
@@ -268,7 +327,9 @@ export default function ProfilePage({
   // -----------------------------
   function deleteImage(img: HTMLImageElement) {
     img.remove()
+    deleteBtnImgRef.current = null
     setDeleteBtn(null)
+    if (editorRef.current) setCharCount(editorRef.current.innerText.length)
   }
 
   // -----------------------------
@@ -417,8 +478,12 @@ export default function ProfilePage({
                       ref={editorRef}
                       contentEditable
                       suppressContentEditableWarning
-                      onKeyUp={saveCursor}
-                      onMouseUp={saveCursor}
+                      onKeyUp={() => {
+                        saveCursor()
+                        setCharCount(editorRef.current?.innerText.length || 0)
+                      }}
+                      onMouseUp={handleEditorClick}
+                      onClick={handleEditorClick}
                       className="w-full min-h-[200px] bg-zinc-800 rounded-xl p-4 outline-none border border-zinc-700"
                     />
 
@@ -485,13 +550,20 @@ export default function ProfilePage({
 
                     </div>
 
+                    {/* CHARACTER COUNTER */}
                     <div className="mt-2 text-xs text-zinc-400">
-                      {editorRef.current?.innerText?.length || 0}/1000
+                      {charCount}/1000
                     </div>
 
                     <div className="flex justify-end gap-2 mt-3">
                       <button
-                        onClick={() => setEditing(false)}
+                        onClick={() => {
+                          if (selectedImg) {
+                            selectedImg.style.outline = 'none'
+                            setSelectedImg(null)
+                          }
+                          setEditing(false)
+                        }}
                         className="bg-zinc-700 px-3 py-1 rounded-lg"
                       >
                         Cancel
@@ -648,7 +720,10 @@ export default function ProfilePage({
       {editing && deleteBtn && (
         <button
           id="img-delete-btn"
-          onMouseLeave={() => setDeleteBtn(null)}
+          onMouseLeave={() => {
+            deleteBtnImgRef.current = null
+            setDeleteBtn(null)
+          }}
           onClick={() => deleteImage(deleteBtn.img)}
           style={{
             position: 'fixed',
