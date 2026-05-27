@@ -436,7 +436,7 @@ export default function HomePage() {
                     {/* AVATAR — clickable to profile, no text above or below */}
                     <div
                       className="flex-shrink-0 self-start cursor-pointer"
-                      onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.user_id}`) }}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.username}`) }}
                       title={`View ${post.username}'s profile`}
                     >
                       <div className="w-14 h-20 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 hover:border-zinc-400 transition-colors">
@@ -464,7 +464,7 @@ export default function HomePage() {
                           {/* USERNAME — clickable to profile */}
                           <span
                             className="font-semibold text-zinc-300 hover:text-white cursor-pointer transition-colors"
-                            onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.user_id}`) }}
+                            onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.username}`) }}
                           >
                             {post.username}
                           </span>
