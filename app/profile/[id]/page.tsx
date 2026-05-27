@@ -29,6 +29,9 @@ export default function ProfilePage({
   const [loading, setLoading] =
     useState(true)
 
+  const [activeTab, setActiveTab] =
+    useState<'messages' | 'friends'>('messages')
+
   const editorRef =
     useRef<HTMLDivElement | null>(null)
 
@@ -78,7 +81,7 @@ export default function ProfilePage({
   }
 
   // -----------------------------
-  // ENTER EDIT MODE (IMPORTANT FIX)
+  // LOAD EDIT CONTENT ON OPEN
   // -----------------------------
   useEffect(() => {
     if (editing && editorRef.current && profile) {
@@ -117,23 +120,15 @@ export default function ProfilePage({
   }
 
   // -----------------------------
-  // RICH TEXT CONTROLS
+  // RICH TEXT
   // -----------------------------
   function exec(command: string) {
     document.execCommand(command)
     editorRef.current?.focus()
   }
 
-  function toggleBold() {
-    exec('bold')
-  }
-
-  function toggleItalic() {
-    exec('italic')
-  }
-
   // -----------------------------
-  // LOADING / NOT FOUND
+  // LOADING
   // -----------------------------
   if (loading) {
     return (
@@ -175,93 +170,144 @@ export default function ProfilePage({
 
         </div>
 
-        {/* RIGHT */}
-        <div className="col-span-2 bg-zinc-900 rounded-2xl p-6">
+        {/* RIGHT WRAPPER (for tab positioning) */}
+        <div className="col-span-2 relative">
 
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-3xl font-bold">
-              About Me
-            </h2>
+          {/* TAB BUTTONS (FOLDER STYLE) */}
+          <div className="absolute -top-6 right-6 flex gap-2 z-10">
 
-            {isOwnProfile && !editing && (
-              <button
-                onClick={() => setEditing(true)}
-                className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-green-500 transition"
-              >
-                Edit
-              </button>
-            )}
+            <button
+              onClick={() => setActiveTab('friends')}
+              className={`px-4 py-2 rounded-t-lg border border-zinc-700 transition ${
+                activeTab === 'friends'
+                  ? 'bg-green-500 text-black font-bold'
+                  : 'bg-green-200 text-black hover:bg-green-300'
+              }`}
+            >
+              Friends
+            </button>
+
+            <button
+              onClick={() => setActiveTab('messages')}
+              className={`px-4 py-2 rounded-t-lg border border-zinc-700 transition ${
+                activeTab === 'messages'
+                  ? 'bg-green-500 text-black font-bold'
+                  : 'bg-green-200 text-black hover:bg-green-300'
+              }`}
+            >
+              Messages
+            </button>
+
           </div>
 
-          {/* VIEW MODE */}
-          {!editing ? (
-            <div
-              className="bg-zinc-900 rounded-xl p-4 min-h-[300px]"
-              dangerouslySetInnerHTML={{
-                __html:
-                  profile.about_me?.trim() ||
-                  `<span class="text-zinc-400 italic">This player has not written anything yet.</span>`,
-              }}
-            />
-          ) : (
-            /* EDIT MODE */
-            <div>
+          {/* RIGHT PANEL */}
+          <div className="bg-zinc-900 rounded-2xl p-6 min-h-[500px]">
 
-              {/* EDITOR */}
-              <div
-                ref={editorRef}
-                contentEditable
-                suppressContentEditableWarning
-                className="w-full min-h-[250px] bg-zinc-800 rounded-xl p-4 text-white outline-none border border-zinc-700 focus:border-green-500"
-              />
+            {/* ABOUT SECTION ALWAYS SHOWN FOR NOW */}
+            <div className="mb-6">
+              <h2 className="text-3xl font-bold mb-4">
+                About Me
+              </h2>
 
-              {/* TOOLBAR (NOW BELOW EDITOR) */}
-              <div className="flex gap-2 mt-2">
+              {!editing ? (
+                <div
+                  className="bg-zinc-900 rounded-xl p-4 min-h-[200px]"
+                  dangerouslySetInnerHTML={{
+                    __html:
+                      profile.about_me?.trim() ||
+                      `<span class="text-zinc-400 italic">This player has not written anything yet.</span>`,
+                  }}
+                />
+              ) : (
+                <div>
+
+                  {/* EDITOR */}
+                  <div
+                    ref={editorRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    className="w-full min-h-[200px] bg-zinc-800 rounded-xl p-4 text-white outline-none border border-zinc-700 focus:border-green-500"
+                  />
+
+                  {/* TOOLBAR */}
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() =>
+                        exec('bold')
+                      }
+                      className="w-8 h-8 bg-zinc-700 rounded-md font-bold"
+                    >
+                      B
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        exec('italic')
+                      }
+                      className="w-8 h-8 bg-zinc-700 rounded-md italic"
+                    >
+                      I
+                    </button>
+                  </div>
+
+                  <div className="mt-2 text-sm text-zinc-400">
+                    {
+                      editorRef.current
+                        ?.innerText?.length ||
+                      0
+                    }
+                    /1000
+                  </div>
+
+                  <div className="flex justify-end gap-2 mt-3">
+                    <button
+                      onClick={() =>
+                        setEditing(false)
+                      }
+                      className="bg-zinc-700 px-4 py-2 rounded-xl"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      onClick={saveAboutMe}
+                      className="bg-green-500 text-black px-5 py-2 rounded-xl font-bold"
+                    >
+                      Save
+                    </button>
+                  </div>
+
+                </div>
+              )}
+
+              {isOwnProfile && !editing && (
                 <button
-                  onClick={toggleBold}
-                  className="w-8 h-8 bg-zinc-700 rounded-md font-bold text-white hover:bg-zinc-600 transition"
+                  onClick={() => setEditing(true)}
+                  className="mt-4 bg-green-500 text-black px-4 py-2 rounded-xl font-bold"
                 >
-                  B
+                  Edit
                 </button>
+              )}
+            </div>
 
-                <button
-                  onClick={toggleItalic}
-                  className="w-8 h-8 bg-zinc-700 rounded-md italic text-white hover:bg-zinc-600 transition"
-                >
-                  I
-                </button>
-              </div>
+            {/* TAB CONTENT AREA */}
+            <div className="border-t border-zinc-700 pt-4">
 
-              {/* COUNTER (BELOW TOOLBAR) */}
-              <div className="mt-2 text-zinc-400 text-sm">
-                {
-                  editorRef.current?.innerText
-                    ?.length || 0
-                }
-                /1000
-              </div>
+              {activeTab === 'messages' && (
+                <div className="text-zinc-300">
+                  Messages tab coming soon...
+                </div>
+              )}
 
-              {/* ACTIONS */}
-              <div className="flex justify-end gap-2 mt-3">
-
-                <button
-                  onClick={() => setEditing(false)}
-                  className="bg-zinc-700 text-white px-4 py-2 rounded-xl"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={saveAboutMe}
-                  className="bg-green-600 text-white px-5 py-2 rounded-xl font-bold hover:bg-green-500 transition"
-                >
-                  Save
-                </button>
-
-              </div>
+              {activeTab === 'friends' && (
+                <div className="text-zinc-300">
+                  Friends tab coming soon...
+                </div>
+              )}
 
             </div>
-          )}
+
+          </div>
 
         </div>
 
