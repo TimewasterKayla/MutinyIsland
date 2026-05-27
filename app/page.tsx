@@ -11,9 +11,9 @@ export default function HomePage() {
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
 
+  const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-
   const [checkingAuth, setCheckingAuth] = useState(true)
 
   // -----------------------------
@@ -35,7 +35,18 @@ export default function HomePage() {
   }, [router])
 
   // -----------------------------
-  // SIGN UP (EDGE FUNCTION VERSION)
+  // SWITCH MODE
+  // -----------------------------
+  function switchMode(to: 'login' | 'signup') {
+    setMode(to)
+    setErrorMessage('')
+    setEmail('')
+    setPassword('')
+    setUsername('')
+  }
+
+  // -----------------------------
+  // SIGN UP → then auto-login
   // -----------------------------
   async function signUp() {
     setLoading(true)
@@ -56,11 +67,7 @@ export default function HomePage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
           },
-          body: JSON.stringify({
-            email,
-            password,
-            username,
-          }),
+          body: JSON.stringify({ email, password, username }),
         }
       )
 
@@ -72,7 +79,18 @@ export default function HomePage() {
         return
       }
 
-      alert('Account created successfully!')
+      // Auto-login after successful signup
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({ email, password })
+
+      if (signInError || !signInData.user) {
+        setErrorMessage('Account created! Please log in.')
+        switchMode('login')
+        setLoading(false)
+        return
+      }
+
+      window.location.href = '/home'
     } catch (err) {
       console.error(err)
       setErrorMessage('Something went wrong')
@@ -88,42 +106,54 @@ export default function HomePage() {
     setLoading(true)
     setErrorMessage('')
 
-    if (!email || !password || !username) {
+    if (!password || !username) {
       setErrorMessage('Please fill in all fields')
       setLoading(false)
       return
     }
 
+    // Look up email by username
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .ilike('username', username)
+      .single()
+
+    if (profileError || !profile) {
+      setErrorMessage('Username not found')
+      setLoading(false)
+      return
+    }
+
+    // We need the email — fetch from auth via profile id isn't possible client-side,
+    // so require email only at login if username lookup isn't wired server-side.
+    // For now, sign in requires email. Show email field at login too but labelled clearly.
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
     if (error || !data.user) {
-      setErrorMessage('Invalid email or password')
+      setErrorMessage('Invalid credentials')
       setLoading(false)
       return
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profileCheck, error: profileCheckError } = await supabase
       .from('profiles')
-      .select('username, coins')
+      .select('username')
       .eq('id', data.user.id)
       .single()
 
-    if (profileError || !profile) {
+    if (profileCheckError || !profileCheck) {
       await supabase.auth.signOut()
-
       setErrorMessage('Profile not found')
       setLoading(false)
       return
     }
 
-    if (
-      profile.username.toLowerCase() !== username.toLowerCase()
-    ) {
+    if (profileCheck.username.toLowerCase() !== username.toLowerCase()) {
       await supabase.auth.signOut()
-
       setErrorMessage('Incorrect username')
       setLoading(false)
       return
@@ -133,7 +163,7 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // LOADING GATE (prevents flicker)
+  // LOADING GATE
   // -----------------------------
   if (checkingAuth) {
     return (
@@ -146,25 +176,26 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden">
 
-      {/* background */}
+      {/* BACKGROUND */}
       <div className="ocean-bg" />
 
       <div className="w-full max-w-md space-y-6 text-center relative z-10">
 
         <h1 className="text-4xl font-bold">Mutiny Island</h1>
 
-        <p className="text-sm italic text-zinc-300">
-          Welcome aboard!
-        </p>
+        <p className="text-sm italic text-zinc-300">Welcome aboard!</p>
 
         <div className="bg-zinc-900/80 backdrop-blur-md p-6 rounded-2xl space-y-4">
 
-          <input
-            className="w-full p-3 rounded bg-zinc-800"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+          {/* EMAIL — login always needs it to auth, signup needs it too */}
+          {mode === 'signup' && (
+            <input
+              className="w-full p-3 rounded bg-zinc-800"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          )}
 
           <input
             className="w-full p-3 rounded bg-zinc-800"
@@ -172,6 +203,15 @@ export default function HomePage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
+
+          {mode === 'login' && (
+            <input
+              className="w-full p-3 rounded bg-zinc-800"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          )}
 
           <input
             className="w-full p-3 rounded bg-zinc-800"
@@ -182,26 +222,44 @@ export default function HomePage() {
           />
 
           {errorMessage && (
-            <p className="text-red-400 italic text-sm">
-              {errorMessage}
-            </p>
+            <p className="text-red-400 italic text-sm">{errorMessage}</p>
           )}
 
-          <button
-            onClick={signUp}
-            disabled={loading}
-            className="w-full bg-yellow-500 text-black p-3 rounded font-bold hover:bg-yellow-400 active:scale-95 transition disabled:opacity-50"
-          >
-            {loading ? 'Loading...' : 'Sign Up'}
-          </button>
+          {mode === 'login' ? (
+            <>
+              <p
+                onClick={() => switchMode('signup')}
+                className="text-sm text-zinc-400 hover:text-white transition cursor-pointer underline underline-offset-2"
+              >
+                Click here to sign up
+              </p>
 
-          <button
-            onClick={login}
-            disabled={loading}
-            className="w-full bg-white text-black p-3 rounded font-bold hover:bg-gray-200 active:scale-95 transition disabled:opacity-50"
-          >
-            {loading ? 'Loading...' : 'Login'}
-          </button>
+              <button
+                onClick={login}
+                disabled={loading}
+                className="w-full bg-white text-black p-3 rounded font-bold hover:bg-gray-200 active:scale-95 transition disabled:opacity-50"
+              >
+                {loading ? 'Loading...' : 'Login'}
+              </button>
+            </>
+          ) : (
+            <>
+              <p
+                onClick={() => switchMode('login')}
+                className="text-sm text-zinc-400 hover:text-white transition cursor-pointer underline underline-offset-2"
+              >
+                Back to login
+              </p>
+
+              <button
+                onClick={signUp}
+                disabled={loading}
+                className="w-full bg-yellow-500 text-black p-3 rounded font-bold hover:bg-yellow-400 active:scale-95 transition disabled:opacity-50"
+              >
+                {loading ? 'Loading...' : 'Sign Up'}
+              </button>
+            </>
+          )}
 
         </div>
       </div>
