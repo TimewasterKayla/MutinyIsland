@@ -608,9 +608,7 @@ export default function ProfilePage({
                       {/* ALIGN LEFT */}
                       <button
                         onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }}
-                        className={`w-7 h-7 rounded flex items-center justify-center ${
-                          selectedImg ? 'bg-green-700 hover:bg-green-600' : 'bg-zinc-700 hover:bg-zinc-600'
-                        }`}
+                        className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center"
                         title="Align left"
                       >
                         <Image src="/left.png" alt="left" width={14} height={14} />
