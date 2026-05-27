@@ -125,9 +125,6 @@ export default function Navbar() {
 <div className="w-1/3 flex items-center gap-2 text-sm">
   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
   <span>{onlineCount} online</span>
-  <button className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center border border-zinc-500 transition cursor-pointer">
-    <Image src="/gear.png" alt="Settings" width={14} height={14} />
-  </button>
 </div>
 
       {/* CENTER */}
@@ -197,6 +194,13 @@ export default function Navbar() {
             </span>
 
           </div>
+        )}
+
+        {/* SETTINGS */}
+        {username && (
+          <button className="w-8 h-8 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center border border-zinc-500 transition cursor-pointer">
+            <Image src="/gear.png" alt="Settings" width={16} height={16} />
+          </button>
         )}
 
         {/* LOGIN / LOGOUT TOGGLE */}
