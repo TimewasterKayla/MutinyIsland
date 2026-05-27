@@ -32,18 +32,12 @@ export default function ProfilePage({
   const [loading, setLoading] =
     useState(true)
 
-  // -----------------------------
-  // PARAMS
-  // -----------------------------
   useEffect(() => {
     Promise.resolve(params).then((p) => {
       setUsernameParam(p.id)
     })
   }, [params])
 
-  // -----------------------------
-  // LOAD PROFILE
-  // -----------------------------
   useEffect(() => {
     if (!usernameParam) return
     loadProfile()
@@ -58,13 +52,8 @@ export default function ProfilePage({
       .eq('username', usernameParam)
       .maybeSingle()
 
-    if (error) {
+    if (error || !data) {
       console.error(error)
-      setLoading(false)
-      return
-    }
-
-    if (!data) {
       setLoading(false)
       return
     }
@@ -83,9 +72,6 @@ export default function ProfilePage({
     setLoading(false)
   }
 
-  // -----------------------------
-  // SAVE
-  // -----------------------------
   async function saveAboutMe() {
     if (!profile) return
 
@@ -110,9 +96,6 @@ export default function ProfilePage({
     setEditing(false)
   }
 
-  // -----------------------------
-  // UI STATES
-  // -----------------------------
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
@@ -152,7 +135,7 @@ export default function ProfilePage({
           </div>
         </div>
 
-        {/* RIGHT */}
+        {/* RIGHT PANEL (UNCHANGED) */}
         <div className="col-span-2 bg-zinc-900 rounded-2xl p-6">
 
           <div className="flex items-center justify-between mb-6">
@@ -170,11 +153,13 @@ export default function ProfilePage({
             )}
           </div>
 
-          {/* VIEW MODE (NOW MATCHES EDIT BG) */}
+          {/* VIEW MODE = MATCH OUTER PANEL */}
           {!editing ? (
-            <div className="bg-zinc-800 rounded-xl p-4 min-h-[300px] whitespace-pre-wrap">
+            <div className="bg-zinc-900 rounded-xl p-4 min-h-[300px]">
               {profile.about_me?.trim() ? (
-                profile.about_me
+                <p className="whitespace-pre-wrap">
+                  {profile.about_me}
+                </p>
               ) : (
                 <span className="text-zinc-400 italic">
                   This player has not written anything yet.
@@ -182,7 +167,7 @@ export default function ProfilePage({
               )}
             </div>
           ) : (
-            /* EDIT MODE */
+            /* EDIT MODE = LIGHTER SHADE */
             <div>
               <textarea
                 value={aboutMe}
@@ -219,6 +204,7 @@ export default function ProfilePage({
                   </button>
                 </div>
               </div>
+
             </div>
           )}
 
