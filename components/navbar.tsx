@@ -113,7 +113,7 @@ export default function Navbar() {
         }}
       />
 
-      {/* DARK OVERLAY (keeps text readable) */}
+      {/* DARK OVERLAY */}
       <div className="absolute inset-0 -z-10 bg-black/40" />
 
       {/* LEFT */}
@@ -155,6 +155,7 @@ export default function Navbar() {
       {/* RIGHT */}
       <div className="w-1/3 flex justify-end items-center gap-4">
 
+        {/* COINS */}
         {username && (
           <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-lg border border-yellow-700">
 
@@ -172,12 +173,20 @@ export default function Navbar() {
           </div>
         )}
 
-        {username && (
+        {/* LOGIN / LOGOUT TOGGLE */}
+        {username ? (
           <button
             onClick={logout}
             className="bg-red-600 px-3 py-1 rounded-lg hover:bg-red-700 active:scale-95 transition cursor-pointer text-white shadow-md"
           >
             Logout
+          </button>
+        ) : (
+          <button
+            onClick={() => router.push('/login')}
+            className="bg-zinc-600 px-3 py-1 rounded-lg hover:bg-zinc-500 active:scale-95 transition cursor-pointer text-white shadow-md"
+          >
+            Login
           </button>
         )}
 
