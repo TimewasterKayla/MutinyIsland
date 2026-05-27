@@ -13,11 +13,12 @@ export default function Navbar() {
   const [userId, setUserId] = useState<string | null>(null)
   const [onlineCount, setOnlineCount] = useState(0)
   const [coins, setCoins] = useState(0)
+  const [crowns, setCrowns] = useState(0)
 
   usePresence(userId)
 
   // -----------------------------
-  // GET USER + PROFILE (COINS HERE)
+  // GET USER + PROFILE (COINS + CROWNS)
   // -----------------------------
   async function getUser() {
     const { data: userData } = await supabase.auth.getUser()
@@ -26,6 +27,7 @@ export default function Navbar() {
       setUsername(null)
       setUserId(null)
       setCoins(0)
+      setCrowns(0)
       return
     }
 
@@ -33,16 +35,18 @@ export default function Navbar() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('username, coins')
+      .select('username, coins, crowns')
       .eq('id', userData.user.id)
       .single()
 
     if (profile) {
       setUsername(profile.username)
       setCoins(profile.coins || 0)
+      setCrowns(profile.crowns || 0)
     } else {
       setUsername(null)
       setCoins(0)
+      setCrowns(0)
     }
   }
 
@@ -91,6 +95,7 @@ export default function Navbar() {
     setUsername(null)
     setUserId(null)
     setCoins(0)
+    setCrowns(0)
 
     router.push('/')
   }
@@ -155,6 +160,24 @@ export default function Navbar() {
       {/* RIGHT */}
       <div className="w-1/3 flex justify-end items-center gap-4">
 
+        {/* CROWNS */}
+        {username && (
+          <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-lg border border-gray-400">
+
+            <Image
+              src="/crown.png"
+              alt="Crowns"
+              width={18}
+              height={18}
+            />
+
+            <span className="text-gray-200 font-semibold">
+              {crowns}
+            </span>
+
+          </div>
+        )}
+
         {/* COINS */}
         {username && (
           <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-lg border border-yellow-700">
@@ -183,11 +206,11 @@ export default function Navbar() {
           </button>
         ) : (
           <button
-  onClick={() => router.push('/')}
-  className="bg-zinc-600 px-3 py-1 rounded-lg hover:bg-zinc-500 active:scale-95 transition cursor-pointer text-white shadow-md"
->
-  Login
-</button>
+            onClick={() => router.push('/')}
+            className="bg-zinc-600 px-3 py-1 rounded-lg hover:bg-zinc-500 active:scale-95 transition cursor-pointer text-white shadow-md"
+          >
+            Login
+          </button>
         )}
 
       </div>
