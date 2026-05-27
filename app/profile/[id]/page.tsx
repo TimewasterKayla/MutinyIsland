@@ -1,13 +1,23 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 
 type Profile = {
   id: string
   username: string
   about_me: string | null
+  avatar: string | null
 }
+
+const avatars = [
+  '/avatars/jess.png',
+  '/avatars/laffite.png',
+  '/avatars/malley.png',
+  '/avatars/morgan.png',
+  '/avatars/read.png',
+]
 
 export default function ProfilePage({
   params,
@@ -29,8 +39,13 @@ export default function ProfilePage({
   const [loading, setLoading] =
     useState(true)
 
+  const [showAvatarEditor, setShowAvatarEditor] =
+    useState(false)
+
   const [activeTab, setActiveTab] =
-    useState<'about' | 'messages' | 'friends' | 'wins'>('about')
+    useState<
+      'about' | 'messages' | 'friends' | 'wins'
+    >('about')
 
   const editorRef =
     useRef<HTMLDivElement | null>(null)
@@ -67,6 +82,25 @@ export default function ProfilePage({
       return
     }
 
+    // Assign random avatar if none exists
+    if (!data.avatar) {
+      const randomAvatar =
+        avatars[
+          Math.floor(
+            Math.random() * avatars.length
+          )
+        ]
+
+      await supabase
+        .from('profiles')
+        .update({
+          avatar: randomAvatar,
+        })
+        .eq('id', data.id)
+
+      data.avatar = randomAvatar
+    }
+
     setProfile(data)
 
     const {
@@ -91,7 +125,7 @@ export default function ProfilePage({
   }, [editing, profile])
 
   // -----------------------------
-  // SAVE
+  // SAVE ABOUT ME
   // -----------------------------
   async function saveAboutMe() {
     if (!profile || !editorRef.current) return
@@ -117,6 +151,34 @@ export default function ProfilePage({
     })
 
     setEditing(false)
+  }
+
+  // -----------------------------
+  // CHANGE AVATAR
+  // -----------------------------
+  async function changeAvatar(
+    avatar: string
+  ) {
+    if (!profile) return
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        avatar,
+      })
+      .eq('id', profile.id)
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setProfile({
+      ...profile,
+      avatar,
+    })
+
+    setShowAvatarEditor(false)
   }
 
   function exec(command: string) {
@@ -151,14 +213,39 @@ export default function ProfilePage({
         {/* LEFT */}
         <div className="bg-zinc-900 rounded-2xl p-6 h-fit">
 
-          <div className="w-full aspect-square rounded-2xl bg-zinc-800 flex items-center justify-center border-2 border-dashed border-zinc-600">
-            <span className="text-zinc-400 text-center">
-              Avatar
-              <br />
-              Coming Soon
-            </span>
+          {/* AVATAR */}
+          <div className="relative">
+
+            <div className="w-full aspect-square rounded-2xl overflow-hidden bg-zinc-800 border border-zinc-700">
+
+              <Image
+                src={
+                  profile.avatar ||
+                  '/avatars/jess.png'
+                }
+                alt="Avatar"
+                width={500}
+                height={500}
+                className="w-full h-full object-cover"
+              />
+
+            </div>
+
+            {/* EDIT AVATAR BUTTON */}
+            {isOwnProfile && (
+              <button
+                onClick={() =>
+                  setShowAvatarEditor(true)
+                }
+                className="absolute bottom-3 right-3 bg-orange-500 hover:bg-orange-600 transition text-white text-xs font-bold px-3 py-2 rounded-lg shadow-lg"
+              >
+                Edit
+              </button>
+            )}
+
           </div>
 
+          {/* USERNAME */}
           <div className="mt-6 text-center">
             <h1 className="text-3xl font-bold">
               {profile.username}
@@ -170,7 +257,7 @@ export default function ProfilePage({
         {/* RIGHT WRAPPER */}
         <div className="col-span-2 relative">
 
-          {/* TAB BAR (smaller + more compact) */}
+          {/* TAB BAR */}
           <div className="absolute -top-7 right-6 flex gap-1 z-10">
 
             {[
@@ -201,11 +288,12 @@ export default function ProfilePage({
           {/* RIGHT PANEL */}
           <div className="bg-zinc-900 rounded-2xl p-6 min-h-[550px]">
 
-            {/* ABOUT TAB CONTENT */}
+            {/* ABOUT TAB */}
             {activeTab === 'about' && (
               <div>
 
                 <div className="flex items-center justify-between mb-4">
+
                   <h2 className="text-3xl font-bold">
                     About Me
                   </h2>
@@ -221,6 +309,7 @@ export default function ProfilePage({
                         Edit
                       </button>
                     )}
+
                 </div>
 
                 {!editing ? (
@@ -242,7 +331,9 @@ export default function ProfilePage({
                       className="w-full min-h-[200px] bg-zinc-800 rounded-xl p-4 outline-none border border-zinc-700"
                     />
 
+                    {/* FORMAT BUTTONS */}
                     <div className="flex gap-2 mt-2">
+
                       <button
                         onClick={() =>
                           exec('bold')
@@ -260,8 +351,10 @@ export default function ProfilePage({
                       >
                         I
                       </button>
+
                     </div>
 
+                    {/* CHARACTER COUNT */}
                     <div className="mt-2 text-xs text-zinc-400">
                       {
                         editorRef.current
@@ -271,7 +364,9 @@ export default function ProfilePage({
                       /1000
                     </div>
 
+                    {/* ACTIONS */}
                     <div className="flex justify-end gap-2 mt-3">
+
                       <button
                         onClick={() =>
                           setEditing(false)
@@ -287,6 +382,7 @@ export default function ProfilePage({
                       >
                         Save
                       </button>
+
                     </div>
 
                   </div>
@@ -319,6 +415,46 @@ export default function ProfilePage({
         </div>
 
       </div>
+
+            {/* AVATAR POPUP */}
+      {showAvatarEditor && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[420px]">
+
+            <h2 className="text-2xl font-bold mb-4">
+              Select Avatar
+            </h2>
+
+            <div className="grid grid-cols-3 gap-4">
+              {avatars.map((avatar) => (
+                <button
+                  key={avatar}
+                  onClick={() => changeAvatar(avatar)}
+                  className="bg-zinc-800 rounded-xl overflow-hidden border border-zinc-700 hover:border-orange-400 transition"
+                >
+                  <Image
+                    src={avatar}
+                    alt="Avatar"
+                    width={120}
+                    height={120}
+                    className="w-full aspect-square object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowAvatarEditor(false)}
+              className="mt-5 w-full bg-zinc-700 hover:bg-zinc-600 transition rounded-xl py-2"
+            >
+              Close
+            </button>
+
+          </div>
+
+        </div>
+      )}
 
     </main>
   )
