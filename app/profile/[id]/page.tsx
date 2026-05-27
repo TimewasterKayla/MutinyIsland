@@ -29,23 +29,24 @@ export default function ProfilePage({
   params: Promise<{ id: string }>
 }) {
   const [usernameParam, setUsernameParam] = useState<string>('')
+
   const [profile, setProfile] = useState<Profile | null>(null)
   const [isOwnProfile, setIsOwnProfile] = useState(false)
   const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showAvatarEditor, setShowAvatarEditor] = useState(false)
 
-  // =========================
-  // IMAGE FEATURE STATE (NEW)
-  // =========================
-  const [showImageModal, setShowImageModal] = useState(false)
-  const [imageUrl, setImageUrl] = useState('')
-  const [editingImageEl, setEditingImageEl] = useState<HTMLImageElement | null>(null)
-
   const [activeTab, setActiveTab] =
     useState<'about' | 'messages' | 'friends' | 'wins' | 'inventory'>('about')
 
   const editorRef = useRef<HTMLDivElement | null>(null)
+
+  // =========================
+  // 🖼 IMAGE FEATURE (ADDED)
+  // =========================
+  const [showImageModal, setShowImageModal] = useState(false)
+  const [imageUrl, setImageUrl] = useState('')
+  const [editingImageEl, setEditingImageEl] = useState<HTMLImageElement | null>(null)
 
   // -----------------------------
   // PARAMS
@@ -79,16 +80,13 @@ export default function ProfilePage({
       return
     }
 
-    // assign avatar if missing
     if (!data.avatar) {
       const randomAvatar =
         avatars[Math.floor(Math.random() * avatars.length)]
 
       await supabase
         .from('profiles')
-        .update({
-          avatar: randomAvatar,
-        })
+        .update({ avatar: randomAvatar })
         .eq('id', data.id)
 
       data.avatar = randomAvatar
@@ -132,9 +130,7 @@ export default function ProfilePage({
 
     const { error } = await supabase
       .from('profiles')
-      .update({
-        about_me: html,
-      })
+      .update({ about_me: html })
       .eq('id', profile.id)
 
     if (error) {
@@ -143,11 +139,7 @@ export default function ProfilePage({
       return
     }
 
-    setProfile({
-      ...profile,
-      about_me: html,
-    })
-
+    setProfile({ ...profile, about_me: html })
     setEditing(false)
   }
 
@@ -159,9 +151,7 @@ export default function ProfilePage({
 
     const { error } = await supabase
       .from('profiles')
-      .update({
-        avatar,
-      })
+      .update({ avatar })
       .eq('id', profile.id)
 
     if (error) {
@@ -169,32 +159,36 @@ export default function ProfilePage({
       return
     }
 
-    setProfile({
-      ...profile,
-      avatar,
-    })
-
+    setProfile({ ...profile, avatar })
     setShowAvatarEditor(false)
   }
 
   // -----------------------------
-  // FORMAT COMMANDS
+  // RICH TEXT
   // -----------------------------
   function exec(command: string) {
     document.execCommand(command)
     editorRef.current?.focus()
   }
 
-  // =====================================================
-  // IMAGE INSERT + EDIT SYSTEM (NEW, SAFE ADDITION)
-  // =====================================================
+  // =========================
+  // 🖼 IMAGE LOGIC (ADDED)
+  // =========================
+
+  function openImageModal() {
+    setImageUrl('')
+    setEditingImageEl(null)
+    setShowImageModal(true)
+  }
 
   function insertImage(url: string) {
     if (!editorRef.current) return
 
     const img = document.createElement('img')
     img.src = url
-    img.className = 'max-w-full rounded-lg my-2'
+    img.style.maxWidth = '100%'
+    img.style.borderRadius = '10px'
+    img.style.margin = '8px 0'
     img.style.cursor = 'pointer'
 
     img.oncontextmenu = (e) => {
@@ -207,13 +201,7 @@ export default function ProfilePage({
     editorRef.current.appendChild(img)
   }
 
-  function openImageModalForNew() {
-    setImageUrl('')
-    setEditingImageEl(null)
-    setShowImageModal(true)
-  }
-
-  function confirmImageInsert() {
+  function confirmImage() {
     if (!imageUrl.trim()) return
 
     if (editingImageEl) {
@@ -222,13 +210,13 @@ export default function ProfilePage({
       insertImage(imageUrl)
     }
 
+    setShowImageModal(false)
     setImageUrl('')
     setEditingImageEl(null)
-    setShowImageModal(false)
   }
 
   // -----------------------------
-  // LOADING STATES
+  // LOADING
   // -----------------------------
   if (loading) {
     return (
@@ -274,22 +262,18 @@ export default function ProfilePage({
             {isOwnProfile && (
               <button
                 onClick={() => setShowAvatarEditor(true)}
-                className="absolute bottom-3 right-3 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                className="absolute bottom-3 right-3 bg-orange-500 hover:bg-orange-600 transition text-white text-xs font-bold px-3 py-2 rounded-lg"
               >
                 Edit
               </button>
             )}
-          </div>
-
-          <div className="mt-6 text-center">
-            <h1 className="text-3xl font-bold">{profile.username}</h1>
           </div>
         </div>
 
         {/* RIGHT */}
         <div className="col-span-2 relative">
 
-          {/* TAB BAR */}
+          {/* TAB BAR (UNCHANGED) */}
           <div className="absolute -top-7 right-6 flex gap-1 z-10">
             {tabs.map((tab) => (
               <button
@@ -330,7 +314,7 @@ export default function ProfilePage({
                     dangerouslySetInnerHTML={{
                       __html:
                         profile.about_me ||
-                        `<span class="text-zinc-400 italic">Nothing here yet</span>`,
+                        `<span class="text-zinc-400 italic">This player has not written anything yet.</span>`,
                     }}
                   />
                 ) : (
@@ -343,7 +327,7 @@ export default function ProfilePage({
                       className="min-h-[200px] bg-zinc-800 p-4 rounded-xl outline-none"
                     />
 
-                    {/* TOOLBAR */}
+                    {/* TOOLBAR (MODIFIED ONLY) */}
                     <div className="flex gap-2 mt-2">
 
                       <button onClick={() => exec('bold')} className="w-7 h-7 bg-zinc-700 rounded font-bold">
@@ -354,9 +338,9 @@ export default function ProfilePage({
                         I
                       </button>
 
-                      {/* IMAGE BUTTON */}
+                      {/* 🖼 IMAGE BUTTON (ADDED) */}
                       <button
-                        onClick={openImageModalForNew}
+                        onClick={openImageModal}
                         className="w-7 h-7 bg-zinc-700 rounded flex items-center justify-center"
                       >
                         <Image src="/picture.png" alt="img" width={16} height={16} />
@@ -380,16 +364,16 @@ export default function ProfilePage({
             )}
 
             {/* OTHER TABS (UNCHANGED) */}
-            {activeTab === 'friends' && <div><h2 className="text-3xl">Friends</h2></div>}
-            {activeTab === 'wins' && <div><h2 className="text-3xl">Wins</h2></div>}
-            {activeTab === 'messages' && <div><h2 className="text-3xl">Messages</h2></div>}
-            {activeTab === 'inventory' && <div><h2 className="text-3xl">Inventory</h2></div>}
+            {activeTab === 'friends' && <div>Friends</div>}
+            {activeTab === 'wins' && <div>Wins</div>}
+            {activeTab === 'messages' && <div>Messages</div>}
+            {activeTab === 'inventory' && <div>Inventory</div>}
 
           </div>
         </div>
       </div>
 
-      {/* IMAGE MODAL */}
+      {/* 🖼 IMAGE MODAL (ADDED) */}
       {showImageModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-zinc-900 p-6 rounded-xl w-[400px]">
@@ -414,7 +398,7 @@ export default function ProfilePage({
               </button>
 
               <button
-                onClick={confirmImageInsert}
+                onClick={confirmImage}
                 className="bg-green-500 text-black px-4 py-1 rounded font-bold"
               >
                 Insert
