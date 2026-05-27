@@ -9,6 +9,10 @@ type Profile = {
   username: string
   about_me: string | null
   avatar: string | null
+  coins: number | null
+  crowns: number | null
+  rank: string | null
+  created_at: string | null
 }
 
 const avatars = [
@@ -112,7 +116,6 @@ export default function ProfilePage({
 
     setIsOwnProfile(own)
 
-    // prevent being stuck on hidden messages tab
     setActiveTab((prev) => {
       if (!own && prev === 'messages') {
         return 'about'
@@ -289,6 +292,58 @@ export default function ProfilePage({
             </h1>
           </div>
 
+          {/* PLAYER INFO */}
+          <div className="mt-6 space-y-3 text-sm">
+
+            <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
+              <span className="text-zinc-400">
+                Rank:
+              </span>{' '}
+              <span className="font-semibold text-white">
+                {profile.rank || 'Peasant'}
+              </span>
+            </div>
+
+            <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
+              <span className="text-zinc-400">
+                Doubloons:
+              </span>{' '}
+              <span className="font-semibold text-yellow-400">
+                {profile.coins || 0}
+              </span>
+            </div>
+
+            <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
+              <span className="text-zinc-400">
+                Crowns:
+              </span>{' '}
+              <span className="font-semibold text-amber-300">
+                {profile.crowns || 0}
+              </span>
+            </div>
+
+            <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
+              <span className="text-zinc-400">
+                Date Joined:
+              </span>{' '}
+              <span className="font-semibold text-white">
+                {profile.created_at
+                  ? new Date(
+                      profile.created_at
+                    ).toLocaleDateString(
+                      'en-US',
+                      {
+                        month: '2-digit',
+                        day: '2-digit',
+                        year: 'numeric',
+                      }
+                    )
+                  : 'Unknown'}
+              </span>
+            </div>
+
+          </div>
+
         </div>
 
         {/* RIGHT WRAPPER */}
@@ -326,23 +381,23 @@ export default function ProfilePage({
 
                 <div className="flex items-center justify-between mb-4 pl-4">
 
-  <h2 className="text-3xl font-bold">
-    About Me
-  </h2>
+                  <h2 className="text-3xl font-bold">
+                    About Me
+                  </h2>
 
-  {isOwnProfile &&
-    !editing && (
-      <button
-        onClick={() =>
-          setEditing(true)
-        }
-        className="bg-green-500 text-black px-4 py-2 rounded-xl font-bold"
-      >
-        Edit
-      </button>
-    )}
+                  {isOwnProfile &&
+                    !editing && (
+                      <button
+                        onClick={() =>
+                          setEditing(true)
+                        }
+                        className="bg-green-500 text-black px-4 py-2 rounded-xl font-bold cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                    )}
 
-</div>
+                </div>
 
                 {/* DISPLAY MODE */}
                 {!editing ? (
