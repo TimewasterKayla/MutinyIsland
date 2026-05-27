@@ -111,7 +111,7 @@ export default function ProfilePage({
   }
 
   // -----------------------------
-  // LOADING
+  // UI STATES
   // -----------------------------
   if (loading) {
     return (
@@ -129,9 +129,6 @@ export default function ProfilePage({
     )
   }
 
-  // -----------------------------
-  // UI
-  // -----------------------------
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-6">
 
@@ -166,14 +163,14 @@ export default function ProfilePage({
             {isOwnProfile && !editing && (
               <button
                 onClick={() => setEditing(true)}
-                className="bg-yellow-500 text-black px-4 py-2 rounded-xl font-bold hover:bg-yellow-400 transition"
+                className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-green-500 transition"
               >
                 Edit
               </button>
             )}
           </div>
 
-          {/* VIEW MODE */}
+          {/* VIEW MODE (NOW MATCHES EDIT BG) */}
           {!editing ? (
             <div className="bg-zinc-800 rounded-xl p-4 min-h-[300px] whitespace-pre-wrap">
               {profile.about_me?.trim() ? (
@@ -192,7 +189,7 @@ export default function ProfilePage({
                 onChange={(e) =>
                   setAboutMe(e.target.value)
                 }
-                className="w-full h-64 bg-zinc-800 rounded-xl p-4 text-white resize-none outline-none border border-zinc-700 focus:border-yellow-500"
+                className="w-full h-64 bg-zinc-800 rounded-xl p-4 text-white resize-none outline-none border border-zinc-700 focus:border-green-500"
                 maxLength={1000}
               />
 
@@ -216,7 +213,7 @@ export default function ProfilePage({
 
                   <button
                     onClick={saveAboutMe}
-                    className="bg-yellow-500 text-black px-5 py-2 rounded-xl font-bold"
+                    className="bg-green-600 text-white px-5 py-2 rounded-xl font-bold hover:bg-green-500 transition"
                   >
                     Save
                   </button>
