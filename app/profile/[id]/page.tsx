@@ -32,8 +32,8 @@ export default function ProfilePage({
   const [loading, setLoading] =
     useState(true)
 
-  const textareaRef =
-    useRef<HTMLTextAreaElement | null>(null)
+  const editorRef =
+    useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     Promise.resolve(params).then((p) => {
@@ -78,10 +78,12 @@ export default function ProfilePage({
   async function saveAboutMe() {
     if (!profile) return
 
+    const html = editorRef.current?.innerHTML || ''
+
     const { error } = await supabase
       .from('profiles')
       .update({
-        about_me: aboutMe,
+        about_me: html,
       })
       .eq('id', profile.id)
 
@@ -93,51 +95,26 @@ export default function ProfilePage({
 
     setProfile({
       ...profile,
-      about_me: aboutMe,
+      about_me: html,
     })
 
     setEditing(false)
   }
 
   // -----------------------------
-  // FORMATTING (stored markdown -> rendered HTML)
+  // FORMATTING HELPERS (REAL DOM)
   // -----------------------------
-  function formatText(text: string) {
-    return text
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/_(.*?)_/g, '<em>$1</em>')
+  function exec(command: string) {
+    document.execCommand(command)
+    editorRef.current?.focus()
   }
 
-  function wrapSelection(before: string, after: string) {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const selected = aboutMe.substring(start, end)
-
-    const newText =
-      aboutMe.substring(0, start) +
-      before +
-      selected +
-      after +
-      aboutMe.substring(end)
-
-    setAboutMe(newText)
-
-    setTimeout(() => {
-      textarea.focus()
-      textarea.selectionStart = start + before.length
-      textarea.selectionEnd = end + before.length
-    }, 0)
+  function toggleBold() {
+    exec('bold')
   }
 
-  function makeBold() {
-    wrapSelection('**', '**')
-  }
-
-  function makeItalic() {
-    wrapSelection('_', '_')
+  function toggleItalic() {
+    exec('italic')
   }
 
   if (loading) {
@@ -177,6 +154,7 @@ export default function ProfilePage({
               {profile.username}
             </h1>
           </div>
+
         </div>
 
         {/* RIGHT */}
@@ -197,76 +175,72 @@ export default function ProfilePage({
             )}
           </div>
 
-          {/* VIEW MODE (REAL RICH TEXT RENDERING) */}
+          {/* VIEW MODE (renders saved HTML) */}
           {!editing ? (
             <div
               className="bg-zinc-900 rounded-xl p-4 min-h-[300px]"
               dangerouslySetInnerHTML={{
                 __html: profile.about_me?.trim()
-                  ? formatText(profile.about_me)
+                  ? profile.about_me
                   : `<span class="text-zinc-400 italic">This player has not written anything yet.</span>`
               }}
             />
           ) : (
-            /* EDIT MODE */
-            <div className="relative">
+            /* EDIT MODE (REAL RICH TEXT) */
+            <div>
 
-              <textarea
-                ref={textareaRef}
-                value={aboutMe}
-                onChange={(e) =>
-                  setAboutMe(e.target.value)
-                }
-                className="w-full h-64 bg-zinc-800 rounded-xl p-4 text-white resize-none outline-none border border-zinc-700 focus:border-green-500"
-                maxLength={1000}
-              />
-
-              {/* FORMAT BUTTONS */}
-              <div className="absolute bottom-3 left-3 flex gap-2">
+              {/* TOOLBAR */}
+              <div className="flex gap-2 mb-2">
                 <button
-                  onClick={makeBold}
-                  className="w-8 h-8 bg-zinc-700 rounded-md flex items-center justify-center font-bold text-white hover:bg-zinc-600 transition"
+                  onClick={toggleBold}
+                  className="w-8 h-8 bg-zinc-700 rounded-md font-bold text-white hover:bg-zinc-600 transition"
                 >
                   B
                 </button>
 
                 <button
-                  onClick={makeItalic}
-                  className="w-8 h-8 bg-zinc-700 rounded-md flex items-center justify-center italic text-white hover:bg-zinc-600 transition"
+                  onClick={toggleItalic}
+                  className="w-8 h-8 bg-zinc-700 rounded-md italic text-white hover:bg-zinc-600 transition"
                 >
                   I
                 </button>
               </div>
 
-              {/* COUNTER MOVED BELOW BUTTONS */}
-              <div className="mt-3 ml-1 text-zinc-400 text-sm">
-                {aboutMe.length}/1000
+              {/* EDITOR */}
+              <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                className="w-full min-h-[250px] bg-zinc-800 rounded-xl p-4 text-white outline-none border border-zinc-700 focus:border-green-500"
+                dangerouslySetInnerHTML={{
+                  __html: aboutMe,
+                }}
+              />
+
+              {/* COUNTER */}
+              <div className="mt-3 text-zinc-400 text-sm">
+                {(editorRef.current?.innerText?.length || 0)}/1000
               </div>
 
               {/* ACTIONS */}
-              <div className="flex justify-between items-center mt-2">
-                <div />
+              <div className="flex justify-end gap-2 mt-3">
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setEditing(false)
-                      setAboutMe(
-                        profile.about_me || ''
-                      )
-                    }}
-                    className="bg-zinc-700 text-white px-4 py-2 rounded-xl"
-                  >
-                    Cancel
-                  </button>
+                <button
+                  onClick={() => {
+                    setEditing(false)
+                  }}
+                  className="bg-zinc-700 text-white px-4 py-2 rounded-xl"
+                >
+                  Cancel
+                </button>
 
-                  <button
-                    onClick={saveAboutMe}
-                    className="bg-green-600 text-white px-5 py-2 rounded-xl font-bold hover:bg-green-500 transition"
-                  >
-                    Save
-                  </button>
-                </div>
+                <button
+                  onClick={saveAboutMe}
+                  className="bg-green-600 text-white px-5 py-2 rounded-xl font-bold hover:bg-green-500 transition"
+                >
+                  Save
+                </button>
+
               </div>
 
             </div>
