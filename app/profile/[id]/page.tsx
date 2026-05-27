@@ -32,7 +32,8 @@ export default function ProfilePage({
   const [loading, setLoading] =
     useState(true)
 
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const textareaRef =
+    useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     Promise.resolve(params).then((p) => {
@@ -99,8 +100,14 @@ export default function ProfilePage({
   }
 
   // -----------------------------
-  // TEXT FORMATTING HELPERS
+  // FORMATTING (stored markdown -> rendered HTML)
   // -----------------------------
+  function formatText(text: string) {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/_(.*?)_/g, '<em>$1</em>')
+  }
+
   function wrapSelection(before: string, after: string) {
     const textarea = textareaRef.current
     if (!textarea) return
@@ -190,22 +197,20 @@ export default function ProfilePage({
             )}
           </div>
 
-          {/* VIEW MODE */}
+          {/* VIEW MODE (REAL RICH TEXT RENDERING) */}
           {!editing ? (
-            <div className="bg-zinc-900 rounded-xl p-4 min-h-[300px]">
-              {profile.about_me?.trim() ? (
-                <p className="whitespace-pre-wrap">
-                  {profile.about_me}
-                </p>
-              ) : (
-                <span className="text-zinc-400 italic">
-                  This player has not written anything yet.
-                </span>
-              )}
-            </div>
+            <div
+              className="bg-zinc-900 rounded-xl p-4 min-h-[300px]"
+              dangerouslySetInnerHTML={{
+                __html: profile.about_me?.trim()
+                  ? formatText(profile.about_me)
+                  : `<span class="text-zinc-400 italic">This player has not written anything yet.</span>`
+              }}
+            />
           ) : (
             /* EDIT MODE */
             <div className="relative">
+
               <textarea
                 ref={textareaRef}
                 value={aboutMe}
@@ -233,10 +238,14 @@ export default function ProfilePage({
                 </button>
               </div>
 
-              <div className="flex justify-between items-center mt-3">
-                <p className="text-zinc-400 text-sm">
-                  {aboutMe.length}/1000
-                </p>
+              {/* COUNTER MOVED BELOW BUTTONS */}
+              <div className="mt-3 ml-1 text-zinc-400 text-sm">
+                {aboutMe.length}/1000
+              </div>
+
+              {/* ACTIONS */}
+              <div className="flex justify-between items-center mt-2">
+                <div />
 
                 <div className="flex gap-2">
                   <button
