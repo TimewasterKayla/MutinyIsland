@@ -78,6 +78,11 @@ export default function HomePage() {
   const [youtubeAutoplay, setYoutubeAutoplay] = useState(false)
   const [editYouTubeWrapper, setEditYouTubeWrapper] = useState<HTMLElement | null>(null)
 
+  // Link modal
+  const [showLinkModal, setShowLinkModal] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('')
+  const [editLinkEl, setEditLinkEl] = useState<HTMLAnchorElement | null>(null)
+
   const [selectedImg, setSelectedImg] = useState<HTMLImageElement | null>(null)
 
   const editorRef = useRef<HTMLDivElement | null>(null)
@@ -113,7 +118,6 @@ export default function HomePage() {
     if (!error && data) setPosts(data)
   }
 
-  // Top posts sorted by likes
   const topPosts = [...posts].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 10)
 
   // -----------------------------
@@ -130,7 +134,7 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // PREVIEW TEXT — strips HTML, no images, max 150 chars
+  // PREVIEW TEXT
   // -----------------------------
   function getPreviewText(html: string): string {
     if (typeof window === 'undefined') return ''
@@ -236,6 +240,16 @@ export default function HomePage() {
     }
   }
 
+  function attachLinkListeners(a: HTMLAnchorElement) {
+    a.style.cursor = 'pointer'
+    a.oncontextmenu = (e) => {
+      e.preventDefault()
+      setEditLinkEl(a)
+      setLinkUrl(a.href)
+      setShowLinkModal(true)
+    }
+  }
+
   // -----------------------------
   // INSERT IMAGE
   // -----------------------------
@@ -338,6 +352,79 @@ export default function HomePage() {
   }
 
   // -----------------------------
+  // INSERT / UPDATE / REMOVE LINK
+  // -----------------------------
+  function insertLink() {
+    const editor = editorRef.current
+    if (!editor) return
+
+    // Editing an existing link
+    if (editLinkEl) {
+      if (!linkUrl.trim()) {
+        const text = document.createTextNode(editLinkEl.innerText)
+        editLinkEl.replaceWith(text)
+      } else {
+        editLinkEl.href = linkUrl.trim()
+      }
+      closeLinkModal()
+      return
+    }
+
+    // Inserting a new link from a selection
+    const sel = window.getSelection()
+    const range = savedRangeRef.current
+
+    if (!range || range.collapsed) {
+      alert('Please highlight some text first, then click the link button.')
+      closeLinkModal()
+      return
+    }
+
+    if (!linkUrl.trim()) {
+      closeLinkModal()
+      return
+    }
+
+    sel?.removeAllRanges()
+    sel?.addRange(range)
+
+    const a = document.createElement('a')
+    a.href = linkUrl.trim()
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.style.color = '#22c55e'
+    a.style.textDecoration = 'underline'
+    a.setAttribute('data-editor-link', '1')
+
+    try {
+      range.surroundContents(a)
+    } catch {
+      const fragment = range.extractContents()
+      a.appendChild(fragment)
+      range.insertNode(a)
+    }
+
+    attachLinkListeners(a)
+
+    const newRange = document.createRange()
+    newRange.setStartAfter(a)
+    newRange.collapse(true)
+    sel?.removeAllRanges()
+    sel?.addRange(newRange)
+
+    editor.focus()
+    setCharCount(editor.innerText.length)
+    closeLinkModal()
+  }
+
+  function closeLinkModal() {
+    setShowLinkModal(false)
+    setLinkUrl('')
+    setEditLinkEl(null)
+    savedRangeRef.current = null
+  }
+
+  // -----------------------------
   // CREATE POST
   // -----------------------------
   async function createPost() {
@@ -405,15 +492,12 @@ export default function HomePage() {
         backgroundAttachment: 'fixed',
       }}
     >
-      {/* dark overlay so text stays readable */}
       <div className="w-full min-h-screen" style={{ background: 'rgba(0,0,0,0.55)' }}>
-        {/* OUTER WRAPPER — two columns */}
         <div className="w-full max-w-5xl mx-auto px-4 py-8 flex gap-6 items-start">
 
           {/* LEFT: MAIN FEED */}
           <div className="flex-1 min-w-0">
 
-            {/* TOP BAR */}
             <div className="flex justify-between items-center mb-6">
               <h1 className="text-3xl font-bold">Mutiny Island</h1>
               <button
@@ -424,7 +508,6 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* POSTS */}
             <div className="space-y-3">
               {posts.map((post) => (
                 <div
@@ -433,7 +516,6 @@ export default function HomePage() {
                 >
                   <div className="flex gap-3">
 
-                    {/* AVATAR — clickable to profile, no text above or below */}
                     <div
                       className="flex-shrink-0 self-start cursor-pointer"
                       onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.username}`) }}
@@ -455,13 +537,10 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    {/* RIGHT CONTENT */}
                     <div className="flex-1 min-w-0" style={{ maxHeight: '80px', overflow: 'hidden' }}>
 
-                      {/* ROW 1: username · date + like button */}
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-xs text-zinc-400 leading-tight truncate">
-                          {/* USERNAME — clickable to profile */}
                           <span
                             className="font-semibold text-zinc-300 hover:text-white cursor-pointer transition-colors"
                             onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.username}`) }}
@@ -471,7 +550,6 @@ export default function HomePage() {
                           <span className="mx-1 text-zinc-600">·</span>
                           <span>{new Date(post.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         </p>
-                        {/* LIKE — top right, extra top padding to avoid clipping */}
                         <button
                           onClick={(e) => toggleLike(e, post)}
                           className="flex-shrink-0 flex flex-col items-center gap-0 cursor-pointer leading-none"
@@ -482,7 +560,6 @@ export default function HomePage() {
                         </button>
                       </div>
 
-                      {/* ROW 2: TITLE — clickable to open post */}
                       {post.title && (
                         <h2
                           onClick={(e) => { e.stopPropagation(); router.push(`/posts/${post.id}`) }}
@@ -501,7 +578,6 @@ export default function HomePage() {
                         </h2>
                       )}
 
-                      {/* ROW 3: PREVIEW TEXT */}
                       <p
                         className="text-zinc-400 leading-snug mt-0.5"
                         style={{
@@ -525,7 +601,6 @@ export default function HomePage() {
           {/* RIGHT SIDEBAR */}
           <div className="w-64 flex-shrink-0 space-y-4 sticky top-8">
 
-            {/* ANNOUNCEMENTS */}
             <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl p-4">
               <h2 className="text-base font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
                 <span className="text-yellow-400">📢</span> Announcements
@@ -533,7 +608,6 @@ export default function HomePage() {
               <p className="text-zinc-400 text-sm italic">No announcements yet.</p>
             </div>
 
-            {/* TOP POSTS */}
             <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl p-4">
               <h2 className="text-base font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
                 <span className="text-green-400">🏆</span> Top Posts
@@ -550,7 +624,7 @@ export default function HomePage() {
                       <div className="flex-1 min-w-0">
                         <button
                           onClick={() => router.push(`/posts/${post.id}`)}
-                          className="text-left w-full group"
+                          className="text-left w-full group cursor-pointer"
                         >
                           <p className="text-sm font-semibold text-zinc-200 group-hover:text-white leading-snug truncate underline underline-offset-2 decoration-zinc-600">
                             {post.title || 'Untitled'}
@@ -582,7 +656,6 @@ export default function HomePage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl flex flex-col" style={{ maxHeight: '90vh' }}>
 
-            {/* HEADER */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-zinc-800 flex-shrink-0">
               <h2 className="text-2xl font-bold">New Post</h2>
               <button onClick={closeModal} className="text-zinc-400 hover:text-white text-2xl leading-none cursor-pointer">×</button>
@@ -590,7 +663,6 @@ export default function HomePage() {
 
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
 
-              {/* TITLE */}
               <div>
                 <input
                   className="w-full p-3 bg-zinc-800 rounded-xl border border-zinc-700 text-white placeholder-zinc-500 text-lg font-semibold"
@@ -603,26 +675,62 @@ export default function HomePage() {
 
               {/* TOOLBAR */}
               <div className="flex gap-2 items-center flex-wrap">
-                <button onMouseDown={(e) => { e.preventDefault(); exec('bold') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold text-white" title="Bold">B</button>
-                <button onMouseDown={(e) => { e.preventDefault(); exec('italic') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic text-white" title="Italic">I</button>
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); exec('bold') }}
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold text-white cursor-pointer"
+                  title="Bold"
+                >B</button>
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); exec('italic') }}
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic text-white cursor-pointer"
+                  title="Italic"
+                >I</button>
                 <button
                   onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditImageEl(null); setImageUrl(''); setImageSize('medium'); setShowImageModal(true) }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Insert image"
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
+                  title="Insert image"
                 >
                   <Image src="/picture.png" alt="img" width={14} height={14} />
                 </button>
-                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Align left">
+                {/* LINK */}
+                <button
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    saveCursor()
+                    setEditLinkEl(null)
+                    setLinkUrl('')
+                    setShowLinkModal(true)
+                  }}
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
+                  title="Insert link"
+                >
+                  <Image src="/link.png" alt="Link" width={14} height={14} />
+                </button>
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }}
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
+                  title="Align left"
+                >
                   <Image src="/left.png" alt="left" width={14} height={14} />
                 </button>
-                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Align center">
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
+                  title="Align center"
+                >
                   <Image src="/center.png" alt="center" width={14} height={14} />
                 </button>
-                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Align right">
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
+                  title="Align right"
+                >
                   <Image src="/right.png" alt="right" width={14} height={14} />
                 </button>
                 <button
                   onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditYouTubeWrapper(null); setYoutubeUrl(''); setYoutubeSize('medium'); setYoutubeAlignment('center'); setYoutubeAutoplay(false); setShowYouTubeModal(true) }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center" title="Insert YouTube video"
+                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
+                  title="Insert YouTube video"
                 >
                   <Image src="/youtube.png" alt="YouTube" width={14} height={14} />
                 </button>
@@ -658,13 +766,12 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* FOOTER */}
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-zinc-800 flex-shrink-0">
-              <button onClick={closeModal} className="px-5 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-xl cursor-pointer">Cancel</button>
+              <button onClick={closeModal} className="px-5 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-xl cursor-pointer transition">Cancel</button>
               <button
                 onClick={createPost}
                 disabled={loading || !postTitle.trim()}
-                className="px-6 py-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl cursor-pointer disabled:opacity-50"
+                className="px-6 py-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl cursor-pointer disabled:opacity-50 transition"
               >
                 {loading ? 'Posting...' : 'Post'}
               </button>
@@ -681,14 +788,14 @@ export default function HomePage() {
             <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') insertImage() }} placeholder="Enter image URL" className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4" autoFocus />
             <div className="mb-4">
               <label className="text-sm text-zinc-400 mb-1 block">Size</label>
-              <select value={imageSize} onChange={(e) => setImageSize(e.target.value as 'small' | 'medium' | 'large')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white">
+              <select value={imageSize} onChange={(e) => setImageSize(e.target.value as 'small' | 'medium' | 'large')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white cursor-pointer">
                 <option value="small">Small (200px)</option>
                 <option value="medium">Medium (400px)</option>
                 <option value="large">Large (Full width)</option>
               </select>
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => { setShowImageModal(false); setImageUrl(''); setEditImageEl(null) }} className="bg-zinc-700 px-3 py-1 rounded">Cancel</button>
+              <button onClick={() => { setShowImageModal(false); setImageUrl(''); setEditImageEl(null) }} className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition">Cancel</button>
               <button
                 onClick={() => {
                   if (editImageEl) {
@@ -699,9 +806,70 @@ export default function HomePage() {
                     setShowImageModal(false); setImageUrl(''); setEditImageEl(null)
                   } else { insertImage() }
                 }}
-                className="bg-green-500 text-black px-4 py-1 rounded font-bold"
+                className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition"
               >
                 {editImageEl ? 'Update' : 'Insert'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LINK MODAL */}
+      {showLinkModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-[420px]">
+            <h2 className="text-2xl font-bold mb-1 flex items-center gap-2">
+              <Image src="/link.png" alt="Link" width={20} height={20} />
+              {editLinkEl ? 'Edit Link' : 'Insert Link'}
+            </h2>
+
+            {!editLinkEl && (
+              <p className="text-xs text-zinc-400 mb-4">
+                Highlight text in the editor before clicking this button to turn it into a link.
+              </p>
+            )}
+            {editLinkEl && (
+              <p className="text-xs text-zinc-400 mb-4">
+                Update the URL below, or clear it to remove the link.
+              </p>
+            )}
+
+            <input
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') insertLink() }}
+              placeholder="https://example.com"
+              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
+              autoFocus
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={closeLinkModal}
+                className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition"
+              >
+                Cancel
+              </button>
+
+              {editLinkEl && (
+                <button
+                  onClick={() => {
+                    const text = document.createTextNode(editLinkEl.innerText)
+                    editLinkEl.replaceWith(text)
+                    closeLinkModal()
+                  }}
+                  className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition"
+                >
+                  Remove
+                </button>
+              )}
+
+              <button
+                onClick={insertLink}
+                className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition"
+              >
+                {editLinkEl ? 'Update' : 'Insert'}
               </button>
             </div>
           </div>
@@ -719,7 +887,7 @@ export default function HomePage() {
             <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') insertYouTube() }} placeholder="Paste YouTube URL" className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4" autoFocus />
             <div className="mb-4">
               <label className="text-sm text-zinc-400 mb-1 block">Size</label>
-              <select value={youtubeSize} onChange={(e) => setYoutubeSize(e.target.value as 'small' | 'medium' | 'large')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white">
+              <select value={youtubeSize} onChange={(e) => setYoutubeSize(e.target.value as 'small' | 'medium' | 'large')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white cursor-pointer">
                 <option value="small">Small (300px)</option>
                 <option value="medium">Medium (560px)</option>
                 <option value="large">Large (Full width)</option>
@@ -727,7 +895,7 @@ export default function HomePage() {
             </div>
             <div className="mb-4">
               <label className="text-sm text-zinc-400 mb-1 block">Alignment</label>
-              <select value={youtubeAlignment} onChange={(e) => setYoutubeAlignment(e.target.value as 'left' | 'center' | 'right')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white">
+              <select value={youtubeAlignment} onChange={(e) => setYoutubeAlignment(e.target.value as 'left' | 'center' | 'right')} className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white cursor-pointer">
                 <option value="left">Left</option>
                 <option value="center">Center</option>
                 <option value="right">Right</option>
@@ -738,8 +906,8 @@ export default function HomePage() {
               <label htmlFor="yt-autoplay-post" className="text-sm text-zinc-300 cursor-pointer select-none">Autoplay when post is opened</label>
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={closeYouTubeModal} className="bg-zinc-700 px-3 py-1 rounded">Cancel</button>
-              <button onClick={insertYouTube} className="bg-green-500 text-black px-4 py-1 rounded font-bold">{editYouTubeWrapper ? 'Update' : 'Insert'}</button>
+              <button onClick={closeYouTubeModal} className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition">Cancel</button>
+              <button onClick={insertYouTube} className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition">{editYouTubeWrapper ? 'Update' : 'Insert'}</button>
             </div>
           </div>
         </div>
