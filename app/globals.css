@@ -106,6 +106,7 @@ body {
     transform: translateY(-120vh) rotate(360deg);
     opacity: 0;
   }
+}
 
 /* =========================================
    🪵 WOODEN NAVBAR
@@ -114,7 +115,6 @@ body {
 .wooden-navbar {
   position: relative;
 
-  /* wood colors */
   background:
     linear-gradient(
       to bottom,
@@ -170,4 +170,42 @@ body {
 
   pointer-events: none;
 }
+
+/* =========================================
+   👑 CROWN SHIMMER EFFECT
+========================================= */
+
+@keyframes crownShimmer {
+  0% {
+    transform: translateX(-60%);
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(60%);
+    opacity: 0.5;
+  }
+}
+
+.crown-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.crown-shimmer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    120deg,
+    transparent,
+    rgba(255, 255, 255, 0.25),
+    transparent
+  );
+  animation: crownShimmer 3.5s infinite ease-in-out;
 }

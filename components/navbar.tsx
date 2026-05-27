@@ -162,7 +162,7 @@ export default function Navbar() {
 
         {/* CROWNS */}
         {username && (
-          <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-lg border border-gray-400">
+          <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-lg border border-gray-400 crown-shimmer">
 
             <Image
               src="/crown.png"

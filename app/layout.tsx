@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Survivor Simulator",
+  title: "Mutiny Island",
   description: "A multiplayer Survivor-style game simulator",
 }
 
