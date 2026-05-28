@@ -52,6 +52,7 @@ export default function SeasonPage({
   const [text, setText] = useState('')
   const [lobbyText, setLobbyText] = useState('')
   const [voteTarget, setVoteTarget] = useState('')
+  const [votedName, setVotedName] = useState<string | null>(null)
   const [lobby, setLobby] = useState<any>(null)
   const [isPlayerInLobby, setIsPlayerInLobby] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('Lobby')
@@ -275,7 +276,8 @@ export default function SeasonPage({
       target_id: voteTarget,
     })
     if (error) { console.error('VOTE ERROR:', error); return }
-    alert('Vote submitted')
+    const voted = players.find((p) => p.user_id === voteTarget)
+    setVotedName(voted?.username ?? 'Unknown')
   }
 
   function getDayNumber() {
@@ -308,13 +310,13 @@ export default function SeasonPage({
       {/* ══ LEFT COLUMN ══ */}
       <aside className="w-64 shrink-0 flex flex-col gap-4">
 
-        {/* Day Counter */}
-        <div
-          className="rounded-2xl p-5 text-center border border-[#a07840]"
-          style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN }}
-        >
-          <p className="text-xs font-bold uppercase tracking-widest text-amber-800 mb-1">Current Day</p>
-          <p className="font-black text-6xl tracking-[0.2em] uppercase leading-none text-zinc-900">{day}</p>
+        {/* Day Counter — scroll image background */}
+        <div className="relative flex items-center justify-center" style={{ aspectRatio: '2.8 / 1' }}>
+          <img src="/scroll.png" alt="scroll" className="absolute inset-0 w-full h-full object-fill" />
+          <div className="relative z-10 text-center">
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-900 mb-0.5">Current Day</p>
+            <p className="font-black text-5xl tracking-[0.2em] uppercase leading-none text-zinc-900">{day}</p>
+          </div>
         </div>
 
         {/* Profile card — driven entirely by `me` from the players array */}
@@ -427,7 +429,7 @@ export default function SeasonPage({
 
         <div
           className="rounded-2xl rounded-tl-none overflow-hidden border border-[#a07840]"
-          style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN, height: '72vh', overflowY: 'auto' }}
+          style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN, height: '78vh', overflowY: 'auto' }}
         >
 
           {/* ── LOBBY TAB ── */}
@@ -485,7 +487,7 @@ export default function SeasonPage({
               </p>
 
               <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
-                <h3 className="font-bold text-base mb-2">Lobby Chat</h3>
+                <h3 className="font-bold text-base mb-2 uppercase tracking-widest">Lobby Chat</h3>
                 <div ref={lobbyChatRef} className="overflow-y-auto space-y-2 mb-2 pr-1" style={{ flex: 1, minHeight: 0 }}>
                   {lobbyMessages.map((m) => {
                     const isOnline = onlineUserIds.has(m.sender_id)
@@ -498,7 +500,6 @@ export default function SeasonPage({
                           />
                           <span
                             className="font-bold text-amber-900 cursor-pointer hover:underline"
-                            style={{ textTransform: 'uppercase' }}
                             onClick={() => router.push(`/profile/${m.username}`)}
                           >
                             {m.username}
@@ -612,12 +613,12 @@ export default function SeasonPage({
           {activeTab === 'Tiki Court' && (
             <div className="p-5 h-full text-zinc-900 flex">
               <div className="flex-1" />
-              <div className="w-1/2 rounded-xl p-5 border border-[#a07840]" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
-                <h2 className="text-2xl font-bold mb-4">Voting Booth</h2>
+              <div className="w-1/2 rounded-xl p-5 border border-[#a07840] flex flex-col gap-4" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
+                <h2 className="text-2xl font-bold">Voting Booth</h2>
                 <select
                   value={voteTarget}
                   onChange={(e) => setVoteTarget(e.target.value)}
-                  className="w-full p-3 rounded mb-4 border border-[#a07840] bg-[#c8a96e] outline-none focus:ring-2 focus:ring-amber-700 text-zinc-900 cursor-pointer"
+                  className="w-full p-3 rounded border border-[#a07840] bg-[#c8a96e] outline-none focus:ring-2 focus:ring-amber-700 text-zinc-900 cursor-pointer"
                 >
                   <option value="">Select Player</option>
                   {players.map((p) => (
@@ -627,6 +628,21 @@ export default function SeasonPage({
                 <button onClick={castVote} className="w-full bg-red-600 text-white p-3 rounded font-bold hover:bg-red-700 transition cursor-pointer">
                   Cast Vote
                 </button>
+
+                {/* Parchment */}
+                <div className="relative w-full mt-1" style={{ aspectRatio: '1.4 / 1' }}>
+                  <img src="/parchment2.png" alt="parchment" className="absolute inset-0 w-full h-full object-fill" />
+                  {votedName && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span
+                        className="text-black font-bold text-xl text-center px-4 leading-tight"
+                        style={{ fontFamily: 'Georgia, serif', textShadow: 'none', transform: 'rotate(-1deg)' }}
+                      >
+                        {votedName}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -637,7 +653,7 @@ export default function SeasonPage({
               {/* Left column — player grid */}
               <div className="flex-1 min-w-0">
                 <h2 className="text-2xl font-black uppercase tracking-widest mb-4">Castaways</h2>
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-6 gap-2">
                   {[...players]
                     .sort((a, b) => a.username.localeCompare(b.username))
                     .map((player) => (
