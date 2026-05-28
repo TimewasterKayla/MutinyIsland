@@ -302,7 +302,7 @@ export default function SeasonPage({
       {/* ══ RIGHT COLUMN ══ */}
       <div className="w-[58%] flex flex-col min-h-0">
 
-        <div className="flex items-end gap-1 px-1">
+        <div className="flex items-end gap-1 px-1 pr-4">
           {TABS_LEFT.map((tab) => {
             const isActive = activeTab === tab
             return (
@@ -329,7 +329,6 @@ export default function SeasonPage({
           })}
 
           <div className="flex-1" />
-          <div className="w-[6px] shrink-0" />
 
           {(() => {
             const isActive = activeTab === TAB_SUMMARY
