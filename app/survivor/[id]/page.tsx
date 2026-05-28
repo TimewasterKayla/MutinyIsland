@@ -299,58 +299,60 @@ export default function SeasonPage({
           </p>
         </div>
 
-        {/* Player profile card */}
-        {currentUserProfile && (
-          <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 flex flex-col gap-3">
-            {/* Avatar */}
-            <div className="w-full aspect-square rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700">
-              {currentUserProfile.avatar ? (
-                <Image
-                  src={currentUserProfile.avatar}
-                  alt="Avatar"
-                  width={256}
-                  height={256}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-4xl font-black text-zinc-500">
-                  {currentUserProfile.username?.slice(0, 1).toUpperCase()}
-                </div>
-              )}
-            </div>
+        {/* Player profile card — always rendered, mirrors profile page left column */}
+        <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 flex flex-col gap-3">
 
-            {/* Username */}
-            <div className="text-center">
-              <h2 className="text-lg font-bold text-white">{currentUserProfile.username}</h2>
-            </div>
+          {/* Avatar */}
+          <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-zinc-800 border border-zinc-700">
+            {currentUserProfile?.avatar ? (
+              <Image
+                src={currentUserProfile.avatar}
+                alt="Avatar"
+                width={256}
+                height={256}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-4xl font-black text-zinc-600">
+                {currentUserProfile?.username?.slice(0, 1).toUpperCase() ?? '?'}
+              </div>
+            )}
+          </div>
 
-            {/* Stats */}
-            <div className="space-y-2 text-sm">
-              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
-                <span className="text-zinc-400">Rank: </span>
-                <span className="font-semibold text-white">{currentUserProfile.rank || 'Peasant'}</span>
-              </div>
-              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
-                <span className="text-zinc-400">Doubloons: </span>
-                <span className="font-semibold text-yellow-400">{currentUserProfile.coins || 0}</span>
-              </div>
-              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
-                <span className="text-zinc-400">Crowns: </span>
-                <span className="font-semibold text-amber-300">{currentUserProfile.crowns || 0}</span>
-              </div>
-              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
-                <span className="text-zinc-400">Joined: </span>
-                <span className="font-semibold text-white">
-                  {currentUserProfile.created_at
-                    ? new Date(currentUserProfile.created_at).toLocaleDateString('en-US', {
-                        month: '2-digit', day: '2-digit', year: 'numeric',
-                      })
-                    : 'Unknown'}
-                </span>
-              </div>
+          {/* Username */}
+          <div className="mt-2 text-center">
+            <h1 className="text-xl font-bold text-white">
+              {currentUserProfile?.username ?? '—'}
+            </h1>
+          </div>
+
+          {/* Stats */}
+          <div className="space-y-2 text-sm">
+            <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+              <span className="text-zinc-400">Rank: </span>
+              <span className="font-semibold text-white">{currentUserProfile?.rank || 'Peasant'}</span>
+            </div>
+            <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+              <span className="text-zinc-400">Doubloons: </span>
+              <span className="font-semibold text-yellow-400">{currentUserProfile?.coins ?? 0}</span>
+            </div>
+            <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+              <span className="text-zinc-400">Crowns: </span>
+              <span className="font-semibold text-amber-300">{currentUserProfile?.crowns ?? 0}</span>
+            </div>
+            <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+              <span className="text-zinc-400">Date Joined: </span>
+              <span className="font-semibold text-white">
+                {currentUserProfile?.created_at
+                  ? new Date(currentUserProfile.created_at).toLocaleDateString('en-US', {
+                      month: '2-digit', day: '2-digit', year: 'numeric',
+                    })
+                  : 'Unknown'}
+              </span>
             </div>
           </div>
-        )}
+
+        </div>
 
       </aside>
 
