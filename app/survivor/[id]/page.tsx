@@ -184,6 +184,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   // Vote history
   const [voteHistory, setVoteHistory] = useState<VoteRecord[]>([])
 
+  // Fill game (testing util)
+  const [hasFilled, setHasFilled] = useState(false)
+
   // Finale
   const [reunionText,       setReunionText]       = useState('')
   const [reunionMessages,   setReunionMessages]   = useState<Message[]>([])
@@ -783,6 +786,25 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     loadLobbyMessages(lobbyId)
   }
 
+  async function fillGame() {
+    if (!lobbyId || hasFilled || gameStarted) return
+    setHasFilled(true)
+    const spotsNeeded = MAX_PLAYERS - players.length
+    if (spotsNeeded <= 0) return
+    const existingIds = players.map(p => p.user_id)
+    // Pull random profiles that aren't already in the lobby
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id')
+      .not('id', 'in', `(${existingIds.join(',')})`)
+      .limit(spotsNeeded * 3)  // fetch extras so we can shuffle and pick
+    if (!profiles || profiles.length === 0) return
+    const shuffled = shuffleArray(profiles).slice(0, spotsNeeded)
+    const inserts = shuffled.map(p => ({ lobby_id: lobbyId, user_id: p.id }))
+    await supabase.from('lobby_players').insert(inserts)
+    loadPlayers(lobbyId)
+  }
+
   async function castVote() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || !voteTarget || !lobbyId || hasVotedToday) return
@@ -1049,7 +1071,15 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               <div className="flex items-center justify-between mb-4">
                 <div className="w-24" />
                 <h2 className="text-2xl font-black uppercase tracking-widest text-center">Players</h2>
-                <div className="w-24 flex justify-end">
+                <div className="flex items-center gap-2 justify-end" style={{ minWidth: '6rem' }}>
+                  {!gameStarted && !hasFilled && (
+                    <button
+                      onClick={fillGame}
+                      className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow"
+                    >
+                      Fill Game
+                    </button>
+                  )}
                   <button className="flex items-center gap-1.5 bg-sky-400 hover:bg-sky-500 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow">
                     <img src="/info.png" alt="Info" className="w-4 h-4" />
                     Info
@@ -1095,13 +1125,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     })}
                   </div>
 
-                  <p className="italic text-zinc-700 text-xs mb-2 shrink-0">
+                  <p className="italic text-zinc-700 text-xs my-3 shrink-0">
                     Waiting for players ({players.length}/{MAX_PLAYERS})
                     <span className="inline-block w-6 text-left">{'.'.repeat(dotCount)}</span>
                   </p>
 
-                  {/* CHANGED: fixed height chat box (shrink-0) instead of flex-1 to make room for taller avatar grid */}
-                  <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col shrink-0" style={{ height: '32%' }}>
+                  {/* flex-1 so the chat fills remaining space in the container */}
+                  <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
                     <h3 className="font-bold text-base mb-2 uppercase tracking-widest shrink-0">Lobby Chat</h3>
                     {/* CHANGED: overflow-y-auto on this div; lobbyChatRef scrollTop is set to scrollHeight on new messages */}
                     <div ref={lobbyChatRef} className="overflow-y-auto space-y-2 mb-2 pr-1 flex-1 min-h-0">
