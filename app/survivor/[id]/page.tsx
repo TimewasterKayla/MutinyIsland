@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -19,6 +20,16 @@ type Message = {
   created_at?: string
 }
 
+type CurrentUserProfile = {
+  id: string
+  username: string
+  avatar: string | null
+  rank: string | null
+  coins: number | null
+  crowns: number | null
+  created_at: string | null
+}
+
 type Tab = 'Lobby' | 'Camp' | 'Challenge Beach' | 'Tiki Court'
 type CampSubPage = 'Camp 1' | 'Camp 2' | 'Jungle' | 'Water Well'
 
@@ -27,37 +38,12 @@ const CAMP_PAGES: CampSubPage[] = ['Camp 1', 'Camp 2', 'Jungle', 'Water Well']
 const MAX_PLAYERS = 18
 
 const WOOD_GRAIN = `
-  repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent 3px,
-    rgba(0,0,0,0.025) 3px,
-    rgba(0,0,0,0.025) 4px
-  ),
-  repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 5px,
-    rgba(0,0,0,0.015) 5px,
-    rgba(0,0,0,0.015) 6px
-  )
+  repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(0,0,0,0.025) 3px, rgba(0,0,0,0.025) 4px),
+  repeating-linear-gradient(0deg, transparent, transparent 5px, rgba(0,0,0,0.015) 5px, rgba(0,0,0,0.015) 6px)
 `
-
 const WOOD_GRAIN_DARK = `
-  repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent 3px,
-    rgba(0,0,0,0.06) 3px,
-    rgba(0,0,0,0.06) 4px
-  ),
-  repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 5px,
-    rgba(0,0,0,0.04) 5px,
-    rgba(0,0,0,0.04) 6px
-  )
+  repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px),
+  repeating-linear-gradient(0deg, transparent, transparent 5px, rgba(0,0,0,0.04) 5px, rgba(0,0,0,0.04) 6px)
 `
 
 export default function SeasonPage({
@@ -78,6 +64,7 @@ export default function SeasonPage({
   const [isPlayerInLobby, setIsPlayerInLobby] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('Lobby')
   const [campPage, setCampPage] = useState<CampSubPage>('Camp 1')
+  const [currentUserProfile, setCurrentUserProfile] = useState<CurrentUserProfile | null>(null)
 
   const chatRef = useRef<HTMLDivElement>(null)
   const lobbyChatRef = useRef<HTMLDivElement>(null)
@@ -105,7 +92,7 @@ export default function SeasonPage({
     return () => clearInterval(interval)
   }, [lobbyId])
 
-  // AUTO SCROLL CHAT
+  // AUTO SCROLL
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
   }, [messages])
@@ -118,10 +105,19 @@ export default function SeasonPage({
   async function getCurrentUser() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setIsPlayerInLobby(false); return }
-    const { data } = await supabase
+
+    const { data: lobbyData } = await supabase
       .from('lobby_players').select('id')
       .eq('lobby_id', lobbyId).eq('user_id', user.id).maybeSingle()
-    setIsPlayerInLobby(!!data)
+    setIsPlayerInLobby(!!lobbyData)
+
+    // Load current user's profile for sidebar
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('id, username, avatar, rank, coins, crowns, created_at')
+      .eq('id', user.id)
+      .maybeSingle()
+    if (profileData) setCurrentUserProfile(profileData)
   }
 
   // LOBBY
@@ -136,18 +132,13 @@ export default function SeasonPage({
     if (error || !data || data.length === 0) { setPlayers([]); return }
 
     const userIds = data.map((p) => p.user_id)
-
     const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, username, avatar')
-      .in('id', userIds)
-
+      .from('profiles').select('id, username, avatar').in('id', userIds)
     if (profileError) console.error('PROFILE ERROR:', profileError)
 
     const profileMap = Object.fromEntries(
       (profileData || []).map((p) => [p.id, { username: p.username, avatar: p.avatar }])
     )
-
     setPlayers(data.map((p) => ({
       id: p.id,
       user_id: p.user_id,
@@ -158,8 +149,7 @@ export default function SeasonPage({
 
   // Helper: resolve sender IDs -> usernames
   async function resolveUsernames(senderIds: string[]): Promise<Record<string, string>> {
-    const { data } = await supabase
-      .from('profiles').select('id, username').in('id', senderIds)
+    const { data } = await supabase.from('profiles').select('id, username').in('id', senderIds)
     return Object.fromEntries((data || []).map((p: any) => [p.id, p.username]))
   }
 
@@ -167,10 +157,8 @@ export default function SeasonPage({
   async function loadMessages() {
     const { data, error } = await supabase
       .from('messages').select('*').eq('season_id', lobbyId)
-      .eq('message_type', 'camp')
-      .order('created_at', { ascending: true })
+      .eq('message_type', 'camp').order('created_at', { ascending: true })
     if (error || !data || data.length === 0) { setMessages([]); return }
-
     const senderIds = [...new Set(data.map((m) => m.sender_id))]
     const profileMap = await resolveUsernames(senderIds)
     setMessages(data.map((m) => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
@@ -180,10 +168,8 @@ export default function SeasonPage({
   async function loadLobbyMessages() {
     const { data, error } = await supabase
       .from('messages').select('*').eq('season_id', lobbyId)
-      .eq('message_type', 'lobby')
-      .order('created_at', { ascending: true })
+      .eq('message_type', 'lobby').order('created_at', { ascending: true })
     if (error || !data || data.length === 0) { setLobbyMessages([]); return }
-
     const senderIds = [...new Set(data.map((m) => m.sender_id))]
     const profileMap = await resolveUsernames(senderIds)
     setLobbyMessages(data.map((m) => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
@@ -244,6 +230,47 @@ export default function SeasonPage({
     )
   }
 
+  // ── CHAT BOX (reusable) ────────────────────────────────────────────────────
+  function CampChatBox() {
+    return (
+      <div className="w-1/2 flex flex-col min-h-0">
+        <h2 className="text-xl font-bold mb-3">{campPage} Chat</h2>
+        <div
+          ref={chatRef}
+          className="overflow-y-auto mb-3 pr-1 space-y-2"
+          style={{ maxHeight: '420px' }}
+        >
+          {messages.map((m) => (
+            <div key={m.id} className="bg-[#b8955a] p-3 rounded">
+              <div className="flex justify-between mb-1">
+                <p className="text-yellow-800 font-bold text-sm">{m.username}</p>
+                <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
+              </div>
+              <p className="text-sm">{m.content}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={!isPlayerInLobby}
+            className="flex-1 bg-[#b8955a] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
+            placeholder={isPlayerInLobby ? 'Type message...' : 'Join to chat'}
+            onKeyDown={(e) => { if (e.key === 'Enter') sendMessage() }}
+          />
+          <button
+            onClick={sendMessage}
+            disabled={!isPlayerInLobby}
+            className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-zinc-950 text-white flex gap-5 px-5 pb-5 pt-8 justify-center">
@@ -264,6 +291,59 @@ export default function SeasonPage({
           </p>
         </div>
 
+        {/* Player profile card */}
+        {currentUserProfile && (
+          <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 flex flex-col gap-3">
+            {/* Avatar */}
+            <div className="w-full aspect-square rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700">
+              {currentUserProfile.avatar ? (
+                <Image
+                  src={currentUserProfile.avatar}
+                  alt="Avatar"
+                  width={256}
+                  height={256}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-4xl font-black text-zinc-500">
+                  {currentUserProfile.username?.slice(0, 1).toUpperCase()}
+                </div>
+              )}
+            </div>
+
+            {/* Username */}
+            <div className="text-center">
+              <h2 className="text-lg font-bold text-white">{currentUserProfile.username}</h2>
+            </div>
+
+            {/* Stats */}
+            <div className="space-y-2 text-sm">
+              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+                <span className="text-zinc-400">Rank: </span>
+                <span className="font-semibold text-white">{currentUserProfile.rank || 'Peasant'}</span>
+              </div>
+              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+                <span className="text-zinc-400">Doubloons: </span>
+                <span className="font-semibold text-yellow-400">{currentUserProfile.coins || 0}</span>
+              </div>
+              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+                <span className="text-zinc-400">Crowns: </span>
+                <span className="font-semibold text-amber-300">{currentUserProfile.crowns || 0}</span>
+              </div>
+              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+                <span className="text-zinc-400">Joined: </span>
+                <span className="font-semibold text-white">
+                  {currentUserProfile.created_at
+                    ? new Date(currentUserProfile.created_at).toLocaleDateString('en-US', {
+                        month: '2-digit', day: '2-digit', year: 'numeric',
+                      })
+                    : 'Unknown'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
       </aside>
 
       {/* ══ RIGHT COLUMN (tabbed) ══ */}
@@ -278,8 +358,8 @@ export default function SeasonPage({
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`
-                  relative px-5 py-2 rounded-t-lg font-bold text-sm
-                  transition-all duration-150 select-none cursor-pointer
+                  relative px-5 py-2 rounded-t-lg font-bold text-xs tracking-widest
+                  transition-all duration-150 select-none cursor-pointer uppercase
                   border-t border-l border-r
                   ${isActive
                     ? 'text-zinc-900 border-[#a07840] z-10 -mb-px pb-3 shadow-md'
@@ -306,10 +386,13 @@ export default function SeasonPage({
           {/* ── LOBBY TAB ── */}
           {activeTab === 'Lobby' && (
             <div className="p-5 h-full flex flex-col text-zinc-900">
-              <h2 className="text-2xl font-bold mb-4">Players</h2>
+
+              <h2 className="text-2xl font-black uppercase tracking-widest text-center mb-4">
+                Players
+              </h2>
 
               {/* Avatar grid — 2 rows of 9 */}
-              <div className="grid grid-cols-9 gap-3 mb-5">
+              <div className="grid grid-cols-9 gap-3 mb-4">
                 {Array.from({ length: MAX_PLAYERS }).map((_, i) => {
                   const player = players[i]
                   return (
@@ -318,7 +401,6 @@ export default function SeasonPage({
                       onClick={() => player && router.push(`/profile/${player.username}`)}
                       className={`flex flex-col items-center gap-1 ${player ? 'cursor-pointer group' : ''}`}
                     >
-                      {/* Avatar rectangle */}
                       <div
                         className={`
                           w-full aspect-[3/4] rounded-md overflow-hidden border-2
@@ -342,9 +424,8 @@ export default function SeasonPage({
                           </div>
                         ) : null}
                       </div>
-                      {/* Username */}
                       {player && (
-                        <p className="text-[10px] font-semibold text-center leading-tight text-zinc-800 truncate w-full text-center">
+                        <p className="text-[10px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                           {player.username}
                         </p>
                       )}
@@ -353,17 +434,17 @@ export default function SeasonPage({
                 })}
               </div>
 
-              <p className="italic text-zinc-700 text-sm mb-4">
+              <p className="italic text-zinc-700 text-sm mb-3">
                 Waiting for players ({players.length}/{MAX_PLAYERS})
               </p>
 
-              {/* Lobby Chat */}
-              <div className="flex-1 flex flex-col bg-[#b8955a]/50 rounded-xl p-3 min-h-0">
+              {/* Lobby Chat — fixed height, no flex-1 stretch */}
+              <div className="bg-[#b8955a]/50 rounded-xl p-3">
                 <h3 className="font-bold text-base mb-2">Lobby Chat</h3>
                 <div
                   ref={lobbyChatRef}
-                  className="flex-1 overflow-y-auto space-y-2 mb-2 pr-1"
-                  style={{ maxHeight: '200px' }}
+                  className="overflow-y-auto space-y-2 mb-2 pr-1"
+                  style={{ height: '160px' }}
                 >
                   {lobbyMessages.map((m) => (
                     <div key={m.id} className="bg-[#c8a96e] p-2 rounded text-sm">
@@ -384,12 +465,13 @@ export default function SeasonPage({
                   <button
                     onClick={sendLobbyMessage}
                     disabled={!isPlayerInLobby}
-                    className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition"
+                    className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer"
                   >
                     Send
                   </button>
                 </div>
               </div>
+
             </div>
           )}
 
@@ -397,14 +479,14 @@ export default function SeasonPage({
           {activeTab === 'Camp' && (
             <div className="p-5 h-full flex flex-col text-zinc-900">
 
-              {/* Sub-page nav buttons */}
+              {/* Sub-page nav */}
               <div className="flex gap-2 mb-4">
                 {CAMP_PAGES.map((page) => (
                   <button
                     key={page}
                     onClick={() => setCampPage(page)}
                     className={`
-                      px-4 py-2 rounded-lg font-bold text-sm transition border
+                      px-4 py-2 rounded-lg font-bold text-sm transition border cursor-pointer
                       ${campPage === page
                         ? 'bg-amber-900 text-[#f0ddb0] border-amber-950'
                         : 'bg-[#b8955a] text-zinc-800 border-[#a07840] hover:bg-[#a07840]'
@@ -416,61 +498,22 @@ export default function SeasonPage({
                 ))}
               </div>
 
-              {/* Camp 1 / Camp 2 — show tribe chat on left half */}
+              {/* Camp 1 / Camp 2 — chat on RIGHT half */}
               {(campPage === 'Camp 1' || campPage === 'Camp 2') && (
                 <div className="flex gap-4 flex-1 min-h-0">
-                  {/* Tribe chat — left half */}
-                  <div className="w-1/2 flex flex-col min-h-0">
-                    <h2 className="text-xl font-bold mb-3">
-                      {campPage} Chat
-                    </h2>
-                    <div
-                      ref={chatRef}
-                      className="flex-1 overflow-y-auto mb-3 pr-1 space-y-2"
-                      style={{ maxHeight: '420px' }}
-                    >
-                      {messages.map((m) => (
-                        <div key={m.id} className="bg-[#b8955a] p-3 rounded">
-                          <div className="flex justify-between mb-1">
-                            <p className="text-yellow-800 font-bold text-sm">{m.username}</p>
-                            <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
-                          </div>
-                          <p className="text-sm">{m.content}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        disabled={!isPlayerInLobby}
-                        className="flex-1 bg-[#b8955a] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
-                        placeholder={isPlayerInLobby ? 'Type message...' : 'Join to chat'}
-                        onKeyDown={(e) => { if (e.key === 'Enter') sendMessage() }}
-                      />
-                      <button
-                        onClick={sendMessage}
-                        disabled={!isPlayerInLobby}
-                        className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition"
-                      >
-                        Send
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Right half — empty for future content */}
+                  {/* Left half — empty for future content */}
                   <div className="w-1/2" />
+                  {/* Chat — right half */}
+                  <CampChatBox />
                 </div>
               )}
 
-              {/* Jungle */}
               {campPage === 'Jungle' && (
                 <div className="flex-1 flex items-center justify-center">
                   <p className="text-xl italic text-zinc-600">The Jungle — coming soon</p>
                 </div>
               )}
 
-              {/* Water Well */}
               {campPage === 'Water Well' && (
                 <div className="flex-1 flex items-center justify-center">
                   <p className="text-xl italic text-zinc-600">Water Well — coming soon</p>
@@ -484,22 +527,10 @@ export default function SeasonPage({
             <div className="p-5 h-full text-zinc-900">
               <h2 className="text-2xl font-bold mb-6">Challenge Beach</h2>
               <div className="flex gap-4">
-                <button
-                  className="
-                    px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide
-                    bg-yellow-600 text-white border-2 border-yellow-700
-                    hover:bg-yellow-700 transition shadow-md
-                  "
-                >
+                <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-yellow-600 text-white border-2 border-yellow-700 hover:bg-yellow-700 transition shadow-md cursor-pointer">
                   Immunity Challenge
                 </button>
-                <button
-                  className="
-                    px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide
-                    bg-[#8b6840] text-[#f0ddb0] border-2 border-[#6b4820]
-                    hover:bg-[#7a5830] transition shadow-md
-                  "
-                >
+                <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-[#8b6840] text-[#f0ddb0] border-2 border-[#6b4820] hover:bg-[#7a5830] transition shadow-md cursor-pointer">
                   Reward Challenge
                 </button>
               </div>
@@ -509,20 +540,16 @@ export default function SeasonPage({
           {/* ── TIKI COURT TAB ── */}
           {activeTab === 'Tiki Court' && (
             <div className="p-5 h-full text-zinc-900 flex">
-              {/* Left side — empty */}
               <div className="flex-1" />
-
-              {/* Voting booth — right side */}
               <div
                 className="w-1/2 rounded-xl p-5 border border-[#a07840]"
                 style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}
               >
                 <h2 className="text-2xl font-bold mb-4">Voting Booth</h2>
-
                 <select
                   value={voteTarget}
                   onChange={(e) => setVoteTarget(e.target.value)}
-                  className="w-full p-3 rounded mb-4 border border-[#a07840] bg-[#c8a96e] outline-none focus:ring-2 focus:ring-amber-700 text-zinc-900"
+                  className="w-full p-3 rounded mb-4 border border-[#a07840] bg-[#c8a96e] outline-none focus:ring-2 focus:ring-amber-700 text-zinc-900 cursor-pointer"
                 >
                   <option value="">Select Player</option>
                   {players.map((p) => (
@@ -531,10 +558,9 @@ export default function SeasonPage({
                     </option>
                   ))}
                 </select>
-
                 <button
                   onClick={castVote}
-                  className="w-full bg-red-600 text-white p-3 rounded font-bold hover:bg-red-700 transition"
+                  className="w-full bg-red-600 text-white p-3 rounded font-bold hover:bg-red-700 transition cursor-pointer"
                 >
                   Cast Vote
                 </button>
