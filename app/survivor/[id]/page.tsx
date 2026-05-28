@@ -37,6 +37,7 @@ type VoteRecord = {
   voted_off: string
   username: string
   vote_counts: Record<string, number>
+  rocks_drawn?: boolean
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -92,22 +93,38 @@ type ChatPanelProps = {
   onSend: () => void
   scrollRef: React.RefObject<HTMLDivElement | null>
   getMessageDay: (createdAt?: string) => number
+  onlineUserIds: Set<string>
+  onClickUsername: (username: string) => void
 }
 
-function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollRef, getMessageDay }: ChatPanelProps) {
+function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollRef, getMessageDay, onlineUserIds, onClickUsername }: ChatPanelProps) {
   const tribeMessages = messages.filter(m => m.topic === tribeKey)
   return (
     <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
       <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
-        {tribeMessages.map(m => (
-          <div key={m.id} className="bg-[#b8955a] p-3 rounded">
-            <div className="flex justify-between mb-1">
-              <p className="text-yellow-800 font-bold text-sm">{m.username}</p>
-              <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
+        {tribeMessages.map(m => {
+          const isOnline = onlineUserIds.has(m.sender_id)
+          return (
+            <div key={m.id} className="bg-[#b8955a] p-3 rounded">
+              <div className="flex justify-between mb-1">
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 4px #22c55e' : 'none' }}
+                  />
+                  <span
+                    className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
+                    onClick={() => onClickUsername(m.username ?? '')}
+                  >
+                    {m.username}
+                  </span>
+                </span>
+                <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
+              </div>
+              <p className="text-sm">{m.content}</p>
             </div>
-            <p className="text-sm">{m.content}</p>
-          </div>
-        ))}
+          )
+        })}
       </div>
       <div className="flex gap-2 mt-2 shrink-0">
         <input
@@ -453,26 +470,59 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   async function loadVoteHistory(id: string) {
     const { data: allVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).order('day', { ascending: true })
-    if (!allVotes || allVotes.length === 0) { setVoteHistory([]); return }
 
-    const days = [...new Set(allVotes.map(v => v.day))]
-    const allIds = [...new Set([...allVotes.map(v => v.voter_id), ...allVotes.map(v => v.target_id)])]
-    const { data: profileData } = await supabase.from('profiles').select('id, username').in('id', allIds)
+    // We need voted_off list from lobby to know which days had eliminations
+    const l = lobbyRef.current
+    const votedOffList: string[] = l?.voted_off ?? []
+
+    // Build history from days that had votes cast
+    const daysWithVotes = allVotes && allVotes.length > 0
+      ? [...new Set(allVotes.map((v: any) => v.day))]
+      : []
+
+    const allIds = allVotes && allVotes.length > 0
+      ? [...new Set([...allVotes.map((v: any) => v.voter_id), ...allVotes.map((v: any) => v.target_id)])]
+      : []
+    const allPlayerIds = players.map(p => p.user_id)
+    const idsToResolve = [...new Set([...allIds, ...allPlayerIds])]
+
+    const { data: profileData } = idsToResolve.length > 0
+      ? await supabase.from('profiles').select('id, username').in('id', idsToResolve)
+      : { data: [] }
     const nameMap = Object.fromEntries((profileData || []).map((p: any) => [p.id, p.username]))
 
-    const history: VoteRecord[] = days.map(day => {
-      const dayVotes = allVotes.filter(v => v.day === day)
+    // History: one record per voted-off player (tracked in lobby.voted_off order)
+    // Day i elimination = votedOffList[i] was eliminated after day (i+1) voting
+    const history: VoteRecord[] = votedOffList.map((eliminatedId, idx) => {
+      const eliminationDay = idx + 2 // day 2 is first possible elimination day
+      const dayVotes = (allVotes ?? []).filter((v: any) => v.day === eliminationDay - 1)
+      const hadVotes = dayVotes.length > 0
+
+      if (!hadVotes) {
+        // Rocks drawn — no votes cast
+        return {
+          day: eliminationDay - 1,
+          voted_off: eliminatedId,
+          username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
+          vote_counts: {},
+          rocks_drawn: true,
+        }
+      }
+
       const counts: Record<string, number> = {}
-      dayVotes.forEach(v => {
+      dayVotes.forEach((v: any) => {
         const name = nameMap[v.target_id] || v.target_id.slice(0, 8)
         counts[name] = (counts[name] || 0) + 1
       })
-      const maxVotes = Math.max(...Object.values(counts))
-      const tied = Object.entries(counts).filter(([, c]) => c === maxVotes).map(([n]) => n)
-      const votedOffName = tied[Math.floor(Math.random() * tied.length)]
-      const votedOffId = allVotes.find(v => nameMap[v.target_id] === votedOffName)?.target_id ?? ''
-      return { day, voted_off: votedOffId, username: votedOffName, vote_counts: counts }
+      return {
+        day: eliminationDay - 1,
+        voted_off: eliminatedId,
+        username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
+        vote_counts: counts,
+        rocks_drawn: false,
+      }
     })
+
     setVoteHistory(history)
   }
 
@@ -539,14 +589,33 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     const { data: dayVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).eq('day', prevDay)
 
-    if (dayVotes && dayVotes.length > 0) {
-      const counts: Record<string, number> = {}
-      dayVotes.forEach((v: any) => { counts[v.target_id] = (counts[v.target_id] || 0) + 1 })
-      const maxVotes = Math.max(...Object.values(counts))
-      const tied = Object.keys(counts).filter(uid => counts[uid] === maxVotes)
-      const eliminated = tied[Math.floor(Math.random() * tied.length)]
-      if (!newVotedOff.includes(eliminated)) {
-        newVotedOff = [...newVotedOff, eliminated]
+    if (prevDay >= 2) {
+      if (dayVotes && dayVotes.length > 0) {
+        // Normal vote elimination
+        const counts: Record<string, number> = {}
+        dayVotes.forEach((v: any) => { counts[v.target_id] = (counts[v.target_id] || 0) + 1 })
+        const maxVotes = Math.max(...Object.values(counts))
+        const tied = Object.keys(counts).filter(uid => counts[uid] === maxVotes)
+        const eliminated = tied[Math.floor(Math.random() * tied.length)]
+        if (!newVotedOff.includes(eliminated)) {
+          newVotedOff = [...newVotedOff, eliminated]
+        }
+      } else {
+        // No votes cast — rocks drawn, eliminate random player from losing tribe
+        const losingTribeKey = newResults.find(r => r.day === prevDay)?.immunity_winner === TRIBE_1
+          ? TRIBE_2
+          : TRIBE_1
+        const eligible = Object.entries(l.tribe_assignments ?? {})
+          .filter(([uid, tribe]) => !newVotedOff.includes(uid) && tribe === losingTribeKey)
+          .map(([uid]) => uid)
+        // Fallback: if merged or no eligible, pick from all active
+        const pool = eligible.length > 0
+          ? eligible
+          : Object.keys(l.tribe_assignments ?? {}).filter(uid => !newVotedOff.includes(uid))
+        if (pool.length > 0) {
+          const eliminated = pool[Math.floor(Math.random() * pool.length)]
+          newVotedOff = [...newVotedOff, eliminated]
+        }
       }
     }
 
@@ -947,8 +1016,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   {raroPlayers.length === 0 ? (
                     <p className="text-center italic text-zinc-600 text-sm">Loading players...</p>
                   ) : (
-                    <div className="grid grid-cols-10 gap-2">
-                      {raroPlayers.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {raroPlayers.map(p => (
+                        <div key={p.user_id} className="w-16">
+                          <PlayerAvatar player={p} size="sm" />
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -960,16 +1033,24 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#b45309' }}>
                         🔥 {TRIBE_1_NAME} Tribe
                       </p>
-                      <div className="grid grid-cols-9 gap-2">
-                        {tribe1Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {tribe1Players.map(p => (
+                          <div key={p.user_id} className="w-16">
+                            <PlayerAvatar player={p} size="sm" />
+                          </div>
+                        ))}
                       </div>
                     </div>
                     <div>
                       <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#1d4ed8' }}>
                         🌊 {TRIBE_2_NAME} Tribe
                       </p>
-                      <div className="grid grid-cols-9 gap-2">
-                        {tribe2Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {tribe2Players.map(p => (
+                          <div key={p.user_id} className="w-16">
+                            <PlayerAvatar player={p} size="sm" />
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </>
@@ -1020,6 +1101,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       onSend={() => sendMessage(isMerged ? TRIBE_RARO : TRIBE_1)}
                       scrollRef={chatRef}
                       getMessageDay={getMessageDay}
+                      onlineUserIds={onlineUserIds}
+                      onClickUsername={username => router.push(`/profile/${username}`)}
                     />
                   </div>
                 </div>
@@ -1050,6 +1133,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       onSend={() => sendMessage(TRIBE_2)}
                       scrollRef={chatRef}
                       getMessageDay={getMessageDay}
+                      onlineUserIds={onlineUserIds}
+                      onClickUsername={username => router.push(`/profile/${username}`)}
                     />
                   </div>
                 </div>
@@ -1150,46 +1235,106 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           )}
 
           {/* ── SUMMARY TAB ── */}
-          {activeTab === 'Summary' && (
-            <div className="p-5 h-full text-zinc-900 flex gap-5">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-2xl font-black uppercase tracking-widest mb-4">Castaways</h2>
-                <div className="grid grid-cols-6 gap-2">
-                  {[...players]
-                    .sort((a, b) => a.username.localeCompare(b.username))
-                    .map(player => <PlayerAvatar key={player.user_id} player={player} size="sm" />)}
-                </div>
-              </div>
+          {activeTab === 'Summary' && (() => {
+            // Build the ordered grid: active players first (alphabetical), then
+            // voted-off players in reverse elimination order (last out = leftmost
+            // of the bottom, first out = bottom-right)
+            const orderedActive = [...activePlayers].sort((a, b) => a.username.localeCompare(b.username))
+            // votedOffIds[0] = first eliminated, votedOffIds[last] = most recent
+            // We want most-recent at bottom-left, first-out at bottom-right
+            const orderedVotedOff = [...votedOffIds]
+              .map(id => players.find(p => p.user_id === id))
+              .filter(Boolean) as Player[]
+            // Reverse so bottom-right = first eliminated
+            const votedOffReversed = [...orderedVotedOff].reverse()
+            const gridPlayers = [...orderedActive, ...votedOffReversed]
 
-              <div className="w-52 shrink-0 flex flex-col gap-3">
-                <h2 className="text-2xl font-black uppercase tracking-widest mb-1">Stats</h2>
-                <div className="rounded-xl p-3 border border-[#a07840] text-sm space-y-2" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
-                  <div><span className="text-zinc-600 text-xs uppercase font-bold">Players</span><p className="font-black text-xl">{activePlayers.length}/{MAX_PLAYERS}</p></div>
-                  <div><span className="text-zinc-600 text-xs uppercase font-bold">Day</span><p className="font-black text-xl">{currentDay}</p></div>
-                  <div><span className="text-zinc-600 text-xs uppercase font-bold">Online</span><p className="font-black text-xl">{onlineUserIds.size}</p></div>
-                </div>
+            function ordinal(n: number): string {
+              const s = ['th','st','nd','rd']
+              const v = n % 100
+              return n + (s[(v - 20) % 10] || s[v] || s[0])
+            }
 
-                {voteHistory.length > 0 && (
-                  <>
-                    <h3 className="font-black uppercase tracking-widest text-sm mt-1">Tribal History</h3>
-                    <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: '40vh' }}>
-                      {voteHistory.map(record => (
-                        <div key={record.day} className="rounded-xl p-3 border border-[#a07840] text-xs" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
-                          <p className="font-black uppercase tracking-wide mb-1">Day {record.day}</p>
-                          <p className="font-bold text-red-800 mb-1">🪦 {record.username}</p>
-                          <div className="space-y-0.5">
-                            {Object.entries(record.vote_counts).map(([name, count]) => (
-                              <p key={name} className="text-zinc-700">{name}: {count} vote{count !== 1 ? 's' : ''}</p>
-                            ))}
+            return (
+              <div className="p-5 h-full text-zinc-900 flex gap-5">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-2xl font-black uppercase tracking-widest mb-4">Castaways</h2>
+                  <div className="grid grid-cols-6 gap-2">
+                    {gridPlayers.map((player, idx) => {
+                      const isVotedOff = votedOffIds.includes(player.user_id)
+                      // Placement: voted off players get placement from the end
+                      // votedOffReversed[0] = last eliminated = placement (activePlayers.length + 1)
+                      // votedOffReversed[last] = first eliminated = placement MAX_PLAYERS
+                      const votedOffPosition = votedOffReversed.findIndex(p => p.user_id === player.user_id)
+                      const placement = isVotedOff ? (activePlayers.length + 1 + votedOffPosition) : null
+
+                      return (
+                        <div key={player.user_id} className="flex flex-col items-center gap-1">
+                          <div
+                            onClick={() => router.push(`/profile/${player.username}`)}
+                            className="cursor-pointer group w-full"
+                          >
+                            <div
+                              className="w-full aspect-[3/4] rounded-md overflow-hidden border-2 border-[#a07840] group-hover:border-amber-800 transition"
+                              style={{ filter: isVotedOff ? 'grayscale(100%)' : 'none' }}
+                            >
+                              {player.avatar_url ? (
+                                <img src={player.avatar_url} alt={player.username} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
+                                  <span className="text-sm font-black text-amber-900">{player.username.slice(0, 1).toUpperCase()}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
+                          <p className="text-[9px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
+                            {player.username}
+                          </p>
+                          {isVotedOff && placement !== null && (
+                            <div className="bg-zinc-200/80 rounded px-1.5 py-0.5 text-[8px] font-bold text-zinc-500 uppercase tracking-wide">
+                              {ordinal(placement)}
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  </>
-                )}
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="w-52 shrink-0 flex flex-col gap-3">
+                  <h2 className="text-2xl font-black uppercase tracking-widest mb-1">Stats</h2>
+                  <div className="rounded-xl p-3 border border-[#a07840] text-sm space-y-2" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
+                    <div><span className="text-zinc-600 text-xs uppercase font-bold">Players</span><p className="font-black text-xl">{activePlayers.length}/{MAX_PLAYERS}</p></div>
+                    <div><span className="text-zinc-600 text-xs uppercase font-bold">Day</span><p className="font-black text-xl">{currentDay}</p></div>
+                    <div><span className="text-zinc-600 text-xs uppercase font-bold">Online</span><p className="font-black text-xl">{onlineUserIds.size}</p></div>
+                  </div>
+
+                  {voteHistory.length > 0 && (
+                    <>
+                      <h3 className="font-black uppercase tracking-widest text-sm mt-1">Tribal History</h3>
+                      <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: '40vh' }}>
+                        {voteHistory.map(record => (
+                          <div key={record.day} className="rounded-xl p-3 border border-[#a07840] text-xs" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
+                            <p className="font-black uppercase tracking-wide text-sm mb-1">Day {record.day}</p>
+                            <p className="font-bold text-red-800 uppercase tracking-wide mb-1">🪦 {record.username}</p>
+                            {record.rocks_drawn ? (
+                              <p className="text-zinc-700 uppercase font-bold tracking-wide text-xs">Rocks Were Drawn</p>
+                            ) : (
+                              <div className="space-y-0.5">
+                                {Object.entries(record.vote_counts).map(([name, count]) => (
+                                  <p key={name} className="text-zinc-700 uppercase font-semibold tracking-wide">{name}: {count} VOTE{count !== 1 ? 'S' : ''}</p>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
         </div>
       </div>
