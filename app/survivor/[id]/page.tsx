@@ -991,9 +991,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   {raroPlayers.length === 0 ? (
                     <p className="text-center italic text-zinc-600 text-sm">Loading players...</p>
                   ) : (
-                    <div className="grid grid-cols-9 gap-2">
+                    <div className="flex flex-wrap justify-center gap-2">
                       {raroPlayers.map(p => (
-                        <PlayerAvatar key={p.user_id} player={p} size="sm" />
+                        <div key={p.user_id} style={{ width: 'calc(11.11% - 8px)' }}>
+                          <PlayerAvatar player={p} size="sm" />
+                        </div>
                       ))}
                     </div>
                   )}
@@ -1004,9 +1006,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: '#b45309' }}>
                       🔥 {TRIBE_1_NAME} Tribe
                     </p>
-                    <div className="grid grid-cols-9 gap-2">
+                    <div className="flex flex-wrap justify-center gap-2">
                       {tribe1Players.map(p => (
-                        <PlayerAvatar key={p.user_id} player={p} size="sm" />
+                        <div key={p.user_id} style={{ width: 'calc(11.11% - 8px)' }}>
+                          <PlayerAvatar player={p} size="sm" />
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -1014,9 +1018,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: '#1d4ed8' }}>
                       🌊 {TRIBE_2_NAME} Tribe
                     </p>
-                    <div className="grid grid-cols-9 gap-2">
+                    <div className="flex flex-wrap justify-center gap-2">
                       {tribe2Players.map(p => (
-                        <PlayerAvatar key={p.user_id} player={p} size="sm" />
+                        <div key={p.user_id} style={{ width: 'calc(11.11% - 8px)' }}>
+                          <PlayerAvatar player={p} size="sm" />
+                        </div>
                       ))}
                     </div>
                   </div>
