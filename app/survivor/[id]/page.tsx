@@ -136,19 +136,49 @@ export default function SeasonPage({
     if (error || !data || data.length === 0) { setPlayers([]); return }
 
     const userIds = data.map((p) => p.user_id)
-    const { data: profileData } = await supabase
+
+    // Try matching on 'user_id' column first, fall back to 'id' column
+    const { data: profileByUserId } = await supabase
+      .from('profiles').select('user_id, username, avatar_url').in('user_id', userIds)
+
+    if (profileByUserId && profileByUserId.length > 0) {
+      const profileMap = Object.fromEntries(
+        profileByUserId.map((p) => [p.user_id, { username: p.username, avatar_url: p.avatar_url }])
+      )
+      setPlayers(data.map((p) => ({
+        id: p.id,
+        user_id: p.user_id,
+        username: profileMap[p.user_id]?.username || p.user_id.slice(0, 8),
+        avatar_url: profileMap[p.user_id]?.avatar_url || null,
+      })))
+      return
+    }
+
+    // Fallback: profiles table uses 'id' as PK matching auth user id
+    const { data: profileById } = await supabase
       .from('profiles').select('id, username, avatar_url').in('id', userIds)
 
     const profileMap = Object.fromEntries(
-      (profileData || []).map((p) => [p.id, { username: p.username, avatar_url: p.avatar_url }])
+      (profileById || []).map((p) => [p.id, { username: p.username, avatar_url: p.avatar_url }])
     )
-
     setPlayers(data.map((p) => ({
       id: p.id,
       user_id: p.user_id,
       username: profileMap[p.user_id]?.username || p.user_id.slice(0, 8),
       avatar_url: profileMap[p.user_id]?.avatar_url || null,
     })))
+  }
+
+  // Helper: resolve sender IDs -> usernames, handles both 'id' and 'user_id' PK shapes
+  async function resolveUsernames(senderIds: string[]): Promise<Record<string, string>> {
+    const { data: byUserId } = await supabase
+      .from('profiles').select('user_id, username').in('user_id', senderIds)
+    if (byUserId && byUserId.length > 0) {
+      return Object.fromEntries(byUserId.map((p: any) => [p.user_id, p.username]))
+    }
+    const { data: byId } = await supabase
+      .from('profiles').select('id, username').in('id', senderIds)
+    return Object.fromEntries((byId || []).map((p: any) => [p.id, p.username]))
   }
 
   // LOAD MESSAGES (camp chat)
@@ -160,8 +190,7 @@ export default function SeasonPage({
     if (error || !data || data.length === 0) { setMessages([]); return }
 
     const senderIds = [...new Set(data.map((m) => m.sender_id))]
-    const { data: profileData } = await supabase.from('profiles').select('id, username').in('id', senderIds)
-    const profileMap = Object.fromEntries((profileData || []).map((p) => [p.id, p.username]))
+    const profileMap = await resolveUsernames(senderIds)
     setMessages(data.map((m) => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
   }
 
@@ -174,8 +203,7 @@ export default function SeasonPage({
     if (error || !data || data.length === 0) { setLobbyMessages([]); return }
 
     const senderIds = [...new Set(data.map((m) => m.sender_id))]
-    const { data: profileData } = await supabase.from('profiles').select('id, username').in('id', senderIds)
-    const profileMap = Object.fromEntries((profileData || []).map((p) => [p.id, p.username]))
+    const profileMap = await resolveUsernames(senderIds)
     setLobbyMessages(data.map((m) => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
   }
 
@@ -236,7 +264,7 @@ export default function SeasonPage({
 
   // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
-    <main className="min-h-screen bg-zinc-950 text-white flex gap-5 px-5 pb-5 pt-8">
+    <main className="min-h-screen bg-zinc-950 text-white flex gap-5 px-5 pb-5 pt-8 justify-center">
 
       {/* ══ LEFT COLUMN ══ */}
       <aside className="w-64 shrink-0 flex flex-col gap-4">
@@ -269,7 +297,7 @@ export default function SeasonPage({
                 onClick={() => setActiveTab(tab)}
                 className={`
                   relative px-5 py-2 rounded-t-lg font-bold text-sm
-                  transition-all duration-150 select-none
+                  transition-all duration-150 select-none cursor-pointer
                   border-t border-l border-r
                   ${isActive
                     ? 'text-zinc-900 border-[#a07840] z-10 -mb-px pb-3 shadow-md'
