@@ -233,7 +233,7 @@ export default function SeasonPage({
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white flex gap-5 px-5 pb-5 pt-8 justify-center">
+    <main className="min-h-screen text-white flex gap-5 px-5 pb-5 pt-8 justify-center" style={{ backgroundImage: 'url(/castawaywallpaper.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
 
       {/* ══ LEFT COLUMN ══ */}
       <aside className="w-64 shrink-0 flex flex-col gap-4">
@@ -328,7 +328,8 @@ export default function SeasonPage({
             )
           })}
 
-          <div className="flex-1 max-w-[40px]" />
+          <div className="flex-1" />
+          <div className="w-[6px] shrink-0" />
 
           {(() => {
             const isActive = activeTab === TAB_SUMMARY
