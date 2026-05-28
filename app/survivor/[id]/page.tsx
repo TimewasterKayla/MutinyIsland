@@ -165,7 +165,7 @@ export default function SeasonPage({
   async function loadMessages() {
     const { data, error } = await supabase
       .from('messages').select('*').eq('season_id', lobbyId)
-      .eq('message_type', 'camp').order('created_at', { ascending: true })
+      .eq('topic', 'camp').order('created_at', { ascending: true })
     if (error || !data || data.length === 0) { setMessages([]); return }
     const senderIds = [...new Set(data.map((m) => m.sender_id))]
     const profileMap = await resolveUsernames(senderIds)
@@ -175,7 +175,7 @@ export default function SeasonPage({
   async function loadLobbyMessages() {
     const { data, error } = await supabase
       .from('messages').select('*').eq('season_id', lobbyId)
-      .eq('message_type', 'lobby').order('created_at', { ascending: true })
+      .eq('topic', 'lobby').order('created_at', { ascending: true })
     if (error || !data || data.length === 0) { setLobbyMessages([]); return }
     const senderIds = [...new Set(data.map((m) => m.sender_id))]
     const profileMap = await resolveUsernames(senderIds)
@@ -186,7 +186,7 @@ export default function SeasonPage({
     if (!text.trim() || !isPlayerInLobby) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    await supabase.from('messages').insert({ season_id: lobbyId, sender_id: user.id, content: text.trim(), message_type: 'camp' })
+    await supabase.from('messages').insert({ season_id: lobbyId, sender_id: user.id, content: text.trim(), topic: 'camp' })
     setText('')
     loadMessages()
   }
@@ -195,7 +195,7 @@ export default function SeasonPage({
     if (!lobbyText.trim() || !isPlayerInLobby) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    await supabase.from('messages').insert({ season_id: lobbyId, sender_id: user.id, content: lobbyText.trim(), message_type: 'lobby' })
+    await supabase.from('messages').insert({ season_id: lobbyId, sender_id: user.id, content: lobbyText.trim(), topic: 'lobby' })
     setLobbyText('')
     loadLobbyMessages()
   }
