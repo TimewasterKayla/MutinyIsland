@@ -30,10 +30,13 @@ type CurrentUserProfile = {
   created_at: string | null
 }
 
-type Tab = 'Lobby' | 'Camp' | 'Challenge Beach' | 'Tiki Court'
+type TabAll = Tab | 'Summary'
+
+type Tab = 'Lobby' | 'Camp' | 'Challenge Beach' | 'Tiki Court' | 'Summary'
 type CampSubPage = 'Camp 1' | 'Camp 2' | 'Jungle' | 'Water Well'
 
-const TABS: Tab[] = ['Lobby', 'Camp', 'Challenge Beach', 'Tiki Court']
+const TABS_LEFT: Tab[] = ['Lobby', 'Camp', 'Challenge Beach', 'Tiki Court']
+const TAB_SUMMARY: Tab = 'Summary'
 const CAMP_PAGES: CampSubPage[] = ['Camp 1', 'Camp 2', 'Jungle', 'Water Well']
 const MAX_PLAYERS = 18
 
@@ -65,6 +68,7 @@ export default function SeasonPage({
   const [activeTab, setActiveTab] = useState<Tab>('Lobby')
   const [campPage, setCampPage] = useState<CampSubPage>('Camp 1')
   const [currentUserProfile, setCurrentUserProfile] = useState<CurrentUserProfile | null>(null)
+  const [profileLoaded, setProfileLoaded] = useState(false)
 
   const chatRef = useRef<HTMLDivElement>(null)
   const lobbyChatRef = useRef<HTMLDivElement>(null)
@@ -99,13 +103,15 @@ export default function SeasonPage({
 
   async function loadCurrentUserProfile() {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase
+    if (!user) { setProfileLoaded(true); return }
+    const { data, error } = await supabase
       .from('profiles')
       .select('id, username, avatar, rank, coins, crowns, created_at')
       .eq('id', user.id)
       .maybeSingle()
+    if (error) console.error('PROFILE CARD ERROR:', error)
     if (data) setCurrentUserProfile(data)
+    setProfileLoaded(true)
   }
 
   // AUTO SCROLL
@@ -304,7 +310,11 @@ export default function SeasonPage({
 
           {/* Avatar */}
           <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-zinc-800 border border-zinc-700">
-            {currentUserProfile?.avatar ? (
+            {!profileLoaded ? (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
+              </div>
+            ) : currentUserProfile?.avatar ? (
               <Image
                 src={currentUserProfile.avatar}
                 alt="Avatar"
@@ -322,7 +332,11 @@ export default function SeasonPage({
           {/* Username */}
           <div className="mt-2 text-center">
             <h1 className="text-xl font-bold text-white">
-              {currentUserProfile?.username ?? '—'}
+              {!profileLoaded ? (
+                <span className="text-zinc-600">Loading...</span>
+              ) : (
+                currentUserProfile?.username ?? 'Unknown'
+              )}
             </h1>
           </div>
 
@@ -361,7 +375,8 @@ export default function SeasonPage({
 
         {/* Wooden folder tabs */}
         <div className="flex items-end gap-1 px-1">
-          {TABS.map((tab) => {
+          {/* Main tabs — left side */}
+          {TABS_LEFT.map((tab) => {
             const isActive = activeTab === tab
             return (
               <button
@@ -385,6 +400,34 @@ export default function SeasonPage({
               </button>
             )
           })}
+
+          {/* Spacer pushes Summary to the far right */}
+          <div className="flex-1" />
+
+          {/* Summary tab — far right */}
+          {(() => {
+            const isActive = activeTab === TAB_SUMMARY
+            return (
+              <button
+                onClick={() => setActiveTab(TAB_SUMMARY)}
+                className={`
+                  relative px-5 py-2 rounded-t-lg font-bold text-xs tracking-widest
+                  transition-all duration-150 select-none cursor-pointer uppercase
+                  border-t border-l border-r
+                  ${isActive
+                    ? 'text-zinc-900 border-[#a07840] z-10 -mb-px pb-3 shadow-md'
+                    : 'text-[#e8d0a0] border-[#6b4820] hover:text-[#f0ddb0]'
+                  }
+                `}
+                style={{
+                  background: isActive ? '#c8a96e' : '#8b6840',
+                  backgroundImage: isActive ? WOOD_GRAIN : WOOD_GRAIN_DARK,
+                }}
+              >
+                Summary
+              </button>
+            )
+          })()}
         </div>
 
         {/* Tab panel */}
@@ -397,9 +440,18 @@ export default function SeasonPage({
           {activeTab === 'Lobby' && (
             <div className="p-5 h-full flex flex-col text-zinc-900">
 
-              <h2 className="text-2xl font-black uppercase tracking-widest text-center mb-4">
-                Players
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-24" />
+                <h2 className="text-2xl font-black uppercase tracking-widest text-center">
+                  Players
+                </h2>
+                <div className="w-24 flex justify-end">
+                  <button className="flex items-center gap-1.5 bg-sky-400 hover:bg-sky-500 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow">
+                    <img src="/info.png" alt="Info" className="w-4 h-4" />
+                    Info
+                  </button>
+                </div>
+              </div>
 
               {/* Avatar grid — 2 rows of 9 */}
               <div className="grid grid-cols-9 gap-3 mb-4">
@@ -508,13 +560,46 @@ export default function SeasonPage({
                 ))}
               </div>
 
-              {/* Camp 1 / Camp 2 — chat on RIGHT half */}
+              {/* Camp 1 / Camp 2 — chat fills full vertical height on right half */}
               {(campPage === 'Camp 1' || campPage === 'Camp 2') && (
-                <div className="flex gap-4 flex-1 min-h-0">
+                <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
                   {/* Left half — empty for future content */}
                   <div className="w-1/2" />
-                  {/* Chat — right half */}
-                  <CampChatBox />
+                  {/* Chat — right half, full height */}
+                  <div className="w-1/2 flex flex-col min-h-0 h-full">
+                    <h2 className="text-xl font-bold mb-3 shrink-0">{campPage} Chat</h2>
+                    <div
+                      ref={chatRef}
+                      className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0"
+                    >
+                      {messages.map((m) => (
+                        <div key={m.id} className="bg-[#b8955a] p-3 rounded">
+                          <div className="flex justify-between mb-1">
+                            <p className="text-yellow-800 font-bold text-sm">{m.username}</p>
+                            <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
+                          </div>
+                          <p className="text-sm">{m.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 mt-2 shrink-0">
+                      <input
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        disabled={!isPlayerInLobby}
+                        className="flex-1 bg-[#b8955a] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
+                        placeholder={isPlayerInLobby ? 'Type message...' : 'Join to chat'}
+                        onKeyDown={(e) => { if (e.key === 'Enter') sendMessage() }}
+                      />
+                      <button
+                        onClick={sendMessage}
+                        disabled={!isPlayerInLobby}
+                        className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -534,8 +619,10 @@ export default function SeasonPage({
 
           {/* ── CHALLENGE BEACH TAB ── */}
           {activeTab === 'Challenge Beach' && (
-            <div className="p-5 h-full text-zinc-900">
-              <h2 className="text-2xl font-bold mb-6">Challenge Beach</h2>
+            <div className="p-5 h-full text-zinc-900 flex flex-col items-center justify-center gap-6">
+              <h2 className="text-2xl font-black uppercase tracking-widest text-center">
+                Challenge Beach
+              </h2>
               <div className="flex gap-4">
                 <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-yellow-600 text-white border-2 border-yellow-700 hover:bg-yellow-700 transition shadow-md cursor-pointer">
                   Immunity Challenge
@@ -575,6 +662,14 @@ export default function SeasonPage({
                   Cast Vote
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ── SUMMARY TAB ── */}
+          {activeTab === 'Summary' && (
+            <div className="p-5 h-full text-zinc-900">
+              <h2 className="text-2xl font-black uppercase tracking-widest mb-4">Summary</h2>
+              <p className="italic text-zinc-600">Season summary coming soon...</p>
             </div>
           )}
 
