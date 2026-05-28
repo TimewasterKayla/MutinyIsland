@@ -57,6 +57,12 @@ export default function SeasonPage({
   const [activeTab, setActiveTab] = useState<Tab>('Lobby')
   const [campPage, setCampPage] = useState<CampSubPage>('Camp 1')
 
+  // Online presence tracking
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set())
+
+  // Loading dots animation state
+  const [dotCount, setDotCount] = useState(1)
+
   // Extra stats for the profile card sidebar
   const [rank, setRank] = useState<string | null>(null)
   const [coins, setCoins] = useState<number | null>(null)
@@ -123,6 +129,34 @@ export default function SeasonPage({
   useEffect(() => {
     if (lobbyChatRef.current) lobbyChatRef.current.scrollTop = lobbyChatRef.current.scrollHeight
   }, [lobbyMessages])
+
+  // PRESENCE — track who is online in this lobby
+  useEffect(() => {
+    if (!lobbyId || !currentUserId) return
+    const channel = supabase.channel(`presence:${lobbyId}`, {
+      config: { presence: { key: currentUserId } },
+    })
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState<{ user_id: string }>()
+        const ids = new Set(Object.keys(state))
+        setOnlineUserIds(ids)
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ user_id: currentUserId })
+        }
+      })
+    return () => { supabase.removeChannel(channel) }
+  }, [lobbyId, currentUserId])
+
+  // LOADING DOTS animation
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDotCount((d) => (d >= 3 ? 1 : d + 1))
+    }, 500)
+    return () => clearInterval(interval)
+  }, [])
 
   // ── id is passed in as a param to avoid stale-closure bugs from async lobbyId state ──
 
@@ -446,17 +480,34 @@ export default function SeasonPage({
                 })}
               </div>
 
-              <p className="italic text-zinc-700 text-sm mb-3">Waiting for players ({players.length}/{MAX_PLAYERS})</p>
+              <p className="italic text-zinc-700 text-sm mb-3">
+                Waiting for players ({players.length}/{MAX_PLAYERS})<span className="inline-block w-6 text-left">{'.'.repeat(dotCount)}</span>
+              </p>
 
               <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
                 <h3 className="font-bold text-base mb-2">Lobby Chat</h3>
                 <div ref={lobbyChatRef} className="overflow-y-auto space-y-2 mb-2 pr-1" style={{ flex: 1, minHeight: 0 }}>
-                  {lobbyMessages.map((m) => (
-                    <div key={m.id} className="bg-[#c8a96e] p-2 rounded text-sm">
-                      <span className="font-bold text-amber-900 mr-2">{m.username}</span>
-                      <span>{m.content}</span>
-                    </div>
-                  ))}
+                  {lobbyMessages.map((m) => {
+                    const isOnline = onlineUserIds.has(m.sender_id)
+                    return (
+                      <div key={m.id} className="bg-[#c8a96e] p-2 rounded text-sm">
+                        <span className="inline-flex items-center gap-1.5 mr-2">
+                          <span
+                            className="inline-block w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 4px #22c55e' : 'none' }}
+                          />
+                          <span
+                            className="font-bold text-amber-900 cursor-pointer hover:underline"
+                            style={{ textTransform: 'uppercase' }}
+                            onClick={() => router.push(`/profile/${m.username}`)}
+                          >
+                            {m.username}
+                          </span>
+                        </span>
+                        <span>{m.content}</span>
+                      </div>
+                    )
+                  })}
                 </div>
                 <div className="flex gap-2">
                   <input
@@ -498,29 +549,31 @@ export default function SeasonPage({
                   <div className="w-1/2" />
                   <div className="w-1/2 flex flex-col min-h-0 h-full">
                     <h2 className="text-xl font-bold mb-3 shrink-0">{campPage} Chat</h2>
-                    <div ref={chatRef} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
-                      {messages.map((m) => (
-                        <div key={m.id} className="bg-[#b8955a] p-3 rounded">
-                          <div className="flex justify-between mb-1">
-                            <p className="text-yellow-800 font-bold text-sm">{m.username}</p>
-                            <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
+                    <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
+                      <div ref={chatRef} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
+                        {messages.map((m) => (
+                          <div key={m.id} className="bg-[#b8955a] p-3 rounded">
+                            <div className="flex justify-between mb-1">
+                              <p className="text-yellow-800 font-bold text-sm">{m.username}</p>
+                              <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
+                            </div>
+                            <p className="text-sm">{m.content}</p>
                           </div>
-                          <p className="text-sm">{m.content}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2 mt-2 shrink-0">
-                      <input
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        disabled={!isPlayerInLobby}
-                        className="flex-1 bg-[#b8955a] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
-                        placeholder={isPlayerInLobby ? 'Type message...' : 'Join to chat'}
-                        onKeyDown={(e) => { if (e.key === 'Enter') sendMessage() }}
-                      />
-                      <button onClick={sendMessage} disabled={!isPlayerInLobby} className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer">
-                        Send
-                      </button>
+                        ))}
+                      </div>
+                      <div className="flex gap-2 mt-2 shrink-0">
+                        <input
+                          value={text}
+                          onChange={(e) => setText(e.target.value)}
+                          disabled={!isPlayerInLobby}
+                          className="flex-1 bg-[#c8a96e] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
+                          placeholder={isPlayerInLobby ? 'Type message...' : 'Join to chat'}
+                          onKeyDown={(e) => { if (e.key === 'Enter') sendMessage() }}
+                        />
+                        <button onClick={sendMessage} disabled={!isPlayerInLobby} className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer">
+                          Send
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -580,9 +633,44 @@ export default function SeasonPage({
 
           {/* ── SUMMARY TAB ── */}
           {activeTab === 'Summary' && (
-            <div className="p-5 h-full text-zinc-900">
-              <h2 className="text-2xl font-black uppercase tracking-widest mb-4">Summary</h2>
-              <p className="italic text-zinc-600">Season summary coming soon...</p>
+            <div className="p-5 h-full text-zinc-900 flex gap-5">
+              {/* Left column — player grid */}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-2xl font-black uppercase tracking-widest mb-4">Castaways</h2>
+                <div className="grid grid-cols-4 gap-3">
+                  {[...players]
+                    .sort((a, b) => a.username.localeCompare(b.username))
+                    .map((player) => (
+                      <div
+                        key={player.user_id}
+                        onClick={() => router.push(`/profile/${player.username}`)}
+                        className="flex flex-col items-center gap-1 cursor-pointer group"
+                      >
+                        <div className="w-full aspect-[3/4] rounded-md overflow-hidden border-2 border-[#a07840] group-hover:border-amber-800 transition">
+                          {player.avatar_url ? (
+                            <img src={player.avatar_url} alt={player.username} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
+                              <span className="text-xl font-black text-amber-900">{player.username.slice(0, 1).toUpperCase()}</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-[10px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
+                          {player.username}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+              {/* Right column — info/stats */}
+              <div className="w-48 shrink-0 flex flex-col gap-3">
+                <h2 className="text-2xl font-black uppercase tracking-widest mb-1">Stats</h2>
+                <div className="rounded-xl p-3 border border-[#a07840] text-sm space-y-2" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
+                  <div><span className="text-zinc-600 text-xs uppercase font-bold">Players</span><p className="font-black text-xl">{players.length}/{MAX_PLAYERS}</p></div>
+                  <div><span className="text-zinc-600 text-xs uppercase font-bold">Day</span><p className="font-black text-xl">{day}</p></div>
+                  <div><span className="text-zinc-600 text-xs uppercase font-bold">Online</span><p className="font-black text-xl">{onlineUserIds.size}</p></div>
+                </div>
+              </div>
             </div>
           )}
 
