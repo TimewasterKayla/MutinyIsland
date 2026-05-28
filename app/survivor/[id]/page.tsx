@@ -137,48 +137,30 @@ export default function SeasonPage({
 
     const userIds = data.map((p) => p.user_id)
 
-    // Try matching on 'user_id' column first, fall back to 'id' column
-    const { data: profileByUserId } = await supabase
-      .from('profiles').select('user_id, username, avatar_url').in('user_id', userIds)
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, username, avatar')
+      .in('id', userIds)
 
-    if (profileByUserId && profileByUserId.length > 0) {
-      const profileMap = Object.fromEntries(
-        profileByUserId.map((p) => [p.user_id, { username: p.username, avatar_url: p.avatar_url }])
-      )
-      setPlayers(data.map((p) => ({
-        id: p.id,
-        user_id: p.user_id,
-        username: profileMap[p.user_id]?.username || p.user_id.slice(0, 8),
-        avatar_url: profileMap[p.user_id]?.avatar_url || null,
-      })))
-      return
-    }
-
-    // Fallback: profiles table uses 'id' as PK matching auth user id
-    const { data: profileById } = await supabase
-      .from('profiles').select('id, username, avatar_url').in('id', userIds)
+    if (profileError) console.error('PROFILE ERROR:', profileError)
 
     const profileMap = Object.fromEntries(
-      (profileById || []).map((p) => [p.id, { username: p.username, avatar_url: p.avatar_url }])
+      (profileData || []).map((p) => [p.id, { username: p.username, avatar: p.avatar }])
     )
+
     setPlayers(data.map((p) => ({
       id: p.id,
       user_id: p.user_id,
       username: profileMap[p.user_id]?.username || p.user_id.slice(0, 8),
-      avatar_url: profileMap[p.user_id]?.avatar_url || null,
+      avatar_url: profileMap[p.user_id]?.avatar || null,
     })))
   }
 
-  // Helper: resolve sender IDs -> usernames, handles both 'id' and 'user_id' PK shapes
+  // Helper: resolve sender IDs -> usernames
   async function resolveUsernames(senderIds: string[]): Promise<Record<string, string>> {
-    const { data: byUserId } = await supabase
-      .from('profiles').select('user_id, username').in('user_id', senderIds)
-    if (byUserId && byUserId.length > 0) {
-      return Object.fromEntries(byUserId.map((p: any) => [p.user_id, p.username]))
-    }
-    const { data: byId } = await supabase
+    const { data } = await supabase
       .from('profiles').select('id, username').in('id', senderIds)
-    return Object.fromEntries((byId || []).map((p: any) => [p.id, p.username]))
+    return Object.fromEntries((data || []).map((p: any) => [p.id, p.username]))
   }
 
   // LOAD MESSAGES (camp chat)
