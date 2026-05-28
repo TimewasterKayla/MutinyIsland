@@ -21,6 +21,8 @@ type Message = {
   username?: string
   created_at?: string
   topic?: string
+  is_whisper?: boolean
+  whisper_to?: string | null   // user_id of recipient
 }
 
 type Tab = 'Players' | 'Camp' | 'Challenge Beach' | 'Tiki Court' | 'Summary'
@@ -91,42 +93,72 @@ type ChatPanelProps = {
   messages: Message[]
   text: string
   setText: (v: string) => void
-  onSend: () => void
+  onSend: (whisperTo: string | null) => void
   scrollRef: React.RefObject<HTMLDivElement | null>
   getMessageDay: (createdAt?: string) => number
   onlineUserIds: Set<string>
   onClickUsername: (username: string) => void
+  tribeMembers: { user_id: string; username: string }[]
+  currentUserId: string
 }
 
-function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollRef, getMessageDay, onlineUserIds, onClickUsername }: ChatPanelProps) {
+function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollRef, getMessageDay, onlineUserIds, onClickUsername, tribeMembers, currentUserId }: ChatPanelProps) {
+  const [whisperOn,        setWhisperOn]        = useState(false)
+  const [whisperTarget,    setWhisperTarget]    = useState('')
+  const [whisperError,     setWhisperError]     = useState(false)
+
   const tribeMessages = messages.filter(m => m.topic === tribeKey)
+
+  function handleSend() {
+    if (whisperOn) {
+      if (!whisperTarget) { setWhisperError(true); return }
+      setWhisperError(false)
+      onSend(whisperTarget)
+    } else {
+      setWhisperError(false)
+      onSend(null)
+    }
+  }
+
   return (
     <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
       <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
         {tribeMessages.map(m => {
           const isOnline = onlineUserIds.has(m.sender_id)
+          const isWhisper = !!m.is_whisper
           return (
-            <div key={m.id} className="bg-[#b8955a] p-3 rounded">
+            <div
+              key={m.id}
+              className={`p-3 rounded ${isWhisper ? 'bg-red-900/30 border border-red-800/40' : 'bg-[#b8955a]'}`}
+            >
               <div className="flex justify-between mb-1">
                 <span className="inline-flex items-center gap-1.5">
                   <span
                     className="inline-block w-2 h-2 rounded-full shrink-0"
                     style={{ backgroundColor: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 4px #22c55e' : 'none' }}
                   />
-                  <span
-                    className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
-                    onClick={() => onClickUsername(m.username ?? '')}
-                  >
-                    {m.username}
-                  </span>
+                  {isWhisper ? (
+                    <span className="text-red-300 font-bold text-sm italic">
+                      [Whisper from {m.username}]
+                    </span>
+                  ) : (
+                    <span
+                      className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
+                      onClick={() => onClickUsername(m.username ?? '')}
+                    >
+                      {m.username}
+                    </span>
+                  )}
                 </span>
                 <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
               </div>
-              <p className="text-sm">{m.content}</p>
+              <p className={`text-sm ${isWhisper ? 'italic text-red-100' : ''}`}>{m.content}</p>
             </div>
           )
         })}
       </div>
+
+      {/* Send row */}
       <div className="flex gap-2 mt-2 shrink-0">
         <input
           value={text}
@@ -134,16 +166,59 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
           disabled={!canChat}
           className="flex-1 bg-[#c8a96e] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
           placeholder={canChat ? 'Type message...' : 'You cannot chat here'}
-          onKeyDown={e => { if (e.key === 'Enter') onSend() }}
+          onKeyDown={e => { if (e.key === 'Enter') handleSend() }}
         />
         <button
-          onClick={onSend}
+          onClick={handleSend}
           disabled={!canChat}
           className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer"
         >
           Send
         </button>
       </div>
+
+      {/* Whisper row */}
+      {canChat && (
+        <div className="mt-1.5 shrink-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={whisperOn}
+                onChange={e => {
+                  setWhisperOn(e.target.checked)
+                  setWhisperError(false)
+                  if (!e.target.checked) setWhisperTarget('')
+                }}
+                className="w-3.5 h-3.5 accent-red-700 cursor-pointer"
+              />
+              <span
+                className="text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded"
+                style={{ background: '#b94040', color: '#ffe0e0' }}
+              >
+                Whisper?
+              </span>
+            </label>
+            {whisperOn && (
+              <select
+                value={whisperTarget}
+                onChange={e => { setWhisperTarget(e.target.value); setWhisperError(false) }}
+                className="flex-1 bg-[#c8a96e] border border-[#a07840] rounded text-xs px-2 py-1 outline-none focus:ring-1 focus:ring-red-700 text-zinc-900 cursor-pointer"
+              >
+                <option value="">Whisper to...</option>
+                {tribeMembers
+                  .filter(p => p.user_id !== currentUserId)
+                  .map(p => (
+                    <option key={p.user_id} value={p.user_id}>{p.username}</option>
+                  ))}
+              </select>
+            )}
+          </div>
+          {whisperError && (
+            <p className="text-red-700 text-xs italic mt-1">No recipient selected.</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -497,9 +572,14 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       .in('topic', [TRIBE_1, TRIBE_2, TRIBE_RARO])
       .order('created_at', { ascending: true })
     if (error || !data || data.length === 0) { setMessages([]); return }
-    const senderIds = [...new Set(data.map(m => m.sender_id))]
+    const uid = currentUserIdRef.current
+    // Keep non-whispers, plus whispers where I'm the sender or recipient
+    const visible = data.filter((m: any) =>
+      !m.is_whisper || m.sender_id === uid || m.whisper_to === uid
+    )
+    const senderIds = [...new Set(visible.map((m: any) => m.sender_id))]
     const profileMap = await resolveUsernames(senderIds)
-    setMessages(data.map(m => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
+    setMessages(visible.map((m: any) => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
   }
 
   async function loadLobbyMessages(id: string) {
@@ -760,12 +840,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   // ─── Chat & voting ───────────────────────────────────────────────────────
 
-  async function sendMessage(tribeKey: string) {
+  async function sendMessage(tribeKey: string, whisperTo: string | null = null) {
     if (!text.trim() || !lobbyId || !iAmActive) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     await supabase.from('messages').insert({
-      season_id: lobbyId, sender_id: user.id, content: text.trim(), topic: tribeKey,
+      season_id: lobbyId,
+      sender_id: user.id,
+      content: text.trim(),
+      topic: tribeKey,
+      ...(whisperTo ? { is_whisper: true, whisper_to: whisperTo } : {}),
     })
     setText('')
     loadMessages(lobbyId)
@@ -1375,11 +1459,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       messages={messages}
                       text={text}
                       setText={setText}
-                      onSend={() => sendMessage(isMerged ? TRIBE_RARO : TRIBE_1)}
+                      onSend={(whisperTo) => sendMessage(isMerged ? TRIBE_RARO : TRIBE_1, whisperTo)}
                       scrollRef={chatRef}
                       getMessageDay={getMessageDay}
                       onlineUserIds={onlineUserIds}
                       onClickUsername={username => router.push(`/profile/${username}`)}
+                      tribeMembers={isMerged ? raroPlayers : tribe1Players}
+                      currentUserId={_uid}
                     />
                   </div>
                 </div>
@@ -1407,11 +1493,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       messages={messages}
                       text={text}
                       setText={setText}
-                      onSend={() => sendMessage(TRIBE_2)}
+                      onSend={(whisperTo) => sendMessage(TRIBE_2, whisperTo)}
                       scrollRef={chatRef}
                       getMessageDay={getMessageDay}
                       onlineUserIds={onlineUserIds}
                       onClickUsername={username => router.push(`/profile/${username}`)}
+                      tribeMembers={tribe2Players}
+                      currentUserId={_uid}
                     />
                   </div>
                 </div>
