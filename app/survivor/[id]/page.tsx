@@ -1069,27 +1069,27 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
               {!gameStarted ? (
                 <>
-                  {/* CHANGED: grid-cols-9 → grid-cols-6, removed fixed aspect-[3/4] in favour of taller cards */}
-                  <div className="grid grid-cols-6 gap-3 mb-4">
+                  {/* 2 rows of 9 small avatars */}
+                  <div className="grid grid-cols-9 gap-2 mb-2 shrink-0">
                     {Array.from({ length: MAX_PLAYERS }).map((_, i) => {
                       const player = players[i]
                       return (
                         <div
                           key={i}
                           onClick={() => player && router.push(`/profile/${player.username}`)}
-                          className={`flex flex-col items-center gap-1 ${player ? 'cursor-pointer group' : ''}`}
+                          className={`flex flex-col items-center gap-0.5 ${player ? 'cursor-pointer group' : ''}`}
                         >
-                          <div className={`w-full aspect-[3/4] rounded-md overflow-hidden border-2 ${player ? 'border-[#a07840] group-hover:border-amber-800 transition' : 'border-dashed border-[#a07840]/40 bg-[#b8955a]/40'}`}>
+                          <div className={`w-full aspect-square rounded-full overflow-hidden border-2 ${player ? 'border-[#a07840] group-hover:border-amber-800 transition' : 'border-dashed border-[#a07840]/40 bg-[#b8955a]/40'}`}>
                             {player?.avatar_url ? (
                               <img src={player.avatar_url} alt={player.username} className="w-full h-full object-cover" />
                             ) : player ? (
                               <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
-                                <span className="text-2xl font-black text-amber-900">{player.username.slice(0, 1).toUpperCase()}</span>
+                                <span className="text-xs font-black text-amber-900">{player.username.slice(0, 1).toUpperCase()}</span>
                               </div>
                             ) : null}
                           </div>
                           {player && (
-                            <p className="text-xs font-semibold text-center leading-tight text-zinc-800 truncate w-full">
+                            <p className="text-[9px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                               {player.username}
                             </p>
                           )}
@@ -1098,14 +1098,14 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     })}
                   </div>
 
-                  <p className="italic text-zinc-700 text-sm mb-3">
+                  <p className="italic text-zinc-700 text-xs mb-2 shrink-0">
                     Waiting for players ({players.length}/{MAX_PLAYERS})
                     <span className="inline-block w-6 text-left">{'.'.repeat(dotCount)}</span>
                   </p>
 
                   <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
-                    <h3 className="font-bold text-base mb-2 uppercase tracking-widest">Lobby Chat</h3>
-                    <div ref={lobbyChatRef} className="overflow-y-auto space-y-2 mb-2 pr-1" style={{ flex: 1, minHeight: 0 }}>
+                    <h3 className="font-bold text-base mb-2 uppercase tracking-widest shrink-0">Lobby Chat</h3>
+                    <div ref={lobbyChatRef} className="overflow-y-auto space-y-2 mb-2 pr-1 flex-1 min-h-0">
                       {lobbyMessages.map(m => {
                         const isOnline = onlineUserIds.has(m.sender_id)
                         return (
@@ -1127,7 +1127,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         )
                       })}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                       <input
                         value={lobbyText}
                         onChange={e => setLobbyText(e.target.value)}
