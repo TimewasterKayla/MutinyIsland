@@ -608,8 +608,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   useEffect(() => {
     if (!lobbyId || !gameStarted) return
-    loadVoteHistory(lobbyId)
-  }, [lobbyId, gameStarted, votedOffIds.length])
+    loadVoteHistory(lobbyId, currentDay)
+  }, [lobbyId, gameStarted, votedOffIds.length, currentDay])
 
   // ─── If active tab becomes locked, redirect to Players ───────────────────
 
@@ -689,19 +689,25 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     setLobbyMessages(data.map(m => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
   }
 
-  async function loadVoteHistory(id: string) {
+  async function loadVoteHistory(id: string, knownCurrentDay?: number) {
     const l = lobbyRef.current
     const votedOffList: string[] = l?.voted_off ?? []
-    const completedUpToDay = (l?.current_day ?? 1) - 1  // votes are tallied for days before the current one
 
     if (votedOffList.length === 0) { setVoteHistory([]); return }
 
-    // Fetch all votes for this lobby up through completed days only
+    // Use the passed-in day (from state, always fresh) or fall back to lobbyRef
+    const currentDayVal = knownCurrentDay ?? l?.current_day ?? 1
+    // Votes are cast during a day and tallied when that day ends (day advances).
+    // The eliminated player for round N is determined by votes cast on day N.
+    // When we're on day D, rounds 2..D-1 are fully complete.
+    // We include up to day D (current day) because the just-completed round's
+    // votes are on day D-1 but the lobby may already be on day D.
+    // Safest: just fetch ALL votes and filter out day 9999 (finale votes).
     const { data: allVotes } = await supabase
       .from('votes')
       .select('voter_id, target_id, day')
       .eq('lobby_id', id)
-      .lte('day', completedUpToDay)
+      .lt('day', 9999)           // exclude finale jury votes
       .order('day', { ascending: true })
 
     // Resolve all usernames we'll need
@@ -722,23 +728,21 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       votesByDay[v.day][v.target_id] = (votesByDay[v.day][v.target_id] || 0) + 1
     })
 
-    // For each eliminated player, find the day they were voted off.
-    // We match a day to an eliminated player if that day's votes have them
-    // as the plurality target. We consume days in order so each day is
-    // only attributed to one elimination.
+    // For each eliminated player (in order), find the earliest day where they
+    // received at least one vote. Each day is consumed by at most one elimination.
     const usedDays = new Set<number>()
 
     const history: VoteRecord[] = votedOffList.map((eliminatedId) => {
-      // Find earliest unused day where this person received votes
+      // Find earliest unused day where this person received any votes
       const matchDay = Object.keys(votesByDay)
         .map(Number)
-        .filter(day => !usedDays.has(day) && votesByDay[day][eliminatedId] !== undefined)
+        .filter(day => !usedDays.has(day) && (votesByDay[day][eliminatedId] ?? 0) > 0)
         .sort((a, b) => a - b)[0]
 
       if (matchDay !== undefined) {
         usedDays.add(matchDay)
         const dayCounts = votesByDay[matchDay]
-        // Build display map: username -> vote count
+        // Build display map: username -> vote count (all targets that day)
         const vote_counts: Record<string, number> = {}
         Object.entries(dayCounts).forEach(([targetId, count]) => {
           const name = nameMap[targetId] || targetId.slice(0, 8)
@@ -753,7 +757,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         }
       }
 
-      // No votes found for this person — rocks were drawn or votes missing
+      // Truly no votes found for this person on any day — must have been rocks
       const fallbackDay = Object.keys(votesByDay)
         .map(Number)
         .filter(d => !usedDays.has(d))
