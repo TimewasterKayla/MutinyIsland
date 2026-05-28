@@ -28,8 +28,8 @@ type CampSubPage = 'Malolo Tribe' | 'Kaliki Tribe' | 'Jungle' | 'Water Well'
 
 type ChallengeResult = {
   day: number
-  immunity_winner: 'tribe1' | 'tribe2' | 'raro'
-  reward_winner: 'tribe1' | 'tribe2' | 'raro'
+  immunity_winner: 'malolo' | 'kaliki' | 'raro'
+  reward_winner: 'malolo' | 'kaliki' | 'raro'
 }
 
 type VoteRecord = {
@@ -45,8 +45,8 @@ const MAX_PLAYERS = 18
 const DAY_DURATION_MS = 5 * 60 * 1000
 const MERGE_AT = 10
 
-const TRIBE_1    = 'tribe1'
-const TRIBE_2    = 'tribe2'
+const TRIBE_1    = 'malolo'
+const TRIBE_2    = 'kaliki'
 const TRIBE_RARO = 'raro'
 
 const TRIBE_1_NAME    = 'Malolo'
@@ -349,15 +349,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   async function loadLobby(id: string) {
     const { data } = await supabase.from('lobbies').select('*').eq('id', id).maybeSingle()
-    if (data) {
-      // Debug: log tribe_assignments to confirm keys match user UUIDs
-      if (data.tribe_assignments) {
-        console.log('[loadLobby] tribe_assignments keys:', Object.keys(data.tribe_assignments))
-        console.log('[loadLobby] currentUserId (ref):', currentUserIdRef.current)
-        console.log('[loadLobby] my tribe:', data.tribe_assignments[currentUserIdRef.current ?? ''])
-      }
-      setLobby(data)
-    }
+    if (data) setLobby(data)
   }
 
   async function loadPlayers(id: string) {
@@ -487,7 +479,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       const uniqueTribes = [...new Set(remaining)]
 
       if (uniqueTribes.length >= 2) {
-        const tribes = uniqueTribes as ('tribe1' | 'tribe2' | 'raro')[]
+        const tribes = uniqueTribes as ('malolo' | 'kaliki' | 'raro')[]
         const immunityWinner = tribes[Math.floor(Math.random() * tribes.length)]
         const rewardWinner   = tribes[Math.floor(Math.random() * tribes.length)]
         newResults = [...existingResults, { day: prevDay, immunity_winner: immunityWinner, reward_winner: rewardWinner }]
