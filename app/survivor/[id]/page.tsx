@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -20,33 +20,38 @@ type Message = {
   sender_id: string
   username?: string
   created_at?: string
+  topic?: string
 }
 
 type Tab = 'Players' | 'Camp' | 'Challenge Beach' | 'Tiki Court' | 'Summary'
-type CampSubPage = 'Camp 1' | 'Camp 2' | 'Jungle' | 'Water Well'
+type CampSubPage = 'Malolo Tribe' | 'Kaliki Tribe' | 'Jungle' | 'Water Well'
 
 type ChallengeResult = {
   day: number
-  immunity_winner: 'malolo' | 'kaliki' | 'raro'
-  reward_winner: 'malolo' | 'kaliki' | 'raro'
+  immunity_winner: 'tribe1' | 'tribe2' | 'raro'
+  reward_winner: 'tribe1' | 'tribe2' | 'raro'
 }
 
 type VoteRecord = {
   day: number
-  voted_off: string   // user_id
+  voted_off: string
   username: string
-  vote_counts: Record<string, number> // username -> count
+  vote_counts: Record<string, number>
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const MAX_PLAYERS = 18
-const DAY_DURATION_MS = 5 * 60 * 1000   // 5 minutes per day
+const DAY_DURATION_MS = 5 * 60 * 1000
 const MERGE_AT = 10
 
-const TRIBE_MALOLO = 'malolo'
-const TRIBE_KALIKI = 'kaliki'
-const TRIBE_RARO   = 'raro'
+const TRIBE_1    = 'tribe1'
+const TRIBE_2    = 'tribe2'
+const TRIBE_RARO = 'raro'
+
+const TRIBE_1_NAME    = 'Malolo'
+const TRIBE_2_NAME    = 'Kaliki'
+const TRIBE_RARO_NAME = 'Raro'
 
 const WOOD_GRAIN = `
   repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(0,0,0,0.025) 3px, rgba(0,0,0,0.025) 4px),
@@ -95,12 +100,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [lobby,           setLobby]           = useState<any>(null)
   const [isPlayerInLobby, setIsPlayerInLobby] = useState(false)
   const [activeTab,       setActiveTab]       = useState<Tab>('Players')
-  const [campPage,        setCampPage]        = useState<CampSubPage>('Camp 1')
+  const [campPage,        setCampPage]        = useState<CampSubPage>('Malolo Tribe')
 
   // Presence & UI
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set())
   const [dotCount,      setDotCount]      = useState(1)
-  const [countdown,     setCountdown]     = useState<number>(0)  // ms remaining in day
+  const [countdown,     setCountdown]     = useState<number>(0)
+  const [isPaused,      setIsPaused]      = useState(false)
 
   // Profile sidebar
   const [rank,     setRank]     = useState<string | null>(null)
@@ -108,45 +114,43 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [crowns,   setCrowns]   = useState<number | null>(null)
   const [joinedAt, setJoinedAt] = useState<string | null>(null)
 
-  // Vote history for summary tab
+  // Vote history
   const [voteHistory, setVoteHistory] = useState<VoteRecord[]>([])
 
-  const chatRef       = useRef<HTMLDivElement>(null)
-  const lobbyChatRef  = useRef<HTMLDivElement>(null)
-  const lobbyRef      = useRef<any>(null)   // mirror of `lobby` for use in intervals
+  // Refs
+  const chatRef      = useRef<HTMLDivElement>(null)
+  const lobbyChatRef = useRef<HTMLDivElement>(null)
+  const lobbyRef     = useRef<any>(null)
+  const playersRef   = useRef<Player[]>([])
+  const isPausedRef  = useRef(false)
+  const pausedAtRef  = useRef<number | null>(null)
 
   // ─── Derived game state ───────────────────────────────────────────────────
 
-  const gameStarted   = !!lobby?.started_at
-  const currentDay    = lobby?.current_day ?? 0
-  const tribeAssign   = (lobby?.tribe_assignments ?? {}) as Record<string, string>
-  const votedOffIds   = (lobby?.voted_off ?? []) as string[]
+  const gameStarted      = !!lobby?.started_at
+  const currentDay       = lobby?.current_day ?? 0
+  const tribeAssign      = (lobby?.tribe_assignments ?? {}) as Record<string, string>
+  const votedOffIds      = (lobby?.voted_off ?? []) as string[]
   const challengeResults = (lobby?.challenge_results ?? []) as ChallengeResult[]
-  const activePlayers = players.filter(p => !votedOffIds.includes(p.user_id))
-  const remainingCount = activePlayers.length
+  const activePlayers    = players.filter(p => !votedOffIds.includes(p.user_id))
+  const remainingCount   = activePlayers.length
 
-  const me          = players.find(p => p.user_id === currentUserId) ?? null
-  const iAmActive   = me ? !votedOffIds.includes(me.user_id) : false
-  const myTribe     = me ? tribeAssign[me.user_id] : null
-  const isMerged    = gameStarted && remainingCount <= MERGE_AT
+  const me        = players.find(p => p.user_id === currentUserId) ?? null
+  const iAmActive = me ? !votedOffIds.includes(me.user_id) : false
+  const myTribe   = me ? tribeAssign[me.user_id] : null
+  const isMerged  = gameStarted && remainingCount <= MERGE_AT
 
-  // Today's challenge result (day N result is posted when day flips to N+1)
   const todayResult = challengeResults.find(r => r.day === currentDay - 1) ?? null
-  const losingTribe = todayResult ? (todayResult.immunity_winner === TRIBE_MALOLO ? TRIBE_KALIKI : TRIBE_MALOLO) : null
+  const losingTribe = todayResult
+    ? (todayResult.immunity_winner === TRIBE_1 ? TRIBE_2 : TRIBE_1)
+    : null
 
-  // Can I access Tiki Court?
-  // - Game must have started
-  // - Day must be >= 2
-  // - I must be active (not voted off, and actually a player)
-  // - Pre-merge: only losing tribe on day >= 2
-  // - Post-merge: every active player on every day >= 2
   const canAccessTikiCourt = (() => {
     if (!gameStarted || currentDay < 2 || !iAmActive) return false
     if (isMerged) return true
     return myTribe === losingTribe
   })()
 
-  // Tab lock: before game starts, only Players tab is accessible
   const tabAccessible = (tab: Tab): boolean => {
     if (tab === 'Players') return true
     if (tab === 'Summary') return true
@@ -155,20 +159,29 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     return true
   }
 
-  // Camp sub-pages: post-merge, collapse to single camp
   const campPages: CampSubPage[] = isMerged
-    ? ['Camp 1', 'Jungle', 'Water Well']
-    : ['Camp 1', 'Camp 2', 'Jungle', 'Water Well']
+    ? ['Malolo Tribe', 'Jungle', 'Water Well']
+    : ['Malolo Tribe', 'Kaliki Tribe', 'Jungle', 'Water Well']
 
-  // Players split by tribe for Players tab
-  const maloloPlayers = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_MALOLO)
-  const kalikiPlayers = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_KALIKI)
-  const raroPlayers   = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_RARO)
-
-  // Who can I vote for? My own tribe members only (excluding myself)
+  const tribe1Players  = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_1)
+  const tribe2Players  = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_2)
+  const raroPlayers    = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_RARO)
   const voteablePlayers = activePlayers.filter(p =>
     p.user_id !== currentUserId && tribeAssign[p.user_id] === myTribe
   )
+
+  function tribeName(key: string): string {
+    if (key === TRIBE_1) return TRIBE_1_NAME
+    if (key === TRIBE_2) return TRIBE_2_NAME
+    if (key === TRIBE_RARO) return TRIBE_RARO_NAME
+    return key
+  }
+
+  // ─── Keep refs in sync ───────────────────────────────────────────────────
+
+  useEffect(() => { lobbyRef.current = lobby }, [lobby])
+  useEffect(() => { playersRef.current = players }, [players])
+  useEffect(() => { isPausedRef.current = isPaused }, [isPaused])
 
   // ─── PARAMS ──────────────────────────────────────────────────────────────
 
@@ -198,9 +211,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (!lobbyId || !currentUserId) return
     loadPlayers(lobbyId)
   }, [lobbyId, currentUserId])
-
-  // Keep lobbyRef in sync
-  useEffect(() => { lobbyRef.current = lobby }, [lobby])
 
   // ─── Profile sidebar ─────────────────────────────────────────────────────
 
@@ -259,6 +269,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   useEffect(() => {
     const tick = () => {
+      if (isPausedRef.current) return
       const l = lobbyRef.current
       if (!l?.day_ends_at) { setCountdown(0); return }
       const remaining = new Date(l.day_ends_at).getTime() - Date.now()
@@ -269,16 +280,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     return () => clearInterval(interval)
   }, [])
 
-  // ─── Day advancement (client-side leader election: lowest user_id acts) ───
+  // ─── Day advancement ─────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!gameStarted || !lobbyId || !currentUserId) return
     if (countdown > 0) return
-    // Only the player with the lowest user_id advances the day to avoid race dupes
-    const sortedIds = [...players.map(p => p.user_id)].sort()
+    if (isPaused) return
+    const sortedIds = [...playersRef.current.map(p => p.user_id)].sort()
     if (sortedIds[0] !== currentUserId) return
     advanceDay(lobbyId)
-  }, [countdown, gameStarted, currentUserId, lobbyId])
+  }, [countdown, gameStarted, currentUserId, lobbyId, isPaused])
 
   // ─── Check if already voted today ────────────────────────────────────────
 
@@ -294,7 +305,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       .then(({ data }) => setHasVotedToday(!!data))
   }, [lobbyId, currentUserId, currentDay])
 
-  // ─── Load vote history for summary ───────────────────────────────────────
+  // ─── Vote history ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!lobbyId || !gameStarted) return
@@ -341,7 +352,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     }))
     setPlayers(mapped)
 
-    // Auto-start game when 18th player joins
     const { data: lobbyData } = await supabase.from('lobbies').select('*').eq('id', id).maybeSingle()
     if (lobbyData && !lobbyData.started_at && mapped.length >= MAX_PLAYERS) {
       await startGame(id, mapped, lobbyData)
@@ -356,7 +366,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   async function loadMessages(id: string) {
     const { data, error } = await supabase
       .from('messages').select('*').eq('season_id', id)
-      .eq('topic', 'camp').order('created_at', { ascending: true })
+      .in('topic', [TRIBE_1, TRIBE_2, TRIBE_RARO])
+      .order('created_at', { ascending: true })
     if (error || !data || data.length === 0) { setMessages([]); return }
     const senderIds = [...new Set(data.map(m => m.sender_id))]
     const profileMap = await resolveUsernames(senderIds)
@@ -374,7 +385,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }
 
   async function loadVoteHistory(id: string) {
-    // Load all votes grouped by day
     const { data: allVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).order('day', { ascending: true })
     if (!allVotes || allVotes.length === 0) { setVoteHistory([]); return }
@@ -391,7 +401,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         const name = nameMap[v.target_id] || v.target_id.slice(0, 8)
         counts[name] = (counts[name] || 0) + 1
       })
-      // Find who got most votes
       const maxVotes = Math.max(...Object.values(counts))
       const tied = Object.entries(counts).filter(([, c]) => c === maxVotes).map(([n]) => n)
       const votedOffName = tied[Math.floor(Math.random() * tied.length)]
@@ -404,14 +413,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   // ─── Game logic ──────────────────────────────────────────────────────────
 
   async function startGame(id: string, allPlayers: Player[], lobbyData: any) {
-    // Optimistic lock: only one client should write this
     const { data: check } = await supabase.from('lobbies').select('started_at').eq('id', id).maybeSingle()
-    if (check?.started_at) return   // already started by another client
+    if (check?.started_at) return
 
     const shuffled = shuffleArray(allPlayers.map(p => p.user_id))
     const tribeAssignments: Record<string, string> = {}
     shuffled.forEach((uid, i) => {
-      tribeAssignments[uid] = i < MAX_PLAYERS / 2 ? TRIBE_MALOLO : TRIBE_KALIKI
+      tribeAssignments[uid] = i < MAX_PLAYERS / 2 ? TRIBE_1 : TRIBE_2
     })
 
     const now = new Date()
@@ -433,13 +441,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   async function advanceDay(id: string) {
     const l = lobbyRef.current
     if (!l) return
-    // Guard: don't advance if day_ends_at is still in the future (another client already advanced)
     if (new Date(l.day_ends_at).getTime() > Date.now() + 2000) return
 
     const newDay = (l.current_day ?? 1) + 1
     const dayEndsAt = new Date(Date.now() + DAY_DURATION_MS)
 
-    // Generate challenge results for the day that just ended (previous day)
     const prevDay = newDay - 1
     const existingResults: ChallengeResult[] = l.challenge_results ?? []
     const alreadyHasResult = existingResults.some(r => r.day === prevDay)
@@ -452,14 +458,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       const uniqueTribes = [...new Set(remaining)]
 
       if (uniqueTribes.length >= 2) {
-        const tribes = uniqueTribes as ('malolo' | 'kaliki' | 'raro')[]
+        const tribes = uniqueTribes as ('tribe1' | 'tribe2' | 'raro')[]
         const immunityWinner = tribes[Math.floor(Math.random() * tribes.length)]
         const rewardWinner   = tribes[Math.floor(Math.random() * tribes.length)]
         newResults = [...existingResults, { day: prevDay, immunity_winner: immunityWinner, reward_winner: rewardWinner }]
       }
     }
 
-    // Process votes for day that just ended and eliminate player
     let newVotedOff: string[] = l.voted_off ?? []
     const { data: dayVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).eq('day', prevDay)
@@ -475,7 +480,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       }
     }
 
-    // Check for merge
     const activeAfterElim = Object.keys(l.tribe_assignments ?? {})
       .filter(uid => !newVotedOff.includes(uid))
     const merging = activeAfterElim.length <= MERGE_AT
@@ -498,12 +502,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   // ─── Chat & voting ───────────────────────────────────────────────────────
 
-  async function sendMessage(tribe: string) {
+  async function sendMessage(tribeKey: string) {
     if (!text.trim() || !lobbyId || !iAmActive) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     await supabase.from('messages').insert({
-      season_id: lobbyId, sender_id: user.id, content: text.trim(), topic: tribe,
+      season_id: lobbyId, sender_id: user.id, content: text.trim(), topic: tribeKey,
     })
     setText('')
     loadMessages(lobbyId)
@@ -535,6 +539,30 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     setVotedName(voted?.username ?? 'Unknown')
     setHasVotedToday(true)
   }
+
+  // ─── Pause / resume ──────────────────────────────────────────────────────
+
+  async function togglePause() {
+    if (!lobbyId) return
+    if (!isPaused) {
+      pausedAtRef.current = Date.now()
+      setIsPaused(true)
+      isPausedRef.current = true
+    } else {
+      const pausedMs = pausedAtRef.current ? Date.now() - pausedAtRef.current : 0
+      pausedAtRef.current = null
+      const l = lobbyRef.current
+      if (l?.day_ends_at) {
+        const newEndsAt = new Date(new Date(l.day_ends_at).getTime() + pausedMs)
+        await supabase.from('lobbies').update({ day_ends_at: newEndsAt.toISOString() }).eq('id', lobbyId)
+        await loadLobby(lobbyId)
+      }
+      setIsPaused(false)
+      isPausedRef.current = false
+    }
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
 
   function getMessageDay(createdAt?: string) {
     if (!createdAt || !lobby?.started_at) return 0
@@ -577,14 +605,15 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     )
   }
 
-  // ─── Chat panel ───────────────────────────────────────────────────────────
+  // ─── Chat panel ──────────────────────────────────────────────────────────
 
-  function ChatPanel({ topic, scrollRef }: { topic: string, scrollRef: React.RefObject<HTMLDivElement | null> }) {
-    const canChat = iAmActive && myTribe === topic
+  function ChatPanel({ tribeKey, scrollRef }: { tribeKey: string, scrollRef: React.RefObject<HTMLDivElement | null> }) {
+    const canChat = iAmActive && myTribe === tribeKey
+    const tribeMessages = messages.filter(m => m.topic === tribeKey)
     return (
       <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
         <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
-          {messages.filter(m => true).map(m => (
+          {tribeMessages.map(m => (
             <div key={m.id} className="bg-[#b8955a] p-3 rounded">
               <div className="flex justify-between mb-1">
                 <p className="text-yellow-800 font-bold text-sm">{m.username}</p>
@@ -601,10 +630,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
             disabled={!canChat}
             className="flex-1 bg-[#c8a96e] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
             placeholder={canChat ? 'Type message...' : 'You cannot chat here'}
-            onKeyDown={e => { if (e.key === 'Enter') sendMessage(topic) }}
+            onKeyDown={e => { if (e.key === 'Enter') sendMessage(tribeKey) }}
           />
           <button
-            onClick={() => sendMessage(topic)}
+            onClick={() => sendMessage(tribeKey)}
             disabled={!canChat}
             className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer"
           >
@@ -634,7 +663,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       {/* ══ LEFT COLUMN ══ */}
       <aside className="w-64 shrink-0 flex flex-col gap-4" style={{ height: 'calc(78vh + 2.5rem)' }}>
 
-        {/* Day Counter — scroll.png */}
+        {/* Day Counter */}
         <div className="relative flex items-center justify-center shrink-0" style={{ aspectRatio: '2.8 / 1' }}>
           <img src="/scroll.png" alt="scroll" className="absolute inset-0 w-full h-full object-fill" />
           <div className="relative z-10 text-center">
@@ -662,9 +691,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
             </h1>
             {gameStarted && myTribe && (
               <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{
-                color: myTribe === TRIBE_MALOLO ? '#f59e0b' : myTribe === TRIBE_KALIKI ? '#60a5fa' : '#a78bfa'
+                color: myTribe === TRIBE_1 ? '#f59e0b' : myTribe === TRIBE_2 ? '#60a5fa' : '#a78bfa'
               }}>
-                {myTribe === TRIBE_MALOLO ? 'Malolo' : myTribe === TRIBE_KALIKI ? 'Kaliki' : 'Raro'}
+                Tribe {tribeName(myTribe)}
               </p>
             )}
           </div>
@@ -692,9 +721,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           </div>
         </div>
 
-        {/* Clock — fills remaining space to align with bottom of right column */}
+        {/* Clock */}
         <div
-          className="flex-1 rounded-2xl border border-[#a07840] flex flex-col items-center justify-center"
+          className="flex-1 rounded-2xl border border-[#a07840] flex flex-col items-center justify-center gap-3"
           style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN }}
         >
           {currentDay === 0 ? (
@@ -703,10 +732,25 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
             </p>
           ) : (
             <>
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-800 mb-1">Clock</p>
-              <p className="font-black text-4xl tracking-[0.15em] text-zinc-900 tabular-nums">
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-800">Clock</p>
+              <p className={`font-black text-4xl tracking-[0.15em] tabular-nums transition-colors ${isPaused ? 'text-amber-700' : 'text-zinc-900'}`}>
                 {formatCountdown(countdown)}
               </p>
+              <button
+                onClick={togglePause}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg font-bold text-xs uppercase tracking-widest border transition ${
+                  isPaused
+                    ? 'bg-amber-600 border-amber-800 text-white hover:bg-amber-700'
+                    : 'bg-zinc-800/70 border-zinc-900/50 text-amber-100 hover:bg-zinc-900/80'
+                }`}
+              >
+                {isPaused ? '▶ Resume' : '⏸ Pause'}
+              </button>
+              {isPaused && (
+                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-800 animate-pulse">
+                  Paused
+                </p>
+              )}
             </>
           )}
         </div>
@@ -788,7 +832,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               </div>
 
               {!gameStarted ? (
-                /* Pre-game: flat grid + lobby chat */
                 <>
                   <div className="grid grid-cols-9 gap-3 mb-4">
                     {Array.from({ length: MAX_PLAYERS }).map((_, i) => {
@@ -863,34 +906,30 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   </div>
                 </>
               ) : isMerged ? (
-                /* Post-merge: single Raro tribe */
                 <div>
                   <p className="text-center font-black uppercase tracking-widest text-lg mb-3" style={{ color: '#7c3aed' }}>
-                    ⚔ Raro — The Merge Tribe
+                    ⚔ Tribe {TRIBE_RARO_NAME} — The Merge Tribe
                   </p>
                   <div className="grid grid-cols-10 gap-2">
                     {raroPlayers.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
                   </div>
                 </div>
               ) : (
-                /* Two-tribe view */
                 <div className="flex flex-col gap-6">
-                  {/* Malolo */}
                   <div>
-                    <p className="font-black uppercase tracking-widest text-base mb-2" style={{ color: '#b45309' }}>
-                      🔥 Tribe Malolo
+                    <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#b45309' }}>
+                      🔥 Tribe {TRIBE_1_NAME}
                     </p>
                     <div className="grid grid-cols-9 gap-2">
-                      {maloloPlayers.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                      {tribe1Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
                     </div>
                   </div>
-                  {/* Kaliki */}
                   <div>
-                    <p className="font-black uppercase tracking-widest text-base mb-2" style={{ color: '#1d4ed8' }}>
-                      🌊 Tribe Kaliki
+                    <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#1d4ed8' }}>
+                      🌊 Tribe {TRIBE_2_NAME}
                     </p>
                     <div className="grid grid-cols-9 gap-2">
-                      {kalikiPlayers.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                      {tribe2Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
                     </div>
                   </div>
                 </div>
@@ -908,29 +947,51 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     onClick={() => setCampPage(page)}
                     className={`px-4 py-2 rounded-lg font-bold text-sm transition border cursor-pointer ${campPage === page ? 'bg-amber-900 text-[#f0ddb0] border-amber-950' : 'bg-[#b8955a] text-zinc-800 border-[#a07840] hover:bg-[#a07840]'}`}
                   >
-                    {isMerged && page === 'Camp 1' ? 'Raro Camp' : page}
+                    {isMerged && page === 'Malolo Tribe' ? 'Raro Camp' : page}
                   </button>
                 ))}
               </div>
 
-              {campPage === 'Camp 1' && (
+              {campPage === 'Malolo Tribe' && (
                 <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
-                  <div className="w-1/2" />
+                  <div className="w-1/2 flex flex-col min-h-0">
+                    <h2 className="text-base font-black uppercase tracking-widest mb-3 shrink-0" style={{ color: isMerged ? '#7c3aed' : '#b45309' }}>
+                      Tribe {isMerged ? TRIBE_RARO_NAME : TRIBE_1_NAME}
+                    </h2>
+                    <div className="overflow-y-auto flex-1">
+                      <div className="grid grid-cols-4 gap-2">
+                        {(isMerged ? raroPlayers : tribe1Players).map(p => (
+                          <PlayerAvatar key={p.user_id} player={p} size="sm" />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   <div className="w-1/2 flex flex-col min-h-0 h-full">
                     <h2 className="text-xl font-bold mb-3 shrink-0">
-                      {isMerged ? 'Raro Camp Chat' : 'Malolo Camp Chat'}
+                      {isMerged ? `${TRIBE_RARO_NAME} Camp Chat` : `${TRIBE_1_NAME} Camp Chat`}
                     </h2>
-                    <ChatPanel topic={isMerged ? TRIBE_RARO : TRIBE_MALOLO} scrollRef={chatRef} />
+                    <ChatPanel tribeKey={isMerged ? TRIBE_RARO : TRIBE_1} scrollRef={chatRef} />
                   </div>
                 </div>
               )}
 
-              {campPage === 'Camp 2' && !isMerged && (
+              {campPage === 'Kaliki Tribe' && !isMerged && (
                 <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
-                  <div className="w-1/2" />
+                  <div className="w-1/2 flex flex-col min-h-0">
+                    <h2 className="text-base font-black uppercase tracking-widest mb-3 shrink-0" style={{ color: '#1d4ed8' }}>
+                      Tribe {TRIBE_2_NAME}
+                    </h2>
+                    <div className="overflow-y-auto flex-1">
+                      <div className="grid grid-cols-4 gap-2">
+                        {tribe2Players.map(p => (
+                          <PlayerAvatar key={p.user_id} player={p} size="sm" />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   <div className="w-1/2 flex flex-col min-h-0 h-full">
-                    <h2 className="text-xl font-bold mb-3 shrink-0">Kaliki Camp Chat</h2>
-                    <ChatPanel topic={TRIBE_KALIKI} scrollRef={chatRef} />
+                    <h2 className="text-xl font-bold mb-3 shrink-0">{TRIBE_2_NAME} Camp Chat</h2>
+                    <ChatPanel tribeKey={TRIBE_2} scrollRef={chatRef} />
                   </div>
                 </div>
               )}
@@ -954,11 +1015,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   <div className="flex gap-4">
                     <div className="flex-1 bg-[#c8a96e] rounded-xl p-4 border border-[#a07840] text-center">
                       <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-1">Immunity Winner</p>
-                      <p className="text-2xl font-black capitalize">{todayResult.immunity_winner}</p>
+                      <p className="text-2xl font-black capitalize">Tribe {tribeName(todayResult.immunity_winner)}</p>
                     </div>
                     <div className="flex-1 bg-[#c8a96e] rounded-xl p-4 border border-[#a07840] text-center">
                       <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-1">Reward Winner</p>
-                      <p className="text-2xl font-black capitalize">{todayResult.reward_winner}</p>
+                      <p className="text-2xl font-black capitalize">Tribe {tribeName(todayResult.reward_winner)}</p>
                     </div>
                   </div>
                 </div>
@@ -1012,7 +1073,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   </>
                 )}
 
-                {/* Parchment */}
                 <div className="relative w-full mt-1" style={{ aspectRatio: '1.4 / 1' }}>
                   <img src="/parchment2.png" alt="parchment" className="absolute inset-0 w-full h-full object-fill" />
                   {votedName && (
@@ -1033,7 +1093,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           {/* ── SUMMARY TAB ── */}
           {activeTab === 'Summary' && (
             <div className="p-5 h-full text-zinc-900 flex gap-5">
-              {/* Left — castaway grid */}
               <div className="flex-1 min-w-0">
                 <h2 className="text-2xl font-black uppercase tracking-widest mb-4">Castaways</h2>
                 <div className="grid grid-cols-6 gap-2">
@@ -1043,7 +1102,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 </div>
               </div>
 
-              {/* Right — stats + vote history */}
               <div className="w-52 shrink-0 flex flex-col gap-3">
                 <h2 className="text-2xl font-black uppercase tracking-widest mb-1">Stats</h2>
                 <div className="rounded-xl p-3 border border-[#a07840] text-sm space-y-2" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
