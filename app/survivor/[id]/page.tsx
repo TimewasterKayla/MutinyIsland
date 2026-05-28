@@ -28,8 +28,9 @@ type CampSubPage = 'Malolo Tribe' | 'Kaliki Tribe' | 'Jungle' | 'Water Well'
 
 type ChallengeResult = {
   day: number
-  immunity_winner: 'malolo' | 'kaliki' | 'raro'
-  reward_winner: 'malolo' | 'kaliki' | 'raro'
+  immunity_winner: 'malolo' | 'kaliki' | 'raro' | string  // string = user_id for individual immunity post-merge
+  reward_winner: 'malolo' | 'kaliki' | 'raro' | string
+  individual_immunity?: string  // user_id of immune player post-merge
 }
 
 type VoteRecord = {
@@ -216,17 +217,26 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     ? (todayResult.immunity_winner === TRIBE_1 ? TRIBE_2 : TRIBE_1)
     : null
 
+  // Individual immunity: the user_id stored in today's result post-merge
+  const todayIndividualImmune = (isMerged && todayResult?.individual_immunity) ? todayResult.individual_immunity : null
+  const iAmImmune = todayIndividualImmune === _uid
+
   const canAccessTikiCourt = (() => {
     if (!gameStarted || currentDay < 2 || !iAmActive) return false
+    if (remainingCount <= 3) return false  // final 3 — no vote
     if (isMerged) return true
     return myTribe === losingTribe
   })()
+
+  // Challenge Beach is locked when <=3 players remain (final tribal, no challenge)
+  const canAccessChallengeBeach = gameStarted && remainingCount > 3
 
   const tabAccessible = (tab: Tab): boolean => {
     if (tab === 'Players') return true
     if (tab === 'Summary') return true
     if (!gameStarted) return false
     if (tab === 'Tiki Court') return canAccessTikiCourt
+    if (tab === 'Challenge Beach') return canAccessChallengeBeach
     return true
   }
 
@@ -238,7 +248,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const tribe2Players  = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_2)
   const raroPlayers    = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_RARO)
   const voteablePlayers = activePlayers.filter(p =>
-    p.user_id !== _uid && tribeAssign[p.user_id] === myTribe
+    p.user_id !== _uid &&
+    tribeAssign[p.user_id] === myTribe &&
+    p.user_id !== todayIndividualImmune
   )
 
   function tribeName(key: string): string {
@@ -577,7 +589,19 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         .map(([, tribe]) => tribe)
       const uniqueTribes = [...new Set(remaining)]
 
-      if (uniqueTribes.length >= 2) {
+      const activeThenIds = Object.keys(l.tribe_assignments ?? {}).filter(uid => !(l.voted_off ?? []).includes(uid))
+      const isMergedThen = activeThenIds.length <= MERGE_AT
+
+      if (isMergedThen) {
+        // Post-merge: individual immunity — pick a random active player
+        const immunePlayer = activeThenIds[Math.floor(Math.random() * activeThenIds.length)]
+        newResults = [...existingResults, {
+          day: prevDay,
+          immunity_winner: immunePlayer,
+          reward_winner: immunePlayer,
+          individual_immunity: immunePlayer,
+        }]
+      } else if (uniqueTribes.length >= 2) {
         const tribes = uniqueTribes as ('malolo' | 'kaliki' | 'raro')[]
         const immunityWinner = tribes[Math.floor(Math.random() * tribes.length)]
         const rewardWinner   = tribes[Math.floor(Math.random() * tribes.length)]
@@ -589,15 +613,24 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     const { data: dayVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).eq('day', prevDay)
 
+    // Determine if this day had individual immunity (post-merge)
+    const prevDayImmune = newResults.find(r => r.day === prevDay)?.individual_immunity ?? null
+
     if (prevDay >= 2) {
       if (dayVotes && dayVotes.length > 0) {
         const counts: Record<string, number> = {}
-        dayVotes.forEach((v: any) => { counts[v.target_id] = (counts[v.target_id] || 0) + 1 })
-        const maxVotes = Math.max(...Object.values(counts))
-        const tied = Object.keys(counts).filter(uid => counts[uid] === maxVotes)
-        const eliminated = tied[Math.floor(Math.random() * tied.length)]
-        if (!newVotedOff.includes(eliminated)) {
-          newVotedOff = [...newVotedOff, eliminated]
+        dayVotes.forEach((v: any) => {
+          // Discard votes cast against the immune player
+          if (prevDayImmune && v.target_id === prevDayImmune) return
+          counts[v.target_id] = (counts[v.target_id] || 0) + 1
+        })
+        if (Object.keys(counts).length > 0) {
+          const maxVotes = Math.max(...Object.values(counts))
+          const tied = Object.keys(counts).filter(uid => counts[uid] === maxVotes)
+          const eliminated = tied[Math.floor(Math.random() * tied.length)]
+          if (!newVotedOff.includes(eliminated)) {
+            newVotedOff = [...newVotedOff, eliminated]
+          }
         }
       } else {
         const losingTribeKey = newResults.find(r => r.day === prevDay)?.immunity_winner === TRIBE_1
@@ -1163,16 +1196,37 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               {todayResult ? (
                 <div className="bg-[#b8955a]/60 rounded-xl p-5 border border-[#a07840]">
                   <h3 className="font-black uppercase tracking-widest text-base mb-3">Day {todayResult.day} Results</h3>
-                  <div className="flex gap-4">
-                    <div className="flex-1 bg-[#c8a96e] rounded-xl p-4 border border-[#a07840] text-center">
-                      <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-1">Immunity Winner</p>
-                      <p className="text-2xl font-black capitalize">{tribeName(todayResult.immunity_winner)} Tribe</p>
+                  {isMerged ? (
+                    // Post-merge: show individual immunity winner by name
+                    <div className="flex justify-center">
+                      <div className="bg-[#c8a96e] rounded-xl p-4 border border-[#a07840] text-center w-72">
+                        <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-1">Individual Immunity</p>
+                        {(() => {
+                          const immunePlayer = players.find(p => p.user_id === todayResult.individual_immunity)
+                          return (
+                            <p className="text-2xl font-black">
+                              {immunePlayer ? immunePlayer.username : 'Unknown'}
+                              {todayResult.individual_immunity === _uid && (
+                                <span className="ml-2 text-base font-bold text-amber-700">(You!)</span>
+                              )}
+                            </p>
+                          )
+                        })()}
+                      </div>
                     </div>
-                    <div className="flex-1 bg-[#c8a96e] rounded-xl p-4 border border-[#a07840] text-center">
-                      <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-1">Reward Winner</p>
-                      <p className="text-2xl font-black capitalize">{tribeName(todayResult.reward_winner)} Tribe</p>
+                  ) : (
+                    // Pre-merge: show tribe immunity + reward
+                    <div className="flex gap-4">
+                      <div className="flex-1 bg-[#c8a96e] rounded-xl p-4 border border-[#a07840] text-center">
+                        <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-1">Immunity Winner</p>
+                        <p className="text-2xl font-black capitalize">{tribeName(todayResult.immunity_winner)} Tribe</p>
+                      </div>
+                      <div className="flex-1 bg-[#c8a96e] rounded-xl p-4 border border-[#a07840] text-center">
+                        <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-1">Reward Winner</p>
+                        <p className="text-2xl font-black capitalize">{tribeName(todayResult.reward_winner)} Tribe</p>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 <div className="bg-[#b8955a]/60 rounded-xl p-5 border border-[#a07840] text-center">
@@ -1184,9 +1238,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-yellow-600 text-white border-2 border-yellow-700 hover:bg-yellow-700 transition shadow-md cursor-pointer">
                   Immunity Challenge
                 </button>
-                <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-[#8b6840] text-[#f0ddb0] border-2 border-[#6b4820] hover:bg-[#7a5830] transition shadow-md cursor-pointer">
-                  Reward Challenge
-                </button>
+                {/* Reward Challenge only shown pre-merge */}
+                {!isMerged && (
+                  <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-[#8b6840] text-[#f0ddb0] border-2 border-[#6b4820] hover:bg-[#7a5830] transition shadow-md cursor-pointer">
+                    Reward Challenge
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1199,8 +1256,28 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 <h2 className="text-2xl font-bold">Voting Booth</h2>
 
                 {hasVotedToday ? (
-                  <div className="bg-[#c8a96e] rounded-xl p-3 border border-[#a07840] text-center">
-                    <p className="font-bold text-zinc-700">You have already voted today.</p>
+                  <div className="flex flex-col gap-3">
+                    <div className="bg-[#c8a96e] rounded-xl p-3 border border-[#a07840] text-center">
+                      <p className="font-bold text-zinc-700">You voted for <span className="text-red-800">{votedName}</span>.</p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!lobbyId || !currentUserId) return
+                        // Delete today's existing vote so they can re-vote
+                        await supabase
+                          .from('votes')
+                          .delete()
+                          .eq('lobby_id', lobbyId)
+                          .eq('voter_id', currentUserId)
+                          .eq('day', currentDay)
+                        setHasVotedToday(false)
+                        setVotedName(null)
+                        setVoteTarget('')
+                      }}
+                      className="w-full bg-amber-700 text-white p-3 rounded font-bold hover:bg-amber-800 transition cursor-pointer"
+                    >
+                      ✏️ Change Vote
+                    </button>
                   </div>
                 ) : (
                   <>
@@ -1269,8 +1346,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       const isVotedOff = votedOffIds.includes(player.user_id)
                       const votedOffPosition = votedOffReversed.findIndex(p => p.user_id === player.user_id)
                       const placement = isVotedOff ? (activePlayers.length + 1 + votedOffPosition) : null
-                      // Jury = eliminated at or after the merge (MERGE_AT players remaining)
-                      const isJury = isVotedOff && placement !== null && placement <= MERGE_AT
+                      // Jury = eliminated at or after the merge.
+                      // Pre-merge boots: MAX_PLAYERS - MERGE_AT players voted off before merge.
+                      // So jury members have placement > (MAX_PLAYERS - MERGE_AT).
+                      const preMergeBoots = MAX_PLAYERS - MERGE_AT
+                      const isJury = isVotedOff && placement !== null && placement > preMergeBoots
 
                       return (
                         <div key={player.user_id} className="flex flex-col items-center gap-1">
@@ -1294,14 +1374,31 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                           <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                             {player.username}
                           </p>
-                          {isVotedOff && placement !== null && (
-                            <div
-                              className="rounded px-1.5 py-0.5 text-[8px] font-bold text-white uppercase tracking-wide text-center"
-                              style={{ backgroundColor: isJury ? '#71717a' : '#3f3f46' }}
-                            >
-                              {isJury ? `JURY - ${ordinal(placement)}` : ordinal(placement)}
-                            </div>
-                          )}
+                          {isVotedOff && placement !== null && (() => {
+                            const totalPlayers = players.length || MAX_PLAYERS
+                            // 1st = highest placement number (last voted off... actually active players
+                            // are still in — placement here counts up from the first boot)
+                            // placement 1 = first voted off (worst), highest = winner
+                            // We need the winner to be the LAST remaining, which stays as activePlayers
+                            // So among votedOff, the highest placement# = most recently eliminated
+                            // final 3 are still "active" — so placement among voted off goes up to
+                            // (activePlayers.length + votedOffReversed.length)
+                            const maxPlacement = activePlayers.length + votedOffReversed.length
+                            const isFirst  = placement === maxPlacement
+                            const isSecond = placement === maxPlacement - 1
+                            const isThird  = placement === maxPlacement - 2
+                            const bgColor = isFirst ? '#d97706' : isSecond ? '#9ca3af' : isThird ? '#b45309' : isJury ? '#71717a' : '#3f3f46'
+                            const label   = isFirst ? '🥇 1st' : isSecond ? '🥈 2nd' : isThird ? '🥉 3rd'
+                              : isJury ? `JURY - ${ordinal(placement)}` : ordinal(placement)
+                            return (
+                              <div
+                                className="rounded px-1.5 py-0.5 text-[8px] font-bold text-white uppercase tracking-wide text-center"
+                                style={{ backgroundColor: bgColor }}
+                              >
+                                {label}
+                              </div>
+                            )
+                          })()}
                         </div>
                       )
                     })}
