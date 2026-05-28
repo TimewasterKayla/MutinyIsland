@@ -30,8 +30,6 @@ type CurrentUserProfile = {
   created_at: string | null
 }
 
-type TabAll = Tab | 'Summary'
-
 type Tab = 'Lobby' | 'Camp' | 'Challenge Beach' | 'Tiki Court' | 'Summary'
 type CampSubPage = 'Camp 1' | 'Camp 2' | 'Jungle' | 'Water Well'
 
@@ -57,6 +55,7 @@ export default function SeasonPage({
   const router = useRouter()
 
   const [lobbyId, setLobbyId] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [lobbyMessages, setLobbyMessages] = useState<Message[]>([])
@@ -78,18 +77,15 @@ export default function SeasonPage({
     Promise.resolve(params).then((p) => setLobbyId(p.id))
   }, [params])
 
-  // INIT — waits for lobbyId so auth session is ready before loading profile
+  // INIT
   useEffect(() => {
     if (!lobbyId) return
-    getCurrentUser()
+    initUser()
     loadLobby()
-    loadPlayers()
     loadMessages()
     loadLobbyMessages()
-    loadCurrentUserProfile() // ← moved here so auth is established before firing
 
     const interval = setInterval(() => {
-      loadPlayers()
       loadMessages()
       loadLobbyMessages()
     }, 3000)
@@ -97,18 +93,31 @@ export default function SeasonPage({
     return () => clearInterval(interval)
   }, [lobbyId])
 
-  async function loadCurrentUserProfile() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setProfileLoaded(true); return }
-    const { data, error } = await supabase
+  // Load players whenever lobbyId or currentUserId changes
+  useEffect(() => {
+    if (!lobbyId) return
+    loadPlayers()
+    const interval = setInterval(loadPlayers, 3000)
+    return () => clearInterval(interval)
+  }, [lobbyId, currentUserId])
+
+  // Once players load, find the current user in the list and fetch their full profile
+  useEffect(() => {
+    if (!currentUserId || players.length === 0) return
+    const me = players.find((p) => p.user_id === currentUserId)
+    if (!me) return
+
+    supabase
       .from('profiles')
       .select('id, username, avatar, rank, coins, crowns, created_at')
-      .eq('id', user.id)
+      .eq('username', me.username)
       .maybeSingle()
-    if (error) console.error('PROFILE CARD ERROR:', error)
-    if (data) setCurrentUserProfile(data)
-    setProfileLoaded(true)
-  }
+      .then(({ data, error }) => {
+        if (error) console.error('PROFILE CARD ERROR:', error)
+        if (data) setCurrentUserProfile(data)
+        setProfileLoaded(true)
+      })
+  }, [players, currentUserId])
 
   // AUTO SCROLL
   useEffect(() => {
@@ -119,10 +128,12 @@ export default function SeasonPage({
     if (lobbyChatRef.current) lobbyChatRef.current.scrollTop = lobbyChatRef.current.scrollHeight
   }, [lobbyMessages])
 
-  // CURRENT USER
-  async function getCurrentUser() {
+  // INIT USER
+  async function initUser() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setIsPlayerInLobby(false); return }
+
+    setCurrentUserId(user.id)
 
     const { data: lobbyData } = await supabase
       .from('lobby_players').select('id')
@@ -240,47 +251,6 @@ export default function SeasonPage({
     )
   }
 
-  // ── CHAT BOX (reusable) ────────────────────────────────────────────────────
-  function CampChatBox() {
-    return (
-      <div className="w-1/2 flex flex-col min-h-0">
-        <h2 className="text-xl font-bold mb-3">{campPage} Chat</h2>
-        <div
-          ref={chatRef}
-          className="overflow-y-auto mb-3 pr-1 space-y-2"
-          style={{ maxHeight: '420px' }}
-        >
-          {messages.map((m) => (
-            <div key={m.id} className="bg-[#b8955a] p-3 rounded">
-              <div className="flex justify-between mb-1">
-                <p className="text-yellow-800 font-bold text-sm">{m.username}</p>
-                <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
-              </div>
-              <p className="text-sm">{m.content}</p>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            disabled={!isPlayerInLobby}
-            className="flex-1 bg-[#b8955a] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
-            placeholder={isPlayerInLobby ? 'Type message...' : 'Join to chat'}
-            onKeyDown={(e) => { if (e.key === 'Enter') sendMessage() }}
-          />
-          <button
-            onClick={sendMessage}
-            disabled={!isPlayerInLobby}
-            className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer"
-          >
-            Send
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-zinc-950 text-white flex gap-5 px-5 pb-5 pt-8 justify-center">
@@ -371,7 +341,6 @@ export default function SeasonPage({
 
         {/* Wooden folder tabs */}
         <div className="flex items-end gap-1 px-1">
-          {/* Main tabs — left side */}
           {TABS_LEFT.map((tab) => {
             const isActive = activeTab === tab
             return (
@@ -397,7 +366,7 @@ export default function SeasonPage({
             )
           })}
 
-          {/* Spacer — slightly reduced to nudge Summary left */}
+          {/* Spacer — nudges Summary left */}
           <div className="flex-1 max-w-[40px]" />
 
           {/* Summary tab */}
@@ -537,7 +506,6 @@ export default function SeasonPage({
           {activeTab === 'Camp' && (
             <div className="p-5 h-full flex flex-col text-zinc-900">
 
-              {/* Sub-page nav */}
               <div className="flex gap-2 mb-4">
                 {CAMP_PAGES.map((page) => (
                   <button
