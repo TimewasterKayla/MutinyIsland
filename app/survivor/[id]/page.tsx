@@ -149,6 +149,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   // Tab lock: before game starts, only Players tab is accessible
   const tabAccessible = (tab: Tab): boolean => {
     if (tab === 'Players') return true
+    if (tab === 'Summary') return true
     if (!gameStarted) return false
     if (tab === 'Tiki Court') return canAccessTikiCourt
     return true
@@ -623,6 +624,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }
 
   const tabs: Tab[] = ['Players', 'Camp', 'Challenge Beach', 'Tiki Court']
+  const tabLabel = (tab: Tab) => tab === 'Players' && !gameStarted ? 'Lobby' : tab
 
   return (
     <main
@@ -696,7 +698,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN }}
         >
           {currentDay === 0 ? (
-            <p className="text-center font-bold text-zinc-800 text-sm px-4 italic">
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-800 text-center px-4">
               The game will start soon!
             </p>
           ) : (
@@ -737,7 +739,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   backgroundImage: isActive ? WOOD_GRAIN : WOOD_GRAIN_DARK,
                 }}
               >
-                {tab}
+                {tabLabel(tab)}
                 {locked && <span className="ml-1 text-[9px]">🔒</span>}
               </button>
             )
