@@ -191,8 +191,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const isPausedRef     = useRef(false)
   const pausedAtRef     = useRef<number | null>(null)
   const advancingRef    = useRef(false)
-  // Store currentUserId in a ref so derived values (myTribe, iAmActive) never
-  // stale-close over an old null value between renders
   const currentUserIdRef = useRef<string | null>(null)
 
   // ─── Derived game state ───────────────────────────────────────────────────
@@ -206,7 +204,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const remainingCount   = activePlayers.length
 
   const me        = players.find(p => p.user_id === (currentUserId ?? currentUserIdRef.current)) ?? null
-  // Use ref as fallback so myTribe resolves even if state hasn't re-rendered yet
   const _uid      = currentUserId ?? currentUserIdRef.current ?? ''
   const iAmActive = players.length > 0 && !!_uid
     ? !votedOffIds.includes(_uid)
@@ -356,9 +353,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }, [])
 
   // ─── Day advancement ─────────────────────────────────────────────────────
-  // FIX 1: Removed the "only first sorted player advances" restriction so the
-  // day always advances when the timer hits 0 regardless of who is online.
-  // Added advancingRef guard to prevent duplicate calls from the same client.
+
   useEffect(() => {
     if (!gameStarted || !lobbyId || !currentUserId) return
     if (countdown > 0) return
@@ -367,7 +362,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     advancingRef.current = true
     advanceDay(lobbyId).finally(() => {
-      // Allow re-triggering after a short cooldown
       setTimeout(() => { advancingRef.current = false }, 5000)
     })
   }, [countdown, gameStarted, currentUserId, lobbyId, isPaused])
@@ -404,7 +398,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   async function initUser(id: string) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setIsPlayerInLobby(false); return }
-    // Set ref immediately — state update is async but ref is synchronous
     currentUserIdRef.current = user.id
     setCurrentUserId(user.id)
     const { data } = await supabase
@@ -471,14 +464,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     const { data: allVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).order('day', { ascending: true })
 
-    // We need voted_off list from lobby to know which days had eliminations
     const l = lobbyRef.current
     const votedOffList: string[] = l?.voted_off ?? []
-
-    // Build history from days that had votes cast
-    const daysWithVotes = allVotes && allVotes.length > 0
-      ? [...new Set(allVotes.map((v: any) => v.day))]
-      : []
 
     const allIds = allVotes && allVotes.length > 0
       ? [...new Set([...allVotes.map((v: any) => v.voter_id), ...allVotes.map((v: any) => v.target_id)])]
@@ -491,15 +478,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       : { data: [] }
     const nameMap = Object.fromEntries((profileData || []).map((p: any) => [p.id, p.username]))
 
-    // History: one record per voted-off player (tracked in lobby.voted_off order)
-    // Day i elimination = votedOffList[i] was eliminated after day (i+1) voting
     const history: VoteRecord[] = votedOffList.map((eliminatedId, idx) => {
-      const eliminationDay = idx + 2 // day 2 is first possible elimination day
+      const eliminationDay = idx + 2
       const dayVotes = (allVotes ?? []).filter((v: any) => v.day === eliminationDay - 1)
       const hadVotes = dayVotes.length > 0
 
       if (!hadVotes) {
-        // Rocks drawn — no votes cast
         return {
           day: eliminationDay - 1,
           voted_off: eliminatedId,
@@ -554,13 +538,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     loadLobby(id)
   }
 
-  // FIX 1: Removed the overly strict `> Date.now() + 2000` guard that was
-  // silently bailing when clocks were slightly out of sync. Now uses a
-  // generous 10-second buffer so stale day_ends_at values still trigger.
   async function advanceDay(id: string) {
     const l = lobbyRef.current
     if (!l) return
-    // Only bail if day_ends_at is clearly still in the future (10s buffer)
     if (l.day_ends_at && new Date(l.day_ends_at).getTime() > Date.now() + 10000) return
 
     const newDay = (l.current_day ?? 1) + 1
@@ -591,7 +571,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     if (prevDay >= 2) {
       if (dayVotes && dayVotes.length > 0) {
-        // Normal vote elimination
         const counts: Record<string, number> = {}
         dayVotes.forEach((v: any) => { counts[v.target_id] = (counts[v.target_id] || 0) + 1 })
         const maxVotes = Math.max(...Object.values(counts))
@@ -601,14 +580,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           newVotedOff = [...newVotedOff, eliminated]
         }
       } else {
-        // No votes cast — rocks drawn, eliminate random player from losing tribe
         const losingTribeKey = newResults.find(r => r.day === prevDay)?.immunity_winner === TRIBE_1
           ? TRIBE_2
           : TRIBE_1
         const eligible = Object.entries(l.tribe_assignments ?? {})
           .filter(([uid, tribe]) => !newVotedOff.includes(uid) && tribe === losingTribeKey)
           .map(([uid]) => uid)
-        // Fallback: if merged or no eligible, pick from all active
         const pool = eligible.length > 0
           ? eligible
           : Object.keys(l.tribe_assignments ?? {}).filter(uid => !newVotedOff.includes(uid))
@@ -789,7 +766,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
             <h1 className="text-xl font-bold text-white">
               {me ? me.username : <span className="text-zinc-600">Loading...</span>}
             </h1>
-            {/* FIX 4: tribe name first, then "Tribe" — e.g. "Malolo Tribe" */}
             {gameStarted && myTribe && (
               <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{
                 color: myTribe === TRIBE_1 ? '#f59e0b' : myTribe === TRIBE_2 ? '#60a5fa' : '#a78bfa'
@@ -934,7 +910,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
               {!gameStarted ? (
                 <>
-                  <div className="grid grid-cols-9 gap-3 mb-4">
+                  {/* CHANGED: grid-cols-9 → grid-cols-6, removed fixed aspect-[3/4] in favour of taller cards */}
+                  <div className="grid grid-cols-6 gap-3 mb-4">
                     {Array.from({ length: MAX_PLAYERS }).map((_, i) => {
                       const player = players[i]
                       return (
@@ -948,12 +925,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                               <img src={player.avatar_url} alt={player.username} className="w-full h-full object-cover" />
                             ) : player ? (
                               <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
-                                <span className="text-lg font-black text-amber-900">{player.username.slice(0, 1).toUpperCase()}</span>
+                                <span className="text-2xl font-black text-amber-900">{player.username.slice(0, 1).toUpperCase()}</span>
                               </div>
                             ) : null}
                           </div>
                           {player && (
-                            <p className="text-[10px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
+                            <p className="text-xs font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                               {player.username}
                             </p>
                           )}
@@ -1007,8 +984,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   </div>
                 </>
               ) : isMerged ? (
-                // FIX 2: Added explicit empty-state guard so the grid always renders
-                // something meaningful even when tribe data is still loading
                 <div>
                   <p className="text-center font-black uppercase tracking-widest text-lg mb-3" style={{ color: '#7c3aed' }}>
                     ⚔ {TRIBE_RARO_NAME} Tribe — The Merge Tribe
@@ -1016,44 +991,38 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   {raroPlayers.length === 0 ? (
                     <p className="text-center italic text-zinc-600 text-sm">Loading players...</p>
                   ) : (
-                    <div className="flex flex-wrap justify-center gap-2">
+                    /* CHANGED: grid-cols-6 for bigger cards in merged view */
+                    <div className="grid grid-cols-6 gap-3">
                       {raroPlayers.map(p => (
-                        <div key={p.user_id} className="w-16">
-                          <PlayerAvatar player={p} size="sm" />
-                        </div>
+                        <PlayerAvatar key={p.user_id} player={p} size="md" />
                       ))}
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="flex flex-col gap-6">
-                  {/* Tribe rows — render even while loading; grids will fill in on next poll */}
-                  <>
-                    <div>
-                      <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#b45309' }}>
-                        🔥 {TRIBE_1_NAME} Tribe
-                      </p>
-                      <div className="flex flex-wrap justify-center gap-2">
-                        {tribe1Players.map(p => (
-                          <div key={p.user_id} className="w-16">
-                            <PlayerAvatar player={p} size="sm" />
-                          </div>
-                        ))}
-                      </div>
+                  <div>
+                    <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: '#b45309' }}>
+                      🔥 {TRIBE_1_NAME} Tribe
+                    </p>
+                    {/* CHANGED: grid-cols-5 for bigger tribe cards */}
+                    <div className="grid grid-cols-5 gap-3">
+                      {tribe1Players.map(p => (
+                        <PlayerAvatar key={p.user_id} player={p} size="md" />
+                      ))}
                     </div>
-                    <div>
-                      <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#1d4ed8' }}>
-                        🌊 {TRIBE_2_NAME} Tribe
-                      </p>
-                      <div className="flex flex-wrap justify-center gap-2">
-                        {tribe2Players.map(p => (
-                          <div key={p.user_id} className="w-16">
-                            <PlayerAvatar player={p} size="sm" />
-                          </div>
-                        ))}
-                      </div>
+                  </div>
+                  <div>
+                    <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: '#1d4ed8' }}>
+                      🌊 {TRIBE_2_NAME} Tribe
+                    </p>
+                    {/* CHANGED: grid-cols-5 for bigger tribe cards */}
+                    <div className="grid grid-cols-5 gap-3">
+                      {tribe2Players.map(p => (
+                        <PlayerAvatar key={p.user_id} player={p} size="md" />
+                      ))}
                     </div>
-                  </>
+                  </div>
                 </div>
               )}
             </div>
@@ -1067,7 +1036,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   <button
                     key={page}
                     onClick={() => setCampPage(page)}
-                    className={`px-4 py-2 rounded-lg font-bold text-sm transition border cursor-pointer ${campPage === page ? 'bg-amber-900 text-[#f0ddb0] border-amber-950' : 'bg-[#b8955a] text-zinc-800 border-[#a07840] hover:bg-[#a07840]'}`}
+                    /* CHANGED: added uppercase tracking-widest to sub-page buttons */
+                    className={`px-4 py-2 rounded-lg font-bold text-sm transition border cursor-pointer uppercase tracking-widest ${campPage === page ? 'bg-amber-900 text-[#f0ddb0] border-amber-950' : 'bg-[#b8955a] text-zinc-800 border-[#a07840] hover:bg-[#a07840]'}`}
                   >
                     {isMerged && page === 'Malolo Tribe' ? 'Raro Camp' : page}
                   </button>
@@ -1089,7 +1059,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     </div>
                   </div>
                   <div className="w-1/2 flex flex-col min-h-0 h-full">
-                    <h2 className="text-xl font-bold mb-3 shrink-0">
+                    {/* CHANGED: uppercase tracking-widest on chat heading */}
+                    <h2 className="text-xl font-bold mb-3 shrink-0 uppercase tracking-widest">
                       {isMerged ? `${TRIBE_RARO_NAME} Camp Chat` : `${TRIBE_1_NAME} Camp Chat`}
                     </h2>
                     <ChatPanel
@@ -1123,7 +1094,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     </div>
                   </div>
                   <div className="w-1/2 flex flex-col min-h-0 h-full">
-                    <h2 className="text-xl font-bold mb-3 shrink-0">{TRIBE_2_NAME} Camp Chat</h2>
+                    {/* CHANGED: uppercase tracking-widest on chat heading */}
+                    <h2 className="text-xl font-bold mb-3 shrink-0 uppercase tracking-widest">{TRIBE_2_NAME} Camp Chat</h2>
                     <ChatPanel
                       tribeKey={TRIBE_2}
                       canChat={iAmActive && myTribe === TRIBE_2}
@@ -1236,18 +1208,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
           {/* ── SUMMARY TAB ── */}
           {activeTab === 'Summary' && (() => {
-            // Build the ordered grid: active players first (alphabetical), then
-            // voted-off players in reverse elimination order (last out = leftmost
-            // of the bottom, first out = bottom-right)
             const orderedActive = [...activePlayers].sort((a, b) => a.username.localeCompare(b.username))
-            // votedOffIds[0] = first eliminated, votedOffIds[last] = most recent
-            // We want most-recent at bottom-left, first-out at bottom-right
             const orderedVotedOff = [...votedOffIds]
               .map(id => players.find(p => p.user_id === id))
               .filter(Boolean) as Player[]
-            // Reverse so bottom-right = first eliminated
+            // Reversed so bottom-right = first eliminated
             const votedOffReversed = [...orderedVotedOff].reverse()
             const gridPlayers = [...orderedActive, ...votedOffReversed]
+
+            // CHANGED: voteHistory reversed so most recent is at top
+            const voteHistoryNewestFirst = [...voteHistory].reverse()
 
             function ordinal(n: number): string {
               const s = ['th','st','nd','rd']
@@ -1262,9 +1232,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   <div className="grid grid-cols-6 gap-2">
                     {gridPlayers.map((player, idx) => {
                       const isVotedOff = votedOffIds.includes(player.user_id)
-                      // Placement: voted off players get placement from the end
-                      // votedOffReversed[0] = last eliminated = placement (activePlayers.length + 1)
-                      // votedOffReversed[last] = first eliminated = placement MAX_PLAYERS
                       const votedOffPosition = votedOffReversed.findIndex(p => p.user_id === player.user_id)
                       const placement = isVotedOff ? (activePlayers.length + 1 + votedOffPosition) : null
 
@@ -1287,11 +1254,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                               )}
                             </div>
                           </div>
-                          <p className="text-[9px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
+                          {/* CHANGED: text-[11px] (up from text-[9px]) for bigger usernames */}
+                          <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                             {player.username}
                           </p>
                           {isVotedOff && placement !== null && (
-                            <div className="bg-zinc-200/80 rounded px-1.5 py-0.5 text-[8px] font-bold text-zinc-500 uppercase tracking-wide">
+                            /* CHANGED: dark grey background, white text */
+                            <div className="bg-zinc-700 rounded px-1.5 py-0.5 text-[8px] font-bold text-white uppercase tracking-wide">
                               {ordinal(placement)}
                             </div>
                           )}
@@ -1309,16 +1278,20 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     <div><span className="text-zinc-600 text-xs uppercase font-bold">Online</span><p className="font-black text-xl">{onlineUserIds.size}</p></div>
                   </div>
 
-                  {voteHistory.length > 0 && (
+                  {voteHistoryNewestFirst.length > 0 && (
                     <>
                       <h3 className="font-black uppercase tracking-widest text-sm mt-1">Tribal History</h3>
                       <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: '40vh' }}>
-                        {voteHistory.map(record => (
+                        {/* CHANGED: iterating voteHistoryNewestFirst so most recent is at top */}
+                        {voteHistoryNewestFirst.map(record => (
                           <div key={record.day} className="rounded-xl p-3 border border-[#a07840] text-xs" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
                             <p className="font-black uppercase tracking-wide text-sm mb-1">Day {record.day}</p>
                             <p className="font-bold text-red-800 uppercase tracking-wide mb-1">🪦 {record.username}</p>
+                            {/* CHANGED: rocks_drawn only shown when 0 votes, with new copy */}
                             {record.rocks_drawn ? (
-                              <p className="text-zinc-700 uppercase font-bold tracking-wide text-xs">Rocks Were Drawn</p>
+                              <p className="text-zinc-700 uppercase font-bold tracking-wide text-xs">
+                                0 votes were cast, thus... ROCKS WERE DRAWN
+                              </p>
                             ) : (
                               <div className="space-y-0.5">
                                 {Object.entries(record.vote_counts).map(([name, count]) => (
