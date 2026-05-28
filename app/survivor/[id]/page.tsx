@@ -81,6 +81,55 @@ function formatCountdown(ms: number): string {
   return `${m}:${s}`
 }
 
+// ─── ChatPanel (top-level so it's never recreated on parent re-render) ───────
+
+type ChatPanelProps = {
+  tribeKey: string
+  canChat: boolean
+  messages: Message[]
+  text: string
+  setText: (v: string) => void
+  onSend: () => void
+  scrollRef: React.RefObject<HTMLDivElement | null>
+  getMessageDay: (createdAt?: string) => number
+}
+
+function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollRef, getMessageDay }: ChatPanelProps) {
+  const tribeMessages = messages.filter(m => m.topic === tribeKey)
+  return (
+    <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
+        {tribeMessages.map(m => (
+          <div key={m.id} className="bg-[#b8955a] p-3 rounded">
+            <div className="flex justify-between mb-1">
+              <p className="text-yellow-800 font-bold text-sm">{m.username}</p>
+              <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
+            </div>
+            <p className="text-sm">{m.content}</p>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 mt-2 shrink-0">
+        <input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          disabled={!canChat}
+          className="flex-1 bg-[#c8a96e] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
+          placeholder={canChat ? 'Type message...' : 'You cannot chat here'}
+          onKeyDown={e => { if (e.key === 'Enter') onSend() }}
+        />
+        <button
+          onClick={onSend}
+          disabled={!canChat}
+          className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer"
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SeasonPage({ params }: { params: Promise<{ id: string }> }) {
@@ -626,47 +675,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     )
   }
 
-  // ─── Chat panel ──────────────────────────────────────────────────────────
-  // FIX 3: canChat now checks myTribe === tribeKey directly using the derived
-  // myTribe value, and uses iAmActive which is now stable once players load.
-
-  function ChatPanel({ tribeKey, scrollRef }: { tribeKey: string, scrollRef: React.RefObject<HTMLDivElement | null> }) {
-    const canChat = iAmActive && myTribe === tribeKey
-    const tribeMessages = messages.filter(m => m.topic === tribeKey)
-    return (
-      <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
-        <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
-          {tribeMessages.map(m => (
-            <div key={m.id} className="bg-[#b8955a] p-3 rounded">
-              <div className="flex justify-between mb-1">
-                <p className="text-yellow-800 font-bold text-sm">{m.username}</p>
-                <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
-              </div>
-              <p className="text-sm">{m.content}</p>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2 mt-2 shrink-0">
-          <input
-            value={text}
-            onChange={e => setText(e.target.value)}
-            disabled={!canChat}
-            className="flex-1 bg-[#c8a96e] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
-            placeholder={canChat ? 'Type message...' : 'You cannot chat here'}
-            onKeyDown={e => { if (e.key === 'Enter') sendMessage(tribeKey) }}
-          />
-          <button
-            onClick={() => sendMessage(tribeKey)}
-            disabled={!canChat}
-            className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer"
-          >
-            Send
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   // ─── Render ───────────────────────────────────────────────────────────────
 
   if (!lobbyId) {
@@ -1003,7 +1011,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     <h2 className="text-xl font-bold mb-3 shrink-0">
                       {isMerged ? `${TRIBE_RARO_NAME} Camp Chat` : `${TRIBE_1_NAME} Camp Chat`}
                     </h2>
-                    <ChatPanel tribeKey={isMerged ? TRIBE_RARO : TRIBE_1} scrollRef={chatRef} />
+                    <ChatPanel
+                      tribeKey={isMerged ? TRIBE_RARO : TRIBE_1}
+                      canChat={iAmActive && myTribe === (isMerged ? TRIBE_RARO : TRIBE_1)}
+                      messages={messages}
+                      text={text}
+                      setText={setText}
+                      onSend={() => sendMessage(isMerged ? TRIBE_RARO : TRIBE_1)}
+                      scrollRef={chatRef}
+                      getMessageDay={getMessageDay}
+                    />
                   </div>
                 </div>
               )}
@@ -1024,7 +1041,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   </div>
                   <div className="w-1/2 flex flex-col min-h-0 h-full">
                     <h2 className="text-xl font-bold mb-3 shrink-0">{TRIBE_2_NAME} Camp Chat</h2>
-                    <ChatPanel tribeKey={TRIBE_2} scrollRef={chatRef} />
+                    <ChatPanel
+                      tribeKey={TRIBE_2}
+                      canChat={iAmActive && myTribe === TRIBE_2}
+                      messages={messages}
+                      text={text}
+                      setText={setText}
+                      onSend={() => sendMessage(TRIBE_2)}
+                      scrollRef={chatRef}
+                      getMessageDay={getMessageDay}
+                    />
                   </div>
                 </div>
               )}
