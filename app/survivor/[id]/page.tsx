@@ -103,11 +103,39 @@ type ChatPanelProps = {
 }
 
 function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollRef, getMessageDay, onlineUserIds, onClickUsername, tribeMembers, currentUserId }: ChatPanelProps) {
-  const [whisperOn,        setWhisperOn]        = useState(false)
-  const [whisperTarget,    setWhisperTarget]    = useState('')
-  const [whisperError,     setWhisperError]     = useState(false)
+  const [whisperOn,     setWhisperOn]     = useState(false)
+  const [whisperTarget, setWhisperTarget] = useState('')
+  const [whisperError,  setWhisperError]  = useState(false)
+
+  // FIX 4: Track whether the user has manually scrolled up so we don't
+  // hijack their scroll position every time a new message arrives.
+  const isLockedRef      = useRef(false)
+  const unlockTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const tribeMessages = messages.filter(m => m.topic === tribeKey)
+
+  // Auto-scroll to bottom only when not locked
+  useEffect(() => {
+    if (!isLockedRef.current && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [tribeMessages.length, scrollRef])
+
+  function handleScroll() {
+    const el = scrollRef.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+    if (atBottom) {
+      // User scrolled back to bottom — unlock auto-scroll immediately
+      isLockedRef.current = false
+      if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current)
+    } else {
+      // User scrolled up — lock auto-scroll
+      isLockedRef.current = true
+      // Clear any pending unlock
+      if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current)
+    }
+  }
 
   function handleSend() {
     if (whisperOn) {
@@ -122,14 +150,17 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
 
   return (
     <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
+      {/* FIX 4: onScroll handler added to the message list container */}
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
         {tribeMessages.map(m => {
-          const isOnline = onlineUserIds.has(m.sender_id)
+          const isOnline  = onlineUserIds.has(m.sender_id)
           const isWhisper = !!m.is_whisper
           return (
             <div
               key={m.id}
-              className={`p-3 rounded ${isWhisper ? 'bg-red-900/30 border border-red-800/40' : 'bg-[#b8955a]'}`}
+              // FIX 2: All messages use the same background regardless of whisper status.
+              // Only the header text still indicates it's a whisper.
+              className="p-3 rounded bg-[#b8955a]"
             >
               <div className="flex justify-between mb-1">
                 <span className="inline-flex items-center gap-1.5">
@@ -154,7 +185,7 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
                 </span>
                 <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
               </div>
-              <p className={`text-sm ${isWhisper ? 'italic text-red-100' : ''}`}>{m.content}</p>
+              <p className="text-sm">{m.content}</p>
             </div>
           )
         })}
@@ -244,6 +275,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [lobby,           setLobby]           = useState<any>(null)
   const [isPlayerInLobby, setIsPlayerInLobby] = useState(false)
   const [activeTab,       setActiveTab]       = useState<Tab>('Players')
+  // FIX 3: Start as null so we can set the default based on the player's tribe
   const [campPage,        setCampPage]        = useState<CampSubPage>('Malolo Tribe')
 
   // Presence & UI
@@ -265,20 +297,23 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [hasFilled, setHasFilled] = useState(false)
 
   // Finale
-  const [reunionText,       setReunionText]       = useState('')
-  const [reunionMessages,   setReunionMessages]   = useState<Message[]>([])
-  const [finaleVoteTarget,  setFinaleVoteTarget]  = useState('')
-  const [hasFinaleVoted,    setHasFinaleVoted]    = useState(false)
+  const [reunionText,      setReunionText]      = useState('')
+  const [reunionMessages,  setReunionMessages]  = useState<Message[]>([])
+  const [finaleVoteTarget, setFinaleVoteTarget] = useState('')
+  const [hasFinaleVoted,   setHasFinaleVoted]   = useState(false)
   const reunionChatRef = useRef<HTMLDivElement>(null)
 
+  // FIX 3: Track whether the camp page has been explicitly set by the tribe effect
+  const campPageSetRef = useRef(false)
+
   // Refs
-  const chatRef         = useRef<HTMLDivElement>(null)
-  const lobbyChatRef    = useRef<HTMLDivElement>(null)
-  const lobbyRef        = useRef<any>(null)
-  const playersRef      = useRef<Player[]>([])
-  const isPausedRef     = useRef(false)
-  const pausedAtRef     = useRef<number | null>(null)
-  const advancingRef    = useRef(false)
+  const chatRef          = useRef<HTMLDivElement>(null)
+  const lobbyChatRef     = useRef<HTMLDivElement>(null)
+  const lobbyRef         = useRef<any>(null)
+  const playersRef       = useRef<Player[]>([])
+  const isPausedRef      = useRef(false)
+  const pausedAtRef      = useRef<number | null>(null)
+  const advancingRef     = useRef(false)
   const currentUserIdRef = useRef<string | null>(null)
 
   // ─── Derived game state ───────────────────────────────────────────────────
@@ -299,12 +334,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const myTribe   = _uid ? (tribeAssign[_uid] ?? null) : null
   const isMerged  = gameStarted && remainingCount <= MERGE_AT
 
-  const isFinale    = !!lobby?.is_finale
-  const isFinished  = !!lobby?.finished_at
-  const finalists   = activePlayers  // when 2 remain these are the finalists
+  const isFinale   = !!lobby?.is_finale
+  const isFinished = !!lobby?.finished_at
+  const finalists  = activePlayers
   // Jury = voted off after merge
   const preMergeBootCount = MAX_PLAYERS - MERGE_AT  // 8 for 18-player game
-  const juryIds     = votedOffIds.filter((_, idx) => idx >= preMergeBootCount)
+  const juryIds    = votedOffIds.filter((_, idx) => idx >= preMergeBootCount)
   // Anyone who can chat in reunion: jury + finalists
   const canReunionChat = juryIds.includes(_uid) || activePlayers.some(p => p.user_id === _uid)
 
@@ -341,9 +376,23 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     ? ['Malolo Tribe', 'Jungle', 'Water Well']
     : ['Malolo Tribe', 'Kaliki Tribe', 'Jungle', 'Water Well']
 
-  const tribe1Players  = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_1)
-  const tribe2Players  = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_2)
-  const raroPlayers    = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_RARO)
+  // FIX 3: When the player's tribe is first known, snap the camp page to their tribe.
+  // campPageSetRef ensures this only fires once (not on every re-render).
+  useEffect(() => {
+    if (campPageSetRef.current) return
+    if (!myTribe || !gameStarted) return
+    campPageSetRef.current = true
+    if (myTribe === TRIBE_2) {
+      setCampPage('Kaliki Tribe')
+    } else {
+      // TRIBE_1 or TRIBE_RARO (post-merge) both map to the main camp page
+      setCampPage('Malolo Tribe')
+    }
+  }, [myTribe, gameStarted])
+
+  const tribe1Players   = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_1)
+  const tribe2Players   = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_2)
+  const raroPlayers     = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_RARO)
   const voteablePlayers = activePlayers.filter(p =>
     p.user_id !== _uid &&
     tribeAssign[p.user_id] === myTribe &&
@@ -413,11 +462,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       })
   }, [me?.username])
 
-  // ─── Auto scroll ─────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
-  }, [messages])
+  // ─── Auto scroll (lobby chat only — tribe chat scroll is inside ChatPanel) ──
 
   useEffect(() => {
     if (lobbyChatRef.current) lobbyChatRef.current.scrollTop = lobbyChatRef.current.scrollHeight
@@ -495,18 +540,31 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (reunionChatRef.current) reunionChatRef.current.scrollTop = reunionChatRef.current.scrollHeight
   }, [reunionMessages])
 
-  // ─── Check if already voted today ────────────────────────────────────────
+  // ─── FIX 1: Check if already voted today + restore voted name on refresh ──
 
   useEffect(() => {
     if (!lobbyId || !currentUserId || !currentDay) return
     supabase
       .from('votes')
-      .select('id')
+      .select('id, target_id')
       .eq('lobby_id', lobbyId)
       .eq('voter_id', currentUserId)
       .eq('day', currentDay)
       .maybeSingle()
-      .then(({ data }) => setHasVotedToday(!!data))
+      .then(async ({ data }) => {
+        if (data) {
+          setHasVotedToday(true)
+          setVoteTarget(data.target_id)
+          // Resolve the voted player's username so the parchment shows the
+          // correct name even after a page refresh
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('id', data.target_id)
+            .maybeSingle()
+          setVotedName(profile?.username ?? 'Unknown')
+        }
+      })
   }, [lobbyId, currentUserId, currentDay])
 
   // ─── Vote history ─────────────────────────────────────────────────────────
@@ -878,12 +936,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     const spotsNeeded = MAX_PLAYERS - players.length
     if (spotsNeeded <= 0) return
     const existingIds = players.map(p => p.user_id)
-    // Pull random profiles that aren't already in the lobby
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id')
       .not('id', 'in', `(${existingIds.join(',')})`)
-      .limit(spotsNeeded * 3)  // fetch extras so we can shuffle and pick
+      .limit(spotsNeeded * 3)
     if (!profiles || profiles.length === 0) return
     const shuffled = shuffleArray(profiles).slice(0, spotsNeeded)
     const inserts = shuffled.map(p => ({ lobby_id: lobbyId, user_id: p.id }))
@@ -1175,13 +1232,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
               {!gameStarted ? (
                 <>
-                  {/*
-                    LOBBY ONLY CHANGES:
-                    1. Avatars are now rectangles (aspect-[3/4] rounded-md) instead of circles
-                    2. Lobby chat is a fixed smaller height (shrink-0) instead of flex-1
-                    3. Messages scroll to bottom: the inner list uses overflow-y-auto with
-                       scroll anchored to bottom via the lobbyChatRef auto-scroll effect above
-                  */}
                   <div className="grid grid-cols-9 gap-2 mb-2 shrink-0">
                     {Array.from({ length: MAX_PLAYERS }).map((_, i) => {
                       const player = players[i]
@@ -1191,7 +1241,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                           onClick={() => player && router.push(`/profile/${player.username}`)}
                           className={`flex flex-col items-center gap-0.5 ${player ? 'cursor-pointer group' : ''}`}
                         >
-                          {/* CHANGED: aspect-[3/4] rounded-md (rectangle) instead of aspect-square rounded-full */}
                           <div className={`w-full aspect-[3/4] rounded-md overflow-hidden border-2 ${player ? 'border-[#a07840] group-hover:border-amber-800 transition' : 'border-dashed border-[#a07840]/40 bg-[#b8955a]/40'}`}>
                             {player?.avatar_url ? (
                               <img src={player.avatar_url} alt={player.username} className="w-full h-full object-cover" />
@@ -1216,10 +1265,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     <span className="inline-block w-6 text-left">{'.'.repeat(dotCount)}</span>
                   </p>
 
-                  {/* flex-1 so the chat fills remaining space in the container */}
                   <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
                     <h3 className="font-bold text-base mb-2 uppercase tracking-widest shrink-0">Lobby Chat</h3>
-                    {/* CHANGED: overflow-y-auto on this div; lobbyChatRef scrollTop is set to scrollHeight on new messages */}
                     <div ref={lobbyChatRef} className="overflow-y-auto space-y-2 mb-2 pr-1 flex-1 min-h-0">
                       {lobbyMessages.map(m => {
                         const isOnline = onlineUserIds.has(m.sender_id)
@@ -1258,7 +1305,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   </div>
                 </>
               ) : (isFinale || isFinished) ? (
-                /* ── FINALE view: two columns — finalists left, reunion chat right ── */
+                /* ── FINALE view ── */
                 <div className="flex gap-5 flex-1 min-h-0 overflow-hidden">
                   {/* Left: finalists */}
                   <div className="w-1/2 flex flex-col min-h-0">
@@ -1281,7 +1328,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         </div>
                       ))}
                     </div>
-                    {/* Jury vote section — only shown in finale, not yet finished */}
+                    {/* Jury vote section */}
                     {isFinale && !isFinished && juryIds.includes(_uid) && (
                       <div className="mt-6 p-4 rounded-xl border border-[#a07840]" style={{ background: '#b8955a' }}>
                         <p className="font-black uppercase tracking-widest text-sm mb-3 text-zinc-800">Cast Your Jury Vote</p>
@@ -1741,7 +1788,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         {voteHistoryNewestFirst.map(record => (
                           <div key={record.day} className="rounded-xl p-3 border border-[#a07840] text-xs" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
                             <p className="font-black uppercase tracking-wide text-sm mb-1">Day {record.day}</p>
-                            <p className="font-bold text-red-800 uppercase tracking-wide mb-1">🪦 {record.username}</p>
+                            {/* FIX 5: No emoji before the voted-off username */}
+                            <p className="font-bold text-red-800 uppercase tracking-wide mb-1">{record.username}</p>
                             {record.rocks_drawn ? (
                               <p className="text-zinc-700 uppercase font-bold tracking-wide text-xs">
                                 0 votes were cast, thus... ROCKS WERE DRAWN
