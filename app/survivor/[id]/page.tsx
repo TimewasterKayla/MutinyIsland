@@ -92,6 +92,22 @@ export default function SeasonPage({
     return () => clearInterval(interval)
   }, [lobbyId])
 
+  // Load profile card independently (doesn't need lobbyId)
+  useEffect(() => {
+    loadCurrentUserProfile()
+  }, [])
+
+  async function loadCurrentUserProfile() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, username, avatar, rank, coins, crowns, created_at')
+      .eq('id', user.id)
+      .maybeSingle()
+    if (data) setCurrentUserProfile(data)
+  }
+
   // AUTO SCROLL
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
@@ -110,14 +126,6 @@ export default function SeasonPage({
       .from('lobby_players').select('id')
       .eq('lobby_id', lobbyId).eq('user_id', user.id).maybeSingle()
     setIsPlayerInLobby(!!lobbyData)
-
-    // Load current user's profile for sidebar
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('id, username, avatar, rank, coins, crowns, created_at')
-      .eq('id', user.id)
-      .maybeSingle()
-    if (profileData) setCurrentUserProfile(profileData)
   }
 
   // LOBBY
@@ -379,8 +387,8 @@ export default function SeasonPage({
 
         {/* Tab panel */}
         <div
-          className="flex-1 rounded-2xl rounded-tl-none overflow-hidden border border-[#a07840] min-h-[80vh]"
-          style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN }}
+          className="rounded-2xl rounded-tl-none overflow-hidden border border-[#a07840]"
+          style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN, height: '72vh', overflowY: 'auto' }}
         >
 
           {/* ── LOBBY TAB ── */}
@@ -438,13 +446,13 @@ export default function SeasonPage({
                 Waiting for players ({players.length}/{MAX_PLAYERS})
               </p>
 
-              {/* Lobby Chat — fixed height, no flex-1 stretch */}
-              <div className="bg-[#b8955a]/50 rounded-xl p-3">
+              {/* Lobby Chat — grows to fill remaining column space */}
+              <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
                 <h3 className="font-bold text-base mb-2">Lobby Chat</h3>
                 <div
                   ref={lobbyChatRef}
                   className="overflow-y-auto space-y-2 mb-2 pr-1"
-                  style={{ height: '160px' }}
+                  style={{ flex: 1, minHeight: 0 }}
                 >
                   {lobbyMessages.map((m) => (
                     <div key={m.id} className="bg-[#c8a96e] p-2 rounded text-sm">
