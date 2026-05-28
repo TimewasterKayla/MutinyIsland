@@ -118,14 +118,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [voteHistory, setVoteHistory] = useState<VoteRecord[]>([])
 
   // Refs
-  const chatRef      = useRef<HTMLDivElement>(null)
-  const lobbyChatRef = useRef<HTMLDivElement>(null)
-  const lobbyRef     = useRef<any>(null)
-  const playersRef   = useRef<Player[]>([])
-  const isPausedRef  = useRef(false)
-  const pausedAtRef  = useRef<number | null>(null)
-  // FIX 1: track whether advanceDay is already in-flight to prevent double-fires
-  const advancingRef = useRef(false)
+  const chatRef         = useRef<HTMLDivElement>(null)
+  const lobbyChatRef    = useRef<HTMLDivElement>(null)
+  const lobbyRef        = useRef<any>(null)
+  const playersRef      = useRef<Player[]>([])
+  const isPausedRef     = useRef(false)
+  const pausedAtRef     = useRef<number | null>(null)
+  const advancingRef    = useRef(false)
+  // Store currentUserId in a ref so derived values (myTribe, iAmActive) never
+  // stale-close over an old null value between renders
+  const currentUserIdRef = useRef<string | null>(null)
 
   // ─── Derived game state ───────────────────────────────────────────────────
 
@@ -137,10 +139,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const activePlayers    = players.filter(p => !votedOffIds.includes(p.user_id))
   const remainingCount   = activePlayers.length
 
-  const me        = players.find(p => p.user_id === currentUserId) ?? null
-  // FIX 3: use players.length as a gate so iAmActive is stable once players load
-  const iAmActive = players.length > 0 && me ? !votedOffIds.includes(me.user_id) : false
-  const myTribe   = me ? tribeAssign[me.user_id] : null
+  const me        = players.find(p => p.user_id === (currentUserId ?? currentUserIdRef.current)) ?? null
+  // Use ref as fallback so myTribe resolves even if state hasn't re-rendered yet
+  const _uid      = currentUserId ?? currentUserIdRef.current ?? ''
+  const iAmActive = players.length > 0 && !!_uid
+    ? !votedOffIds.includes(_uid)
+    : false
+  const myTribe   = _uid ? (tribeAssign[_uid] ?? null) : null
   const isMerged  = gameStarted && remainingCount <= MERGE_AT
 
   const todayResult = challengeResults.find(r => r.day === currentDay - 1) ?? null
@@ -170,7 +175,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const tribe2Players  = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_2)
   const raroPlayers    = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_RARO)
   const voteablePlayers = activePlayers.filter(p =>
-    p.user_id !== currentUserId && tribeAssign[p.user_id] === myTribe
+    p.user_id !== _uid && tribeAssign[p.user_id] === myTribe
   )
 
   function tribeName(key: string): string {
@@ -185,6 +190,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => { lobbyRef.current = lobby }, [lobby])
   useEffect(() => { playersRef.current = players }, [players])
   useEffect(() => { isPausedRef.current = isPaused }, [isPaused])
+  useEffect(() => { currentUserIdRef.current = currentUserId }, [currentUserId])
 
   // ─── PARAMS ──────────────────────────────────────────────────────────────
 
@@ -332,6 +338,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   async function initUser(id: string) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setIsPlayerInLobby(false); return }
+    // Set ref immediately — state update is async but ref is synchronous
+    currentUserIdRef.current = user.id
     setCurrentUserId(user.id)
     const { data } = await supabase
       .from('lobby_players').select('id')
@@ -341,7 +349,15 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   async function loadLobby(id: string) {
     const { data } = await supabase.from('lobbies').select('*').eq('id', id).maybeSingle()
-    if (data) setLobby(data)
+    if (data) {
+      // Debug: log tribe_assignments to confirm keys match user UUIDs
+      if (data.tribe_assignments) {
+        console.log('[loadLobby] tribe_assignments keys:', Object.keys(data.tribe_assignments))
+        console.log('[loadLobby] currentUserId (ref):', currentUserIdRef.current)
+        console.log('[loadLobby] my tribe:', data.tribe_assignments[currentUserIdRef.current ?? ''])
+      }
+      setLobby(data)
+    }
   }
 
   async function loadPlayers(id: string) {
@@ -938,38 +954,25 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 </div>
               ) : (
                 <div className="flex flex-col gap-6">
-                  {/* FIX 2: Show all active players (with tribe label) if tribe arrays are
-                      empty — this handles the window between game start and first loadPlayers
-                      returning data with tribeAssign populated. */}
-                  {tribe1Players.length === 0 && tribe2Players.length === 0 && activePlayers.length > 0 ? (
+                  {/* Tribe rows — render even while loading; grids will fill in on next poll */}
+                  <>
                     <div>
-                      <p className="font-black uppercase tracking-widest text-base mb-2 text-center text-zinc-600 italic">
-                        Loading tribe assignments...
+                      <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#b45309' }}>
+                        🔥 {TRIBE_1_NAME} Tribe
                       </p>
                       <div className="grid grid-cols-9 gap-2">
-                        {activePlayers.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                        {tribe1Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
                       </div>
                     </div>
-                  ) : (
-                    <>
-                      <div>
-                        <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#b45309' }}>
-                          🔥 {TRIBE_1_NAME} Tribe
-                        </p>
-                        <div className="grid grid-cols-9 gap-2">
-                          {tribe1Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
-                        </div>
+                    <div>
+                      <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#1d4ed8' }}>
+                        🌊 {TRIBE_2_NAME} Tribe
+                      </p>
+                      <div className="grid grid-cols-9 gap-2">
+                        {tribe2Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
                       </div>
-                      <div>
-                        <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#1d4ed8' }}>
-                          🌊 {TRIBE_2_NAME} Tribe
-                        </p>
-                        <div className="grid grid-cols-9 gap-2">
-                          {tribe2Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
-                        </div>
-                      </div>
-                    </>
-                  )}
+                    </div>
+                  </>
                 </div>
               )}
             </div>
