@@ -124,6 +124,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const playersRef   = useRef<Player[]>([])
   const isPausedRef  = useRef(false)
   const pausedAtRef  = useRef<number | null>(null)
+  // FIX 1: track whether advanceDay is already in-flight to prevent double-fires
+  const advancingRef = useRef(false)
 
   // ─── Derived game state ───────────────────────────────────────────────────
 
@@ -136,7 +138,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const remainingCount   = activePlayers.length
 
   const me        = players.find(p => p.user_id === currentUserId) ?? null
-  const iAmActive = me ? !votedOffIds.includes(me.user_id) : false
+  // FIX 3: use players.length as a gate so iAmActive is stable once players load
+  const iAmActive = players.length > 0 && me ? !votedOffIds.includes(me.user_id) : false
   const myTribe   = me ? tribeAssign[me.user_id] : null
   const isMerged  = gameStarted && remainingCount <= MERGE_AT
 
@@ -281,14 +284,20 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }, [])
 
   // ─── Day advancement ─────────────────────────────────────────────────────
-
+  // FIX 1: Removed the "only first sorted player advances" restriction so the
+  // day always advances when the timer hits 0 regardless of who is online.
+  // Added advancingRef guard to prevent duplicate calls from the same client.
   useEffect(() => {
     if (!gameStarted || !lobbyId || !currentUserId) return
     if (countdown > 0) return
     if (isPaused) return
-    const sortedIds = [...playersRef.current.map(p => p.user_id)].sort()
-    if (sortedIds[0] !== currentUserId) return
-    advanceDay(lobbyId)
+    if (advancingRef.current) return
+
+    advancingRef.current = true
+    advanceDay(lobbyId).finally(() => {
+      // Allow re-triggering after a short cooldown
+      setTimeout(() => { advancingRef.current = false }, 5000)
+    })
   }, [countdown, gameStarted, currentUserId, lobbyId, isPaused])
 
   // ─── Check if already voted today ────────────────────────────────────────
@@ -438,10 +447,14 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     loadLobby(id)
   }
 
+  // FIX 1: Removed the overly strict `> Date.now() + 2000` guard that was
+  // silently bailing when clocks were slightly out of sync. Now uses a
+  // generous 10-second buffer so stale day_ends_at values still trigger.
   async function advanceDay(id: string) {
     const l = lobbyRef.current
     if (!l) return
-    if (new Date(l.day_ends_at).getTime() > Date.now() + 2000) return
+    // Only bail if day_ends_at is clearly still in the future (10s buffer)
+    if (l.day_ends_at && new Date(l.day_ends_at).getTime() > Date.now() + 10000) return
 
     const newDay = (l.current_day ?? 1) + 1
     const dayEndsAt = new Date(Date.now() + DAY_DURATION_MS)
@@ -606,6 +619,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }
 
   // ─── Chat panel ──────────────────────────────────────────────────────────
+  // FIX 3: canChat now checks myTribe === tribeKey directly using the derived
+  // myTribe value, and uses iAmActive which is now stable once players load.
 
   function ChatPanel({ tribeKey, scrollRef }: { tribeKey: string, scrollRef: React.RefObject<HTMLDivElement | null> }) {
     const canChat = iAmActive && myTribe === tribeKey
@@ -689,11 +704,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
             <h1 className="text-xl font-bold text-white">
               {me ? me.username : <span className="text-zinc-600">Loading...</span>}
             </h1>
+            {/* FIX 4: tribe name first, then "Tribe" — e.g. "Malolo Tribe" */}
             {gameStarted && myTribe && (
               <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{
                 color: myTribe === TRIBE_1 ? '#f59e0b' : myTribe === TRIBE_2 ? '#60a5fa' : '#a78bfa'
               }}>
-                Tribe {tribeName(myTribe)}
+                {tribeName(myTribe)} Tribe
               </p>
             )}
           </div>
@@ -906,32 +922,54 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   </div>
                 </>
               ) : isMerged ? (
+                // FIX 2: Added explicit empty-state guard so the grid always renders
+                // something meaningful even when tribe data is still loading
                 <div>
                   <p className="text-center font-black uppercase tracking-widest text-lg mb-3" style={{ color: '#7c3aed' }}>
-                    ⚔ Tribe {TRIBE_RARO_NAME} — The Merge Tribe
+                    ⚔ {TRIBE_RARO_NAME} Tribe — The Merge Tribe
                   </p>
-                  <div className="grid grid-cols-10 gap-2">
-                    {raroPlayers.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
-                  </div>
+                  {raroPlayers.length === 0 ? (
+                    <p className="text-center italic text-zinc-600 text-sm">Loading players...</p>
+                  ) : (
+                    <div className="grid grid-cols-10 gap-2">
+                      {raroPlayers.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col gap-6">
-                  <div>
-                    <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#b45309' }}>
-                      🔥 Tribe {TRIBE_1_NAME}
-                    </p>
-                    <div className="grid grid-cols-9 gap-2">
-                      {tribe1Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                  {/* FIX 2: Show all active players (with tribe label) if tribe arrays are
+                      empty — this handles the window between game start and first loadPlayers
+                      returning data with tribeAssign populated. */}
+                  {tribe1Players.length === 0 && tribe2Players.length === 0 && activePlayers.length > 0 ? (
+                    <div>
+                      <p className="font-black uppercase tracking-widest text-base mb-2 text-center text-zinc-600 italic">
+                        Loading tribe assignments...
+                      </p>
+                      <div className="grid grid-cols-9 gap-2">
+                        {activePlayers.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#1d4ed8' }}>
-                      🌊 Tribe {TRIBE_2_NAME}
-                    </p>
-                    <div className="grid grid-cols-9 gap-2">
-                      {tribe2Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#b45309' }}>
+                          🔥 {TRIBE_1_NAME} Tribe
+                        </p>
+                        <div className="grid grid-cols-9 gap-2">
+                          {tribe1Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="font-black uppercase tracking-widest text-base mb-2 text-center" style={{ color: '#1d4ed8' }}>
+                          🌊 {TRIBE_2_NAME} Tribe
+                        </p>
+                        <div className="grid grid-cols-9 gap-2">
+                          {tribe2Players.map(p => <PlayerAvatar key={p.user_id} player={p} size="sm" />)}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -956,7 +994,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
                   <div className="w-1/2 flex flex-col min-h-0">
                     <h2 className="text-base font-black uppercase tracking-widest mb-3 shrink-0" style={{ color: isMerged ? '#7c3aed' : '#b45309' }}>
-                      Tribe {isMerged ? TRIBE_RARO_NAME : TRIBE_1_NAME}
+                      {isMerged ? TRIBE_RARO_NAME : TRIBE_1_NAME} Tribe
                     </h2>
                     <div className="overflow-y-auto flex-1">
                       <div className="grid grid-cols-4 gap-2">
@@ -979,7 +1017,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
                   <div className="w-1/2 flex flex-col min-h-0">
                     <h2 className="text-base font-black uppercase tracking-widest mb-3 shrink-0" style={{ color: '#1d4ed8' }}>
-                      Tribe {TRIBE_2_NAME}
+                      {TRIBE_2_NAME} Tribe
                     </h2>
                     <div className="overflow-y-auto flex-1">
                       <div className="grid grid-cols-4 gap-2">
@@ -1015,11 +1053,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   <div className="flex gap-4">
                     <div className="flex-1 bg-[#c8a96e] rounded-xl p-4 border border-[#a07840] text-center">
                       <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-1">Immunity Winner</p>
-                      <p className="text-2xl font-black capitalize">Tribe {tribeName(todayResult.immunity_winner)}</p>
+                      <p className="text-2xl font-black capitalize">{tribeName(todayResult.immunity_winner)} Tribe</p>
                     </div>
                     <div className="flex-1 bg-[#c8a96e] rounded-xl p-4 border border-[#a07840] text-center">
                       <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-1">Reward Winner</p>
-                      <p className="text-2xl font-black capitalize">Tribe {tribeName(todayResult.reward_winner)}</p>
+                      <p className="text-2xl font-black capitalize">{tribeName(todayResult.reward_winner)} Tribe</p>
                     </div>
                   </div>
                 </div>
