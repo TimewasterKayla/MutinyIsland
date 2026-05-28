@@ -991,10 +991,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   {raroPlayers.length === 0 ? (
                     <p className="text-center italic text-zinc-600 text-sm">Loading players...</p>
                   ) : (
-                    /* CHANGED: grid-cols-6 for bigger cards in merged view */
-                    <div className="grid grid-cols-6 gap-3">
+                    <div className="grid grid-cols-9 gap-2">
                       {raroPlayers.map(p => (
-                        <PlayerAvatar key={p.user_id} player={p} size="md" />
+                        <PlayerAvatar key={p.user_id} player={p} size="sm" />
                       ))}
                     </div>
                   )}
@@ -1005,10 +1004,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: '#b45309' }}>
                       🔥 {TRIBE_1_NAME} Tribe
                     </p>
-                    {/* CHANGED: grid-cols-5 for bigger tribe cards */}
-                    <div className="grid grid-cols-5 gap-3">
+                    <div className="grid grid-cols-9 gap-2">
                       {tribe1Players.map(p => (
-                        <PlayerAvatar key={p.user_id} player={p} size="md" />
+                        <PlayerAvatar key={p.user_id} player={p} size="sm" />
                       ))}
                     </div>
                   </div>
@@ -1016,10 +1014,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: '#1d4ed8' }}>
                       🌊 {TRIBE_2_NAME} Tribe
                     </p>
-                    {/* CHANGED: grid-cols-5 for bigger tribe cards */}
-                    <div className="grid grid-cols-5 gap-3">
+                    <div className="grid grid-cols-9 gap-2">
                       {tribe2Players.map(p => (
-                        <PlayerAvatar key={p.user_id} player={p} size="md" />
+                        <PlayerAvatar key={p.user_id} player={p} size="sm" />
                       ))}
                     </div>
                   </div>
