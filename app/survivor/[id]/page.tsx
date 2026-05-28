@@ -150,30 +150,49 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
 
   return (
     <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
-      {/* FIX 4: onScroll handler added to the message list container */}
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
+      {/* Fix 6: flex flex-col + justify-end ensures messages start at the bottom
+          and new messages appear at the bottom pushing older ones up */}
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pr-1 min-h-0 flex flex-col justify-end">
+        <div className="space-y-2">
         {tribeMessages.map(m => {
           const isOnline  = onlineUserIds.has(m.sender_id)
           const isWhisper = !!m.is_whisper
+          const isSentByMe = m.sender_id === currentUserId
           return (
             <div
               key={m.id}
-              // FIX 2: All messages use the same background regardless of whisper status.
-              // Only the header text still indicates it's a whisper.
               className="p-3 rounded bg-[#b8955a]"
             >
               <div className="flex justify-between mb-1">
                 <span className="inline-flex items-center gap-1.5">
-                  <span
-                    className="inline-block w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 4px #22c55e' : 'none' }}
-                  />
+                  {/* Fix 2: Only show the online dot for non-whispers, or for whispers I sent.
+                      Incoming whispers (received) hide the dot entirely. */}
+                  {(!isWhisper || isSentByMe) && (
+                    <span
+                      className="inline-block w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 4px #22c55e' : 'none' }}
+                    />
+                  )}
                   {isWhisper ? (
-                    <span className="text-red-300 font-bold text-sm italic">
-                      {m.sender_id === currentUserId
-                        ? `[Whisper to ${tribeMembers.find(p => p.user_id === m.whisper_to)?.username ?? 'someone'}]`
-                        : `[Whisper from ${m.username}]`}
-                    </span>
+                    isSentByMe ? (
+                      // Fix 1: Sent whisper — show "MyUsername" (non-italic) then "[Whisper to X]" (italic, crimson)
+                      <>
+                        <span
+                          className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
+                          onClick={() => onClickUsername(m.username ?? '')}
+                        >
+                          {m.username}
+                        </span>
+                        <span className="font-bold text-sm italic" style={{ color: '#dc143c' }}>
+                          {` [Whisper to ${tribeMembers.find(p => p.user_id === m.whisper_to)?.username ?? 'someone'}]`}
+                        </span>
+                      </>
+                    ) : (
+                      // Fix 2+3: Received whisper — just the crimson italic tag, no dot
+                      <span className="font-bold text-sm italic" style={{ color: '#dc143c' }}>
+                        {`[Whisper from ${m.username}]`}
+                      </span>
+                    )
                   ) : (
                     <span
                       className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
@@ -189,6 +208,7 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
             </div>
           )
         })}
+        </div>
       </div>
 
       {/* Send row */}
@@ -540,10 +560,24 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (reunionChatRef.current) reunionChatRef.current.scrollTop = reunionChatRef.current.scrollHeight
   }, [reunionMessages])
 
-  // ─── FIX 1: Check if already voted today + restore voted name on refresh ──
+  // ─── Fix 4: Reset parchment state when the day changes ──────────────────
+  // We track the last day we loaded votes for. When currentDay changes,
+  // clear the parchment immediately so stale data never shows.
+  const lastLoadedVoteDayRef = useRef<number>(0)
+
+  // ─── Check if already voted today + restore voted name on refresh ─────────
 
   useEffect(() => {
     if (!lobbyId || !currentUserId || !currentDay) return
+
+    // If the day has advanced, wipe the previous round's state right away
+    if (currentDay !== lastLoadedVoteDayRef.current) {
+      setHasVotedToday(false)
+      setVotedName(null)
+      setVoteTarget('')
+      lastLoadedVoteDayRef.current = currentDay
+    }
+
     supabase
       .from('votes')
       .select('id, target_id')
@@ -555,14 +589,17 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         if (data) {
           setHasVotedToday(true)
           setVoteTarget(data.target_id)
-          // Resolve the voted player's username so the parchment shows the
-          // correct name even after a page refresh
           const { data: profile } = await supabase
             .from('profiles')
             .select('username')
             .eq('id', data.target_id)
             .maybeSingle()
           setVotedName(profile?.username ?? 'Unknown')
+        } else {
+          // Explicitly clear in case a stale value slipped through
+          setHasVotedToday(false)
+          setVotedName(null)
+          setVoteTarget('')
         }
       })
   }, [lobbyId, currentUserId, currentDay])
@@ -653,61 +690,77 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }
 
   async function loadVoteHistory(id: string) {
-    const { data: allVotes } = await supabase
-      .from('votes').select('*').eq('lobby_id', id).order('day', { ascending: true })
-
     const l = lobbyRef.current
     const votedOffList: string[] = l?.voted_off ?? []
+    const completedUpToDay = (l?.current_day ?? 1) - 1  // votes are tallied for days before the current one
 
-    const allIds = allVotes && allVotes.length > 0
-      ? [...new Set([...allVotes.map((v: any) => v.voter_id), ...allVotes.map((v: any) => v.target_id)])]
-      : []
-    const allPlayerIds = players.map(p => p.user_id)
-    const idsToResolve = [...new Set([...allIds, ...allPlayerIds])]
+    if (votedOffList.length === 0) { setVoteHistory([]); return }
 
-    const { data: profileData } = idsToResolve.length > 0
-      ? await supabase.from('profiles').select('id, username').in('id', idsToResolve)
+    // Fetch all votes for this lobby up through completed days only
+    const { data: allVotes } = await supabase
+      .from('votes')
+      .select('voter_id, target_id, day')
+      .eq('lobby_id', id)
+      .lte('day', completedUpToDay)
+      .order('day', { ascending: true })
+
+    // Resolve all usernames we'll need
+    const allUserIds = [...new Set([
+      ...votedOffList,
+      ...(allVotes ?? []).map((v: any) => v.voter_id),
+      ...(allVotes ?? []).map((v: any) => v.target_id),
+    ])]
+    const { data: profileData } = allUserIds.length > 0
+      ? await supabase.from('profiles').select('id, username').in('id', allUserIds)
       : { data: [] }
     const nameMap = Object.fromEntries((profileData || []).map((p: any) => [p.id, p.username]))
 
-    // Build a map of day -> votes cast that day
-    const votesByDay: Record<number, any[]> = {}
+    // Group votes by day: day -> { target_id -> count }
+    const votesByDay: Record<number, Record<string, number>> = {}
     ;(allVotes ?? []).forEach((v: any) => {
-      if (!votesByDay[v.day]) votesByDay[v.day] = []
-      votesByDay[v.day].push(v)
+      if (!votesByDay[v.day]) votesByDay[v.day] = {}
+      votesByDay[v.day][v.target_id] = (votesByDay[v.day][v.target_id] || 0) + 1
     })
 
+    // For each eliminated player, find the day they were voted off.
+    // We match a day to an eliminated player if that day's votes have them
+    // as the plurality target. We consume days in order so each day is
+    // only attributed to one elimination.
     const usedDays = new Set<number>()
 
     const history: VoteRecord[] = votedOffList.map((eliminatedId) => {
-      const candidateDays = Object.keys(votesByDay)
+      // Find earliest unused day where this person received votes
+      const matchDay = Object.keys(votesByDay)
         .map(Number)
-        .filter(day => !usedDays.has(day) && votesByDay[day].some((v: any) => v.target_id === eliminatedId))
-        .sort((a, b) => a - b)
+        .filter(day => !usedDays.has(day) && votesByDay[day][eliminatedId] !== undefined)
+        .sort((a, b) => a - b)[0]
 
-      if (candidateDays.length > 0) {
-        const day = candidateDays[0]
-        usedDays.add(day)
-        const dayVotes = votesByDay[day]
-        const counts: Record<string, number> = {}
-        dayVotes.forEach((v: any) => {
-          const name = nameMap[v.target_id] || v.target_id.slice(0, 8)
-          counts[name] = (counts[name] || 0) + 1
+      if (matchDay !== undefined) {
+        usedDays.add(matchDay)
+        const dayCounts = votesByDay[matchDay]
+        // Build display map: username -> vote count
+        const vote_counts: Record<string, number> = {}
+        Object.entries(dayCounts).forEach(([targetId, count]) => {
+          const name = nameMap[targetId] || targetId.slice(0, 8)
+          vote_counts[name] = count
         })
         return {
-          day,
+          day: matchDay,
           voted_off: eliminatedId,
           username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
-          vote_counts: counts,
+          vote_counts,
           rocks_drawn: false,
         }
       }
 
-      const unusedDaysWithVotes = Object.keys(votesByDay).map(Number).filter(d => !usedDays.has(d)).sort((a, b) => a - b)
-      const day = unusedDaysWithVotes.length > 0 ? unusedDaysWithVotes[0] : (usedDays.size + 2)
-      usedDays.add(day)
+      // No votes found for this person — rocks were drawn or votes missing
+      const fallbackDay = Object.keys(votesByDay)
+        .map(Number)
+        .filter(d => !usedDays.has(d))
+        .sort((a, b) => a - b)[0] ?? (usedDays.size + 2)
+      usedDays.add(fallbackDay)
       return {
-        day,
+        day: fallbackDay,
         voted_off: eliminatedId,
         username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
         vote_counts: {},
