@@ -478,32 +478,52 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       : { data: [] }
     const nameMap = Object.fromEntries((profileData || []).map((p: any) => [p.id, p.username]))
 
-    const history: VoteRecord[] = votedOffList.map((eliminatedId, idx) => {
-      const eliminationDay = idx + 2
-      const dayVotes = (allVotes ?? []).filter((v: any) => v.day === eliminationDay - 1)
-      const hadVotes = dayVotes.length > 0
+    // Build a map of day -> votes cast that day
+    const votesByDay: Record<number, any[]> = {}
+    ;(allVotes ?? []).forEach((v: any) => {
+      if (!votesByDay[v.day]) votesByDay[v.day] = []
+      votesByDay[v.day].push(v)
+    })
 
-      if (!hadVotes) {
+    // For each eliminated player, find the actual day their votes were cast.
+    // We track used days so two eliminations never share the same day entry.
+    const usedDays = new Set<number>()
+
+    const history: VoteRecord[] = votedOffList.map((eliminatedId) => {
+      // Find the earliest day that has votes targeting this player
+      const candidateDays = Object.keys(votesByDay)
+        .map(Number)
+        .filter(day => !usedDays.has(day) && votesByDay[day].some((v: any) => v.target_id === eliminatedId))
+        .sort((a, b) => a - b)
+
+      if (candidateDays.length > 0) {
+        const day = candidateDays[0]
+        usedDays.add(day)
+        const dayVotes = votesByDay[day]
+        const counts: Record<string, number> = {}
+        dayVotes.forEach((v: any) => {
+          const name = nameMap[v.target_id] || v.target_id.slice(0, 8)
+          counts[name] = (counts[name] || 0) + 1
+        })
         return {
-          day: eliminationDay - 1,
+          day,
           voted_off: eliminatedId,
           username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
-          vote_counts: {},
-          rocks_drawn: true,
+          vote_counts: counts,
+          rocks_drawn: false,
         }
       }
 
-      const counts: Record<string, number> = {}
-      dayVotes.forEach((v: any) => {
-        const name = nameMap[v.target_id] || v.target_id.slice(0, 8)
-        counts[name] = (counts[name] || 0) + 1
-      })
+      // No votes targeted this player — rocks were drawn
+      const unusedDaysWithVotes = Object.keys(votesByDay).map(Number).filter(d => !usedDays.has(d)).sort((a, b) => a - b)
+      const day = unusedDaysWithVotes.length > 0 ? unusedDaysWithVotes[0] : (usedDays.size + 2)
+      usedDays.add(day)
       return {
-        day: eliminationDay - 1,
+        day,
         voted_off: eliminatedId,
         username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
-        vote_counts: counts,
-        rocks_drawn: false,
+        vote_counts: {},
+        rocks_drawn: true,
       }
     })
 
@@ -986,15 +1006,27 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               ) : isMerged ? (
                 <div>
                   <p className="text-center font-black uppercase tracking-widest text-lg mb-3" style={{ color: '#7c3aed' }}>
-                    ⚔ {TRIBE_RARO_NAME} Tribe — The Merge Tribe
+                    ⚔ {TRIBE_RARO_NAME} Tribe
                   </p>
                   {raroPlayers.length === 0 ? (
                     <p className="text-center italic text-zinc-600 text-sm">Loading players...</p>
-                  ) : (
+                  ) : raroPlayers.length <= 9 ? (
                     <div className="flex flex-wrap justify-center gap-2">
                       {raroPlayers.map(p => (
                         <div key={p.user_id} style={{ width: 'calc(11.11% - 8px)' }}>
                           <PlayerAvatar player={p} size="sm" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      {[raroPlayers.slice(0, 5), raroPlayers.slice(5)].map((row, rowIdx) => (
+                        <div key={rowIdx} className="flex justify-center gap-2">
+                          {row.map(p => (
+                            <div key={p.user_id} style={{ width: 'calc(11.11% - 8px)' }}>
+                              <PlayerAvatar player={p} size="sm" />
+                            </div>
+                          ))}
                         </div>
                       ))}
                     </div>
@@ -1237,6 +1269,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       const isVotedOff = votedOffIds.includes(player.user_id)
                       const votedOffPosition = votedOffReversed.findIndex(p => p.user_id === player.user_id)
                       const placement = isVotedOff ? (activePlayers.length + 1 + votedOffPosition) : null
+                      // Jury = eliminated at or after the merge (MERGE_AT players remaining)
+                      const isJury = isVotedOff && placement !== null && placement <= MERGE_AT
 
                       return (
                         <div key={player.user_id} className="flex flex-col items-center gap-1">
@@ -1257,14 +1291,15 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                               )}
                             </div>
                           </div>
-                          {/* CHANGED: text-[11px] (up from text-[9px]) for bigger usernames */}
                           <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                             {player.username}
                           </p>
                           {isVotedOff && placement !== null && (
-                            /* CHANGED: dark grey background, white text */
-                            <div className="bg-zinc-700 rounded px-1.5 py-0.5 text-[8px] font-bold text-white uppercase tracking-wide">
-                              {ordinal(placement)}
+                            <div
+                              className="rounded px-1.5 py-0.5 text-[8px] font-bold text-white uppercase tracking-wide text-center"
+                              style={{ backgroundColor: isJury ? '#71717a' : '#3f3f46' }}
+                            >
+                              {isJury ? `JURY - ${ordinal(placement)}` : ordinal(placement)}
                             </div>
                           )}
                         </div>
