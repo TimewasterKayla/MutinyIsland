@@ -78,7 +78,7 @@ export default function SeasonPage({
     Promise.resolve(params).then((p) => setLobbyId(p.id))
   }, [params])
 
-  // INIT
+  // INIT — waits for lobbyId so auth session is ready before loading profile
   useEffect(() => {
     if (!lobbyId) return
     getCurrentUser()
@@ -86,6 +86,7 @@ export default function SeasonPage({
     loadPlayers()
     loadMessages()
     loadLobbyMessages()
+    loadCurrentUserProfile() // ← moved here so auth is established before firing
 
     const interval = setInterval(() => {
       loadPlayers()
@@ -95,11 +96,6 @@ export default function SeasonPage({
 
     return () => clearInterval(interval)
   }, [lobbyId])
-
-  // Load profile card independently (doesn't need lobbyId)
-  useEffect(() => {
-    loadCurrentUserProfile()
-  }, [])
 
   async function loadCurrentUserProfile() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -305,7 +301,7 @@ export default function SeasonPage({
           </p>
         </div>
 
-        {/* Player profile card — always rendered, mirrors profile page left column */}
+        {/* Player profile card */}
         <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 flex flex-col gap-3">
 
           {/* Avatar */}
@@ -401,10 +397,10 @@ export default function SeasonPage({
             )
           })}
 
-          {/* Spacer pushes Summary to the far right */}
-          <div className="flex-1" />
+          {/* Spacer — slightly reduced to nudge Summary left */}
+          <div className="flex-1 max-w-[40px]" />
 
-          {/* Summary tab — far right */}
+          {/* Summary tab */}
           {(() => {
             const isActive = activeTab === TAB_SUMMARY
             return (
@@ -500,7 +496,7 @@ export default function SeasonPage({
                 Waiting for players ({players.length}/{MAX_PLAYERS})
               </p>
 
-              {/* Lobby Chat — grows to fill remaining column space */}
+              {/* Lobby Chat */}
               <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
                 <h3 className="font-bold text-base mb-2">Lobby Chat</h3>
                 <div
@@ -560,12 +556,9 @@ export default function SeasonPage({
                 ))}
               </div>
 
-              {/* Camp 1 / Camp 2 — chat fills full vertical height on right half */}
               {(campPage === 'Camp 1' || campPage === 'Camp 2') && (
                 <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
-                  {/* Left half — empty for future content */}
                   <div className="w-1/2" />
-                  {/* Chat — right half, full height */}
                   <div className="w-1/2 flex flex-col min-h-0 h-full">
                     <h2 className="text-xl font-bold mb-3 shrink-0">{campPage} Chat</h2>
                     <div
