@@ -139,7 +139,9 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
                   />
                   {isWhisper ? (
                     <span className="text-red-300 font-bold text-sm italic">
-                      [Whisper from {m.username}]
+                      {m.sender_id === currentUserId
+                        ? `[Whisper to ${tribeMembers.find(p => p.user_id === m.whisper_to)?.username ?? 'someone'}]`
+                        : `[Whisper from ${m.username}]`}
                     </span>
                   ) : (
                     <span
@@ -181,7 +183,21 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
       {canChat && (
         <div className="mt-1.5 shrink-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            {whisperOn && (
+              <select
+                value={whisperTarget}
+                onChange={e => { setWhisperTarget(e.target.value); setWhisperError(false) }}
+                className="flex-1 bg-[#c8a96e] border border-[#a07840] rounded text-xs px-2 py-1 outline-none focus:ring-1 focus:ring-red-700 text-zinc-900 cursor-pointer"
+              >
+                <option value="">Whisper to...</option>
+                {tribeMembers
+                  .filter(p => p.user_id !== currentUserId)
+                  .map(p => (
+                    <option key={p.user_id} value={p.user_id}>{p.username}</option>
+                  ))}
+              </select>
+            )}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none ml-auto">
               <input
                 type="checkbox"
                 checked={whisperOn}
@@ -199,20 +215,6 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
                 Whisper?
               </span>
             </label>
-            {whisperOn && (
-              <select
-                value={whisperTarget}
-                onChange={e => { setWhisperTarget(e.target.value); setWhisperError(false) }}
-                className="flex-1 bg-[#c8a96e] border border-[#a07840] rounded text-xs px-2 py-1 outline-none focus:ring-1 focus:ring-red-700 text-zinc-900 cursor-pointer"
-              >
-                <option value="">Whisper to...</option>
-                {tribeMembers
-                  .filter(p => p.user_id !== currentUserId)
-                  .map(p => (
-                    <option key={p.user_id} value={p.user_id}>{p.username}</option>
-                  ))}
-              </select>
-            )}
           </div>
           {whisperError && (
             <p className="text-red-700 text-xs italic mt-1">No recipient selected.</p>
