@@ -184,6 +184,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   // Vote history
   const [voteHistory, setVoteHistory] = useState<VoteRecord[]>([])
 
+  // Finale
+  const [reunionText,       setReunionText]       = useState('')
+  const [reunionMessages,   setReunionMessages]   = useState<Message[]>([])
+  const [finaleVoteTarget,  setFinaleVoteTarget]  = useState('')
+  const [hasFinaleVoted,    setHasFinaleVoted]    = useState(false)
+  const reunionChatRef = useRef<HTMLDivElement>(null)
+
   // Refs
   const chatRef         = useRef<HTMLDivElement>(null)
   const lobbyChatRef    = useRef<HTMLDivElement>(null)
@@ -212,6 +219,15 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const myTribe   = _uid ? (tribeAssign[_uid] ?? null) : null
   const isMerged  = gameStarted && remainingCount <= MERGE_AT
 
+  const isFinale    = !!lobby?.is_finale
+  const isFinished  = !!lobby?.finished_at
+  const finalists   = activePlayers  // when 2 remain these are the finalists
+  // Jury = voted off after merge
+  const preMergeBootCount = MAX_PLAYERS - MERGE_AT  // 8 for 18-player game
+  const juryIds     = votedOffIds.filter((_, idx) => idx >= preMergeBootCount)
+  // Anyone who can chat in reunion: jury + finalists
+  const canReunionChat = juryIds.includes(_uid) || activePlayers.some(p => p.user_id === _uid)
+
   const todayResult = challengeResults.find(r => r.day === currentDay - 1) ?? null
   const losingTribe = todayResult
     ? (todayResult.immunity_winner === TRIBE_1 ? TRIBE_2 : TRIBE_1)
@@ -223,17 +239,18 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   const canAccessTikiCourt = (() => {
     if (!gameStarted || currentDay < 2 || !iAmActive) return false
-    if (remainingCount <= 3) return false  // final 3 — no vote
+    if (isFinale || isFinished) return false
     if (isMerged) return true
     return myTribe === losingTribe
   })()
 
-  // Challenge Beach is locked when <=3 players remain (final tribal, no challenge)
-  const canAccessChallengeBeach = gameStarted && remainingCount > 3
+  // Challenge Beach locked when <=3 players remain OR in finale
+  const canAccessChallengeBeach = gameStarted && remainingCount > 3 && !isFinale && !isFinished
 
   const tabAccessible = (tab: Tab): boolean => {
     if (tab === 'Players') return true
     if (tab === 'Summary') return true
+    if (isFinale || isFinished) return false  // only Players + Summary in finale
     if (!gameStarted) return false
     if (tab === 'Tiki Court') return canAccessTikiCourt
     if (tab === 'Challenge Beach') return canAccessChallengeBeach
@@ -281,11 +298,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     loadLobby(lobbyId)
     loadMessages(lobbyId)
     loadLobbyMessages(lobbyId)
+    loadReunionMessages(lobbyId)
 
     const interval = setInterval(() => {
       loadPlayers(lobbyId)
       loadMessages(lobbyId)
       loadLobbyMessages(lobbyId)
+      loadReunionMessages(lobbyId)
       loadLobby(lobbyId)
     }, 3000)
     return () => clearInterval(interval)
@@ -377,6 +396,24 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       setTimeout(() => { advancingRef.current = false }, 5000)
     })
   }, [countdown, gameStarted, currentUserId, lobbyId, isPaused])
+
+  // ─── Check if already finale-voted ──────────────────────────────────────
+
+  useEffect(() => {
+    if (!lobbyId || !currentUserId || !isFinale) return
+    supabase.from('votes').select('id, target_id')
+      .eq('lobby_id', lobbyId).eq('voter_id', currentUserId).eq('day', 9999)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) { setHasFinaleVoted(true); setFinaleVoteTarget(data.target_id) }
+      })
+  }, [lobbyId, currentUserId, isFinale])
+
+  // ─── Auto-scroll reunion chat ─────────────────────────────────────────────
+
+  useEffect(() => {
+    if (reunionChatRef.current) reunionChatRef.current.scrollTop = reunionChatRef.current.scrollHeight
+  }, [reunionMessages])
 
   // ─── Check if already voted today ────────────────────────────────────────
 
@@ -542,6 +579,60 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     setVoteHistory(history)
   }
 
+  async function loadReunionMessages(id: string) {
+    const { data, error } = await supabase
+      .from('messages').select('*').eq('season_id', id)
+      .eq('topic', 'reunion').order('created_at', { ascending: true })
+    if (error || !data || data.length === 0) { setReunionMessages([]); return }
+    const senderIds = [...new Set(data.map((m: any) => m.sender_id))]
+    const profileMap = await resolveUsernames(senderIds)
+    setReunionMessages(data.map((m: any) => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
+  }
+
+  async function sendReunionMessage() {
+    if (!reunionText.trim() || !lobbyId || !canReunionChat) return
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('messages').insert({
+      season_id: lobbyId, sender_id: user.id, content: reunionText.trim(), topic: 'reunion',
+    })
+    setReunionText('')
+    loadReunionMessages(lobbyId)
+  }
+
+  async function castFinaleVote(targetId: string) {
+    if (!lobbyId || !currentUserId || hasFinaleVoted) return
+    // Finale votes go into the votes table with day = 9999 as a sentinel
+    const { error } = await supabase.from('votes').insert({
+      lobby_id: lobbyId, voter_id: currentUserId, target_id: targetId, day: 9999,
+    })
+    if (error) { console.error('FINALE VOTE ERROR:', error); return }
+    setHasFinaleVoted(true)
+    setFinaleVoteTarget(targetId)
+    // Check if all jury have voted and declare winner
+    await resolveFinale(lobbyId)
+  }
+
+  async function resolveFinale(id: string) {
+    const l = lobbyRef.current
+    if (!l || l.finished_at) return
+    const activeIds = Object.keys(l.tribe_assignments ?? {}).filter((uid: string) => !(l.voted_off ?? []).includes(uid))
+    const preMerge = MAX_PLAYERS - MERGE_AT
+    const jury = (l.voted_off ?? []).filter((_: any, idx: number) => idx >= preMerge)
+    const { data: finaleVotes } = await supabase
+      .from('votes').select('*').eq('lobby_id', id).eq('day', 9999)
+    if (!finaleVotes || finaleVotes.length < jury.length) return  // not all jury voted yet
+    const counts: Record<string, number> = {}
+    finaleVotes.forEach((v: any) => { counts[v.target_id] = (counts[v.target_id] || 0) + 1 })
+    const winner = Object.entries(counts).sort((a, b) => (b[1] as number) - (a[1] as number))[0]?.[0]
+    if (!winner) return
+    await supabase.from('lobbies').update({
+      finished_at: new Date().toISOString(),
+      winner_id: winner,
+    }).eq('id', id)
+    loadLobby(id)
+  }
+
   // ─── Game logic ──────────────────────────────────────────────────────────
 
   async function startGame(id: string, allPlayers: Player[], lobbyData: any) {
@@ -573,6 +664,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   async function advanceDay(id: string) {
     const l = lobbyRef.current
     if (!l) return
+    if (l.is_finale || l.finished_at) return  // stop advancing in finale/finished
     if (l.day_ends_at && new Date(l.day_ends_at).getTime() > Date.now() + 10000) return
 
     const newDay = (l.current_day ?? 1) + 1
@@ -658,12 +750,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       activeAfterElim.forEach(uid => { newAssignments[uid] = TRIBE_RARO })
     }
 
+    // Enter finale if exactly 2 players remain after this elimination
+    const enterFinale = activeAfterElim.length === 2
+
     await supabase.from('lobbies').update({
       current_day: newDay,
-      day_ends_at: dayEndsAt.toISOString(),
+      day_ends_at: dayEndsAt.toISOString(),  // timer keeps running through finale
       challenge_results: newResults,
       voted_off: newVotedOff,
       tribe_assignments: newAssignments,
+      ...(enterFinale ? { is_finale: true } : {}),
     }).eq('id', id)
 
     loadLobby(id)
@@ -783,7 +879,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }
 
   const tabs: Tab[] = ['Players', 'Camp', 'Challenge Beach', 'Tiki Court']
-  const tabLabel = (tab: Tab) => tab === 'Players' && !gameStarted ? 'Lobby' : tab
+  const tabLabel = (tab: Tab) => {
+    if (tab === 'Players') {
+      if (isFinale || isFinished) return 'Finalists'
+      if (!gameStarted) return 'Lobby'
+    }
+    return tab
+  }
 
   return (
     <main
@@ -859,6 +961,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           {currentDay === 0 ? (
             <p className="text-xs font-bold uppercase tracking-widest text-amber-800 text-center px-4">
               The game will start soon!
+            </p>
+          ) : (isFinale || isFinished) ? (
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-800 text-center px-4 animate-pulse">
+              {isFinished ? '🏆 Game Over' : '🌟 Finale'}
             </p>
           ) : (
             <>
@@ -1036,6 +1142,111 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     </div>
                   </div>
                 </>
+              ) : (isFinale || isFinished) ? (
+                /* ── FINALE view: two columns — finalists left, reunion chat right ── */
+                <div className="flex gap-5 flex-1 min-h-0 overflow-hidden">
+                  {/* Left: finalists */}
+                  <div className="w-1/2 flex flex-col min-h-0">
+                    <h2 className="text-2xl font-black uppercase tracking-widest mb-4 text-center" style={{ color: '#7c3aed' }}>
+                      Finalists
+                    </h2>
+                    {isFinished && (() => {
+                      const winner = players.find(p => p.user_id === lobby?.winner_id)
+                      return winner ? (
+                        <div className="text-center mb-4 p-3 rounded-xl border border-yellow-600" style={{ background: '#b8955a' }}>
+                          <p className="text-xs font-bold uppercase tracking-widest text-yellow-700 mb-1">🏆 Winner</p>
+                          <p className="text-2xl font-black text-zinc-900">{winner.username}</p>
+                        </div>
+                      ) : null
+                    })()}
+                    <div className="flex justify-center gap-6">
+                      {activePlayers.map(p => (
+                        <div key={p.user_id} style={{ width: '120px' }}>
+                          <PlayerAvatar player={p} size="md" />
+                        </div>
+                      ))}
+                    </div>
+                    {/* Jury vote section — only shown in finale, not yet finished */}
+                    {isFinale && !isFinished && juryIds.includes(_uid) && (
+                      <div className="mt-6 p-4 rounded-xl border border-[#a07840]" style={{ background: '#b8955a' }}>
+                        <p className="font-black uppercase tracking-widest text-sm mb-3 text-zinc-800">Cast Your Jury Vote</p>
+                        {hasFinaleVoted ? (
+                          <div className="text-center">
+                            <p className="font-bold text-zinc-700 text-sm">
+                              You voted for <span className="text-amber-800">{players.find(p => p.user_id === finaleVoteTarget)?.username}</span>
+                            </p>
+                            <button
+                              onClick={async () => {
+                                if (!lobbyId || !currentUserId) return
+                                await supabase.from('votes').delete()
+                                  .eq('lobby_id', lobbyId).eq('voter_id', currentUserId).eq('day', 9999)
+                                setHasFinaleVoted(false)
+                                setFinaleVoteTarget('')
+                              }}
+                              className="mt-2 text-xs font-bold text-amber-700 underline cursor-pointer"
+                            >
+                              Change vote
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {activePlayers.map(p => (
+                              <button
+                                key={p.user_id}
+                                onClick={() => castFinaleVote(p.user_id)}
+                                className="w-full py-2 rounded-lg font-bold text-sm uppercase tracking-wide bg-yellow-700 text-white hover:bg-yellow-800 transition cursor-pointer"
+                              >
+                                Vote for {p.username}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* Right: Reunion Chat */}
+                  <div className="w-1/2 flex flex-col min-h-0 h-full">
+                    <h2 className="text-xl font-bold mb-3 shrink-0 uppercase tracking-widest">Reunion Chat</h2>
+                    <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
+                      <div ref={reunionChatRef} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
+                        {reunionMessages.map(m => {
+                          const isOnline = onlineUserIds.has(m.sender_id)
+                          return (
+                            <div key={m.id} className="bg-[#b8955a] p-3 rounded">
+                              <div className="flex justify-between mb-1">
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span className="inline-block w-2 h-2 rounded-full shrink-0"
+                                    style={{ backgroundColor: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 4px #22c55e' : 'none' }} />
+                                  <span className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
+                                    onClick={() => router.push(`/profile/${m.username}`)}>
+                                    {m.username}
+                                  </span>
+                                </span>
+                              </div>
+                              <p className="text-sm">{m.content}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      {!isFinished && (
+                        <div className="flex gap-2 mt-2 shrink-0">
+                          <input
+                            value={reunionText}
+                            onChange={e => setReunionText(e.target.value)}
+                            disabled={!canReunionChat}
+                            className="flex-1 bg-[#c8a96e] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
+                            placeholder={canReunionChat ? 'Type message...' : 'Only jury & finalists can chat'}
+                            onKeyDown={e => { if (e.key === 'Enter') sendReunionMessage() }}
+                          />
+                          <button onClick={sendReunionMessage} disabled={!canReunionChat}
+                            className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer">
+                            Send
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               ) : isMerged ? (
                 <div>
                   <p className="text-center font-black uppercase tracking-widest text-lg mb-3" style={{ color: '#7c3aed' }}>
@@ -1349,9 +1560,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       // Jury = eliminated at or after the merge.
                       // Pre-merge boots: MAX_PLAYERS - MERGE_AT players voted off before merge.
                       // So jury members have placement > (MAX_PLAYERS - MERGE_AT).
-                      const preMergeBoots = MAX_PLAYERS - MERGE_AT
-                      const isJury = isVotedOff && placement !== null && placement > preMergeBoots
-
                       return (
                         <div key={player.user_id} className="flex flex-col items-center gap-1">
                           <div
@@ -1374,22 +1582,37 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                           <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                             {player.username}
                           </p>
-                          {isVotedOff && placement !== null && (() => {
-                            const totalPlayers = players.length || MAX_PLAYERS
-                            // 1st = highest placement number (last voted off... actually active players
-                            // are still in — placement here counts up from the first boot)
-                            // placement 1 = first voted off (worst), highest = winner
-                            // We need the winner to be the LAST remaining, which stays as activePlayers
-                            // So among votedOff, the highest placement# = most recently eliminated
-                            // final 3 are still "active" — so placement among voted off goes up to
-                            // (activePlayers.length + votedOffReversed.length)
-                            const maxPlacement = activePlayers.length + votedOffReversed.length
-                            const isFirst  = placement === maxPlacement
-                            const isSecond = placement === maxPlacement - 1
-                            const isThird  = placement === maxPlacement - 2
-                            const bgColor = isFirst ? '#d97706' : isSecond ? '#9ca3af' : isThird ? '#b45309' : isJury ? '#71717a' : '#3f3f46'
-                            const label   = isFirst ? '🥇 1st' : isSecond ? '🥈 2nd' : isThird ? '🥉 3rd'
-                              : isJury ? `JURY - ${ordinal(placement)}` : ordinal(placement)
+                          {(() => {
+                            // placement formula (for voted-off players):
+                            //   votedOffPosition 0 = most recently eliminated = 3rd place
+                            //   placement = activePlayers.length + 1 + votedOffPosition
+                            // With 2 finalists: placement 3 = bronze, 4–10 = jury, 11–18 = pre-merge
+                            //
+                            // 1st and 2nd place are still in activePlayers until isFinished,
+                            // at which point winner_id tells us who won.
+                            const isFirst  = isFinished && player.user_id === lobby?.winner_id
+                            const isSecond = isFinished && !isVotedOff && player.user_id !== lobby?.winner_id
+                            const isThird  = isVotedOff && placement !== null && placement === 3
+                            // Jury = placements 3–MERGE_AT (post-merge eliminations)
+                            // But 3rd place gets bronze badge, not "JURY"
+                            const isJuryLabel = isVotedOff && placement !== null && placement > 3 && placement <= MERGE_AT
+
+                            if (!isVotedOff && !isFinished) return null  // still active, game ongoing
+                            if (!isVotedOff && !isFirst && !isSecond) return null  // active, not yet finished
+
+                            const bgColor = isFirst ? '#d97706'
+                              : isSecond ? '#9ca3af'
+                              : isThird  ? '#92400e'
+                              : isJuryLabel ? '#71717a'
+                              : '#3f3f46'
+                            const label = isFirst ? '🥇 1st'
+                              : isSecond ? '🥈 2nd'
+                              : isThird  ? '🥉 3rd'
+                              : isJuryLabel ? `JURY - ${ordinal(placement!)}`
+                              : placement !== null ? ordinal(placement)
+                              : null
+
+                            if (!label) return null
                             return (
                               <div
                                 className="rounded px-1.5 py-0.5 text-[8px] font-bold text-white uppercase tracking-wide text-center"
