@@ -69,23 +69,24 @@ export default function SeasonPage({
   // Derive the current user's player entry directly from the players array
   const me = players.find((p) => p.user_id === currentUserId) ?? null
 
-  // PARAMS
+  // PARAMS — resolve the async params promise and store lobbyId
   useEffect(() => {
     Promise.resolve(params).then((p) => setLobbyId(p.id))
   }, [params])
 
-  // INIT
+  // INIT — only runs once lobbyId is available; pass it directly to avoid stale-closure races
   useEffect(() => {
     if (!lobbyId) return
-    initUser()
-    loadLobby()
-    loadMessages()
-    loadLobbyMessages()
+
+    initUser(lobbyId)
+    loadLobby(lobbyId)
+    loadMessages(lobbyId)
+    loadLobbyMessages(lobbyId)
 
     const interval = setInterval(() => {
-      loadPlayers()
-      loadMessages()
-      loadLobbyMessages()
+      loadPlayers(lobbyId)
+      loadMessages(lobbyId)
+      loadLobbyMessages(lobbyId)
     }, 3000)
 
     return () => clearInterval(interval)
@@ -94,7 +95,7 @@ export default function SeasonPage({
   // Load players once we have both lobbyId and currentUserId
   useEffect(() => {
     if (!lobbyId || !currentUserId) return
-    loadPlayers()
+    loadPlayers(lobbyId)
   }, [lobbyId, currentUserId])
 
   // Once we know who "me" is, fetch the extra stats (rank, coins, crowns, joined)
@@ -123,23 +124,28 @@ export default function SeasonPage({
     if (lobbyChatRef.current) lobbyChatRef.current.scrollTop = lobbyChatRef.current.scrollHeight
   }, [lobbyMessages])
 
-  async function initUser() {
+  // ── id is passed in as a param to avoid stale-closure bugs from async lobbyId state ──
+
+  async function initUser(id: string) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setIsPlayerInLobby(false); return }
     setCurrentUserId(user.id)
     const { data: lobbyData } = await supabase
-      .from('lobby_players').select('id')
-      .eq('lobby_id', lobbyId).eq('user_id', user.id).maybeSingle()
+      .from('lobby_players')
+      .select('id')
+      .eq('lobby_id', id)
+      .eq('user_id', user.id)
+      .maybeSingle()
     setIsPlayerInLobby(!!lobbyData)
   }
 
-  async function loadLobby() {
-    const { data } = await supabase.from('lobbies').select('*').eq('id', lobbyId).maybeSingle()
+  async function loadLobby(id: string) {
+    const { data } = await supabase.from('lobbies').select('*').eq('id', id).maybeSingle()
     setLobby(data)
   }
 
-  async function loadPlayers() {
-    const { data, error } = await supabase.from('lobby_players').select('*').eq('lobby_id', lobbyId)
+  async function loadPlayers(id: string) {
+    const { data, error } = await supabase.from('lobby_players').select('*').eq('lobby_id', id)
     if (error || !data || data.length === 0) { setPlayers([]); return }
 
     const userIds = data.map((p) => p.user_id)
@@ -162,9 +168,9 @@ export default function SeasonPage({
     return Object.fromEntries((data || []).map((p: any) => [p.id, p.username]))
   }
 
-  async function loadMessages() {
+  async function loadMessages(id: string) {
     const { data, error } = await supabase
-      .from('messages').select('*').eq('season_id', lobbyId)
+      .from('messages').select('*').eq('season_id', id)
       .eq('topic', 'camp').order('created_at', { ascending: true })
     if (error || !data || data.length === 0) { setMessages([]); return }
     const senderIds = [...new Set(data.map((m) => m.sender_id))]
@@ -172,9 +178,9 @@ export default function SeasonPage({
     setMessages(data.map((m) => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
   }
 
-  async function loadLobbyMessages() {
+  async function loadLobbyMessages(id: string) {
     const { data, error } = await supabase
-      .from('messages').select('*').eq('season_id', lobbyId)
+      .from('messages').select('*').eq('season_id', id)
       .eq('topic', 'lobby').order('created_at', { ascending: true })
     if (error || !data || data.length === 0) { setLobbyMessages([]); return }
     const senderIds = [...new Set(data.map((m) => m.sender_id))]
@@ -183,27 +189,57 @@ export default function SeasonPage({
   }
 
   async function sendMessage() {
-    if (!text.trim() || !isPlayerInLobby) return
+    if (!text.trim() || !lobbyId) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    await supabase.from('messages').insert({ season_id: lobbyId, sender_id: user.id, content: text.trim(), topic: 'camp' })
+    // Re-verify membership at send time rather than relying solely on cached isPlayerInLobby
+    const { data: membership } = await supabase
+      .from('lobby_players')
+      .select('id')
+      .eq('lobby_id', lobbyId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!membership) return
+    await supabase.from('messages').insert({
+      season_id: lobbyId,
+      sender_id: user.id,
+      content: text.trim(),
+      topic: 'camp',
+    })
     setText('')
-    loadMessages()
+    loadMessages(lobbyId)
   }
 
   async function sendLobbyMessage() {
-    if (!lobbyText.trim() || !isPlayerInLobby) return
+    if (!lobbyText.trim() || !lobbyId) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    await supabase.from('messages').insert({ season_id: lobbyId, sender_id: user.id, content: lobbyText.trim(), topic: 'lobby' })
+    // Re-verify membership at send time rather than relying solely on cached isPlayerInLobby
+    const { data: membership } = await supabase
+      .from('lobby_players')
+      .select('id')
+      .eq('lobby_id', lobbyId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!membership) return
+    await supabase.from('messages').insert({
+      season_id: lobbyId,
+      sender_id: user.id,
+      content: lobbyText.trim(),
+      topic: 'lobby',
+    })
     setLobbyText('')
-    loadLobbyMessages()
+    loadLobbyMessages(lobbyId)
   }
 
   async function castVote() {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user || !voteTarget) return
-    const { error } = await supabase.from('votes').insert({ season_id: lobbyId, voter_id: user.id, target_id: voteTarget })
+    if (!user || !voteTarget || !lobbyId) return
+    const { error } = await supabase.from('votes').insert({
+      season_id: lobbyId,
+      voter_id: user.id,
+      target_id: voteTarget,
+    })
     if (error) { console.error('VOTE ERROR:', error); return }
     alert('Vote submitted')
   }
