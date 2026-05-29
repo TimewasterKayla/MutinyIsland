@@ -33,6 +33,7 @@ type ChallengeResult = {
   immunity_winner: 'malolo' | 'kaliki' | 'raro' | string
   reward_winner: 'malolo' | 'kaliki' | 'raro' | string
   individual_immunity?: string
+  voted_off?: string
 }
 
 type VoteRecord = {
@@ -694,6 +695,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     const l = lobbyRef.current
     const votedOffList: string[] = l?.voted_off ?? []
     const votedOffDays: number[] = (l?.voted_off_days ?? []).map((day: any) => Number(day))
+    const resultBootDays: Record<string, number> = Object.fromEntries(
+      ((l?.challenge_results ?? []) as ChallengeResult[])
+        .filter(result => !!result.voted_off)
+        .map(result => [result.voted_off as string, result.day])
+    )
 
     if (votedOffList.length === 0) { setVoteHistory([]); return }
 
@@ -737,7 +743,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       const inferredDay = voteDaysByTarget[eliminatedId]?.find(day => !usedDays.has(day))
       const day = Number.isFinite(storedDay) && storedDay > 0
         ? storedDay
-        : inferredDay ?? idx + 2
+        : resultBootDays[eliminatedId] ?? inferredDay ?? idx + 2
       usedDays.add(day)
 
       const dayCounts = votesByDay[day] ?? {}
@@ -889,7 +895,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       tribe_assignments: tribeAssignments,
       challenge_results: [],
       voted_off: [],
-      voted_off_days: [],
       status: 'active',
     }).eq('id', id)
 
@@ -935,29 +940,14 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     }
 
     let newVotedOff: string[] = l.voted_off ?? []
-    let newVotedOffDays: number[] = l.voted_off_days ?? []
     const { data: dayVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).eq('day', prevDay)
 
     const prevDayImmune = newResults.find(r => r.day === prevDay)?.individual_immunity ?? null
 
     if (prevDay >= 2) {
-      if (dayVotes && dayVotes.length > 0) {
-        const counts: Record<string, number> = {}
-        dayVotes.forEach((v: any) => {
-          if (prevDayImmune && v.target_id === prevDayImmune) return
-          counts[v.target_id] = (counts[v.target_id] || 0) + 1
-        })
-        if (Object.keys(counts).length > 0) {
-          const maxVotes = Math.max(...Object.values(counts))
-          const tied = Object.keys(counts).filter(uid => counts[uid] === maxVotes)
-          const eliminated = tied[Math.floor(Math.random() * tied.length)]
-          if (!newVotedOff.includes(eliminated)) {
-            newVotedOff = [...newVotedOff, eliminated]
-          }
-        }
-      } else {
-        const activeThenIds = Object.keys(l.tribe_assignments ?? {}).filter(uid => !(l.voted_off ?? []).includes(uid))
+      const activeThenIds = Object.keys(l.tribe_assignments ?? {}).filter(uid => !(l.voted_off ?? []).includes(uid))
+      const pickFallbackEliminated = () => {
         const isMergedThen = activeThenIds.length <= MERGE_AT
 
         let pool: string[]
@@ -969,9 +959,36 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           pool = activeThenIds.filter(uid => l.tribe_assignments[uid] === losingTribeKey)
           if (pool.length === 0) pool = activeThenIds
         }
-        if (pool.length > 0) {
-          const eliminated = pool[Math.floor(Math.random() * pool.length)]
-          newVotedOff = [...newVotedOff, eliminated]
+
+        return pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null
+      }
+
+      let eliminated: string | null = null
+      if (dayVotes && dayVotes.length > 0) {
+        const counts: Record<string, number> = {}
+        dayVotes.forEach((v: any) => {
+          if (prevDayImmune && v.target_id === prevDayImmune) return
+          if (!activeThenIds.includes(v.target_id)) return
+          counts[v.target_id] = (counts[v.target_id] || 0) + 1
+        })
+        if (Object.keys(counts).length > 0) {
+          const maxVotes = Math.max(...Object.values(counts))
+          const tied = Object.keys(counts).filter(uid => counts[uid] === maxVotes)
+          eliminated = tied[Math.floor(Math.random() * tied.length)]
+        }
+      }
+
+      if (!eliminated) eliminated = pickFallbackEliminated()
+      if (eliminated && !newVotedOff.includes(eliminated)) {
+        newVotedOff = [...newVotedOff, eliminated]
+        let recordedBootDay = false
+        newResults = newResults.map(result => {
+          if (result.day !== prevDay) return result
+          recordedBootDay = true
+          return { ...result, voted_off: eliminated }
+        })
+        if (!recordedBootDay) {
+          newResults = [...newResults, { day: prevDay, immunity_winner: '', reward_winner: '', voted_off: eliminated }]
         }
       }
     }
@@ -981,7 +998,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (justEliminated && !(l.voted_off ?? []).includes(justEliminated)) {
       const eliminationIndex = newVotedOff.length - 1
       const placement = MAX_PLAYERS - eliminationIndex
-      newVotedOffDays = [...newVotedOffDays, prevDay]
       await supabase.from('lobby_players')
         .update({ placement, in_game: false })
         .eq('lobby_id', id)
@@ -1004,7 +1020,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       day_ends_at: dayEndsAt.toISOString(),
       challenge_results: newResults,
       voted_off: newVotedOff,
-      voted_off_days: newVotedOffDays,
       tribe_assignments: newAssignments,
       ...(enterFinale ? { is_finale: true } : {}),
     }).eq('id', id)
@@ -1327,18 +1342,18 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
             </div>
           ) : (
             <>
-              {isFinale && (
+              {false && isFinale && (
                 <p className="text-xs font-bold uppercase tracking-widest text-amber-800 animate-pulse">
                   🌟 Finale
                 </p>
               )}
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-800">Clock</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-800">{isFinale ? 'Finale Clock' : 'Clock'}</p>
               <p className={`font-black text-4xl tracking-[0.15em] tabular-nums transition-colors ${isPaused ? 'text-amber-700' : 'text-zinc-900'}`}>
                 {formatCountdown(countdown)}
               </p>
               <button
                 onClick={togglePause}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg font-bold text-xs uppercase tracking-widest border transition ${
+                className={`hidden items-center gap-1.5 px-4 py-1.5 rounded-lg font-bold text-xs uppercase tracking-widest border transition ${
                   isPaused
                     ? 'bg-amber-600 border-amber-800 text-white hover:bg-amber-700'
                     : 'bg-zinc-800/70 border-zinc-900/50 text-amber-100 hover:bg-zinc-900/80'
@@ -2121,10 +2136,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                             const bgColor = placement === 1 ? '#d97706'
                               : placement === 2 ? '#9ca3af'
                               : placement === 3 ? '#92400e'
+                              : placement >= 4 && placement <= 10 ? '#71717a'
                               : '#3f3f46'
 
                             const label = placement === 1 ? '🥇 1st'
                               : placement === 2 ? '🥈 2nd'
+                              : placement >= 3 && placement <= 10 ? `JURY - ${ordinalSuffix(placement)}`
                               : ordinalSuffix(placement)
 
                             return (
