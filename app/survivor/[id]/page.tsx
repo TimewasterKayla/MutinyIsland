@@ -144,7 +144,9 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
 
   return (
     <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pr-1 min-h-0 flex flex-col justify-end">
+      {/* overflow-y-auto + no justify-end so the user can freely scroll up.
+          A bottom-anchor div at the end ensures new messages stay visible. */}
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pr-1 min-h-0">
         <div className="space-y-2">
         {tribeMessages.map(m => {
           const isOnline  = onlineUserIds.has(m.sender_id)
@@ -157,37 +159,30 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
             >
               <div className="flex justify-between mb-1">
                 <span className="inline-flex items-center gap-1.5">
-                  {(!isWhisper || isSentByMe) && (
-                    <span
-                      className="inline-block w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 4px #22c55e' : 'none' }}
-                    />
-                  )}
+                  {/* Whispers: show only the crimson italic tag, no dot or username */}
                   {isWhisper ? (
                     isSentByMe ? (
-                      <>
-                        <span
-                          className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
-                          onClick={() => onClickUsername(m.username ?? '')}
-                        >
-                          {m.username}
-                        </span>
-                        <span className="font-bold text-sm italic" style={{ color: '#dc143c' }}>
-                          {` [Whisper to ${tribeMembers.find(p => p.user_id === m.whisper_to)?.username ?? 'someone'}]`}
-                        </span>
-                      </>
+                      <span className="font-bold text-sm italic" style={{ color: '#dc143c' }}>
+                        {`[Whisper to ${tribeMembers.find(p => p.user_id === m.whisper_to)?.username ?? 'someone'}]`}
+                      </span>
                     ) : (
                       <span className="font-bold text-sm italic" style={{ color: '#dc143c' }}>
                         {`[Whisper from ${m.username}]`}
                       </span>
                     )
                   ) : (
-                    <span
-                      className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
-                      onClick={() => onClickUsername(m.username ?? '')}
-                    >
-                      {m.username}
-                    </span>
+                    <>
+                      <span
+                        className="inline-block w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 4px #22c55e' : 'none' }}
+                      />
+                      <span
+                        className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
+                        onClick={() => onClickUsername(m.username ?? '')}
+                      >
+                        {m.username}
+                      </span>
+                    </>
                   )}
                 </span>
                 <p className="text-xs text-zinc-600">Day {getMessageDay(m.created_at)}</p>
@@ -513,33 +508,32 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }, [])
 
   // ─── Day advancement ─────────────────────────────────────────────────────
-  // FIX 3: Use a ref-based approach to avoid stale closure issues.
-  // The effect reads isPausedRef and lobbyRef directly so it always has
-  // fresh values without needing them as deps (which caused double-fires).
+  // Use a dedicated interval (not the countdown state) so we always have a
+  // fresh closure and never miss the transition at final 3.
+  // The interval fires every 5 seconds and checks if it's time to advance.
 
   useEffect(() => {
-    if (countdown > 0) return
-    if (!gameStarted) return
-    if (!lobbyId || !currentUserId) return
+    const interval = setInterval(() => {
+      if (isPausedRef.current) return
+      const l = lobbyRef.current
+      if (!l?.started_at) return
+      if (l.is_finale || l.finished_at) return
+      if (advancingRef.current) return
+      if (!l.day_ends_at) return
+      const remaining = new Date(l.day_ends_at).getTime() - Date.now()
+      if (remaining > 5000) return  // still time left
 
-    const l = lobbyRef.current
-    if (!l) return
-    // If the lobby is already in finale or finished, don't advance
-    if (l.is_finale || l.finished_at) return
-    // Respect pause
-    if (isPausedRef.current) return
-    // Prevent concurrent advances
-    if (advancingRef.current) return
-    // Double-check: if lobby already has a future day_ends_at, skip
-    // (another client may have already advanced)
-    if (l.day_ends_at && new Date(l.day_ends_at).getTime() > Date.now() + 10000) return
-
-    advancingRef.current = true
-    advanceDay(lobbyId).finally(() => {
-      setTimeout(() => { advancingRef.current = false }, 8000)
-    })
+      const id = l.id
+      if (!id) return
+      advancingRef.current = true
+      advanceDay(id).finally(() => {
+        // Short cooldown to prevent double-fire; advanceDay itself checks DB
+        setTimeout(() => { advancingRef.current = false }, 10000)
+      })
+    }, 5000)
+    return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countdown])
+  }, [])
 
   // ─── Check if already finale-voted ──────────────────────────────────────
 
@@ -961,7 +955,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     // FIX 3: Trigger finale when 2 or fewer players remain after elimination
     const enterFinale = activeAfterElim.length <= 2
 
-    await supabase.from('lobbies').update({
+    const { error: updateError } = await supabase.from('lobbies').update({
       current_day: newDay,
       day_ends_at: dayEndsAt.toISOString(),
       challenge_results: newResults,
@@ -969,6 +963,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       tribe_assignments: newAssignments,
       ...(enterFinale ? { is_finale: true } : {}),
     }).eq('id', id)
+
+    if (updateError) {
+      console.error('[advanceDay] Supabase update failed:', updateError)
+    } else {
+      console.log(`[advanceDay] Advanced to day ${newDay}. Active: ${activeAfterElim.length}. Finale: ${enterFinale}`)
+    }
 
     loadLobby(id)
   }
