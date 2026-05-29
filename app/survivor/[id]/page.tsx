@@ -515,10 +515,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       const id = l.id
       if (!id) return
 
-      // CHANGE 1: During finale, resolve the winner instead of advancing day
+      // During finale, resolve the winner instead of advancing day
       if (l.is_finale) {
         advancingRef.current = true
-        resolveFinale(id).finally(() => {
+        resolveFinale(id, true).finally(() => {
           setTimeout(() => { advancingRef.current = false }, 10000)
         })
         return
@@ -777,28 +777,29 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     await resolveFinale(lobbyId)
   }
 
-  // CHANGE 1: resolveFinale now handles ties and no-votes by randomising among finalists
-  async function resolveFinale(id: string) {
-    const l = lobbyRef.current
-    if (!l || l.finished_at) return
-    const activeIds = Object.keys(l.tribe_assignments ?? {}).filter((uid: string) => !(l.voted_off ?? []).includes(uid))
+  // resolveFinale: fetches fresh lobby from DB, handles ties and no-votes by randomising.
+  // fromTimer=true means the clock expired — resolve unconditionally.
+  // fromTimer=false (castFinaleVote) — only resolve once all jury members have voted.
+  async function resolveFinale(id: string, fromTimer = false) {
+    const { data: freshLobby } = await supabase.from('lobbies').select('*').eq('id', id).maybeSingle()
+    if (!freshLobby || freshLobby.finished_at) return
+
+    const activeIds = Object.keys(freshLobby.tribe_assignments ?? {}).filter((uid: string) => !(freshLobby.voted_off ?? []).includes(uid))
     const preMerge = MAX_PLAYERS - MERGE_AT
-    const jury = (l.voted_off ?? []).filter((_: any, idx: number) => idx >= preMerge)
+    const jury = (freshLobby.voted_off ?? []).filter((_: any, idx: number) => idx >= preMerge)
+
     const { data: finaleVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).eq('day', 9999)
 
-    // Only auto-resolve when timer fires (all jury members voted, or time ran out)
-    // When called from castFinaleVote, only resolve if all jury have voted
-    const calledFromTimer = !finaleVotes || finaleVotes.length < jury.length
-    if (!calledFromTimer && finaleVotes && finaleVotes.length < jury.length) return
+    // When called from castFinaleVote, wait until all jury have voted
+    if (!fromTimer && (!finaleVotes || finaleVotes.length < jury.length)) return
 
     const counts: Record<string, number> = {}
     ;(finaleVotes ?? []).forEach((v: any) => { counts[v.target_id] = (counts[v.target_id] || 0) + 1 })
 
     let winner: string | null = null
-    if (Object.keys(counts).length === 0) {
-      // No votes — randomise
-      winner = activeIds[Math.floor(Math.random() * activeIds.length)]
+    if (Object.keys(counts).length === 0 || activeIds.length === 0) {
+      winner = activeIds[Math.floor(Math.random() * activeIds.length)] ?? null
     } else {
       const maxVotes = Math.max(...Object.values(counts))
       const tied = Object.keys(counts).filter(uid => counts[uid] === maxVotes)
@@ -806,10 +807,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     }
     if (!winner) return
 
-    await supabase.from('lobbies').update({
+    const { error } = await supabase.from('lobbies').update({
       finished_at: new Date().toISOString(),
       winner_id: winner,
     }).eq('id', id)
+    if (error) console.error('[resolveFinale] update failed:', error)
+    else console.log('[resolveFinale] Winner declared:', winner)
     loadLobby(id)
   }
 
@@ -1439,58 +1442,81 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       </div>
                     </div>
 
-                    {/* CHANGE 4: Jury gallery */}
-                    {juryIds.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-black uppercase tracking-widest mb-3 text-center text-zinc-700">
-                          Jury
-                        </h3>
-                        <div className="flex flex-wrap justify-center gap-2">
-                          {juryIds.map((uid, idx) => {
-                            const juryPlayer = players.find(p => p.user_id === uid)
-                            if (!juryPlayer) return null
-                            // Jury placement: juryIds[0] = earliest jury member = highest number
-                            // juryIds[0] was the (preMergeBootCount+1)-th voted off overall
-                            // Their placement = total players - (preMergeBootCount + idx)
-                            const placement = MAX_PLAYERS - preMergeBootCount - idx
-                            return (
-                              <div key={uid} className="flex flex-col items-center gap-0.5" style={{ width: '72px' }}>
-                                <div
-                                  onClick={() => router.push(`/profile/${juryPlayer.username}`)}
-                                  className="cursor-pointer group w-full"
-                                >
-                                  <div className="w-full aspect-[3/4] rounded-md overflow-hidden border-2 border-[#a07840] group-hover:border-amber-800 transition" style={{ filter: 'none' }}>
-                                    {juryPlayer.avatar_url ? (
-                                      <img src={juryPlayer.avatar_url} alt={juryPlayer.username} className="w-full h-full object-cover" />
-                                    ) : (
-                                      <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
-                                        <span className="text-xs font-black text-amber-900">{juryPlayer.username.slice(0, 1).toUpperCase()}</span>
-                                      </div>
-                                    )}
+                    {/* Jury gallery: 2 rows of 4, ordered so 3rd place is top-left and 10th is bottom-right.
+                        juryIds[0] = first jury member = highest placement number (e.g. 10th).
+                        We reverse so index 0 = 3rd place (lowest jury number), then split into rows.
+                        Row 1: placements 3,4,5,6 (top-left to top-right)
+                        Row 2: placements 7,8,9,10 (bottom-left to bottom-right) */}
+                    {juryIds.length > 0 && (() => {
+                      // Build array: [{uid, placement}] ordered lowest placement first (3rd first)
+                      const juryOrdered = [...juryIds].reverse().map((uid, idx) => {
+                        const placement = preMergeBootCount + 1 + idx  // 3rd, 4th, ... 10th
+                        return { uid, placement }
+                      })
+                      const row1 = juryOrdered.slice(0, 4)
+                      const row2 = juryOrdered.slice(4, 8)
+
+                      function JuryAvatar({ uid, placement }: { uid: string; placement: number }) {
+                        const juryPlayer = players.find(p => p.user_id === uid)
+                        if (!juryPlayer) return <div style={{ width: '88px' }} />
+                        return (
+                          <div className="flex flex-col items-center gap-0.5" style={{ width: '88px' }}>
+                            <div
+                              onClick={() => router.push(`/profile/${juryPlayer.username}`)}
+                              className="cursor-pointer group w-full"
+                            >
+                              <div className="w-full aspect-[3/4] rounded-md overflow-hidden border-2 border-[#a07840] group-hover:border-amber-800 transition">
+                                {juryPlayer.avatar_url ? (
+                                  <img src={juryPlayer.avatar_url} alt={juryPlayer.username} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
+                                    <span className="text-sm font-black text-amber-900">{juryPlayer.username.slice(0, 1).toUpperCase()}</span>
                                   </div>
-                                </div>
-                                <p className="text-[9px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
-                                  {juryPlayer.username}
-                                </p>
-                                <div
-                                  className="rounded px-1 py-0.5 text-[8px] font-bold text-white uppercase tracking-wide text-center w-full"
-                                  style={{ backgroundColor: '#71717a' }}
-                                >
-                                  JURY - {placement}th
-                                </div>
+                                )}
                               </div>
-                            )
-                          })}
+                            </div>
+                            <p className="text-[10px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
+                              {juryPlayer.username}
+                            </p>
+                            <div
+                              className="rounded px-1 py-0.5 text-[9px] font-bold text-white uppercase tracking-wide text-center w-full"
+                              style={{ backgroundColor: '#71717a' }}
+                            >
+                              JURY - {placement}th
+                            </div>
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <div>
+                          <h3 className="text-base font-black uppercase tracking-widest mb-3 text-center text-zinc-700">
+                            Jury
+                          </h3>
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="flex justify-center gap-2">
+                              {row1.map(({ uid, placement }) => (
+                                <JuryAvatar key={uid} uid={uid} placement={placement} />
+                              ))}
+                            </div>
+                            {row2.length > 0 && (
+                              <div className="flex justify-center gap-2">
+                                {row2.map(({ uid, placement }) => (
+                                  <JuryAvatar key={uid} uid={uid} placement={placement} />
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    })()}
                   </div>
 
                   {/* Right: Reunion Chat + Jury Vote */}
                   <div className="w-1/2 flex flex-col min-h-0 h-full gap-3">
 
-                    {/* CHANGE 7: Reunion chat — smaller when voting is shown, full height when finished */}
-                    <div className={`flex flex-col min-h-0 ${isFinished ? 'flex-1' : 'h-[45%]'}`}>
+                    {/* Reunion chat — 60% height when voting shown, full height when finished */}
+                    <div className={`flex flex-col min-h-0 ${isFinished ? 'flex-1' : 'h-[60%]'}`}>
                       <h2 className="text-xl font-bold mb-2 shrink-0 uppercase tracking-widest">Reunion Chat</h2>
                       <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
                         {/* CHANGE 3: Messages flow upward — newest at bottom. Use normal order + scroll to bottom. */}
