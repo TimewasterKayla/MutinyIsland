@@ -125,26 +125,72 @@ export default function SurvivorPage() {
       return
     }
 
-    let { data: membership, error: joinError } = await supabase
+    const { data: existingTargetMembership, error: targetMembershipError } = await supabase
       .from('lobby_players')
-      .insert({ lobby_id: targetLobbyId, user_id: user.id, in_game: true })
       .select('id')
-      .single()
+      .eq('lobby_id', targetLobbyId)
+      .eq('user_id', user.id)
+      .maybeSingle()
 
-    if (joinError) {
-      await hasActiveGame(user.id)
-      const retry = await supabase
+    if (targetMembershipError) {
+      console.error('TARGET MEMBERSHIP ERROR:', {
+        code: targetMembershipError.code,
+        message: targetMembershipError.message,
+        details: targetMembershipError.details,
+        hint: targetMembershipError.hint,
+      })
+      setLoading(false)
+      return
+    }
+
+    let membership = existingTargetMembership
+    let joinError = null
+
+    if (existingTargetMembership) {
+      const { data: reactivated, error: reactivateError } = await supabase
+        .from('lobby_players')
+        .update({ in_game: true })
+        .eq('id', existingTargetMembership.id)
+        .select('id')
+        .single()
+      membership = reactivated
+      joinError = reactivateError
+    } else {
+      const insertResult = await supabase
         .from('lobby_players')
         .insert({ lobby_id: targetLobbyId, user_id: user.id, in_game: true })
         .select('id')
         .single()
+      membership = insertResult.data
+      joinError = insertResult.error
+    }
+
+    if (joinError) {
+      await hasActiveGame(user.id)
+      const retry = existingTargetMembership
+        ? await supabase
+            .from('lobby_players')
+            .update({ in_game: true })
+            .eq('id', existingTargetMembership.id)
+            .select('id')
+            .single()
+        : await supabase
+            .from('lobby_players')
+            .insert({ lobby_id: targetLobbyId, user_id: user.id, in_game: true })
+            .select('id')
+            .single()
       membership = retry.data
       joinError = retry.error
     }
 
     if (joinError || !membership) {
-      console.error('JOIN ERROR:', joinError)
-      alert('Could not join that game. If you were in an older game, the lobby_players unique constraint may need to be updated in Supabase.')
+      console.error('JOIN ERROR:', {
+        code: joinError?.code,
+        message: joinError?.message,
+        details: joinError?.details,
+        hint: joinError?.hint,
+      })
+      alert('Could not join that game. Check the browser console for the JOIN ERROR code and message.')
       setLoading(false)
       return
     }
