@@ -838,11 +838,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     // Write placements for finalists: winner = 1, runner-up = 2
     const runnerUp = activeIds.find(uid => uid !== winner) ?? null
     const placementWrites = [
-      supabase.from('lobby_players').update({ placement: 1 }).eq('lobby_id', id).eq('user_id', winner).select(),
+      supabase.from('lobby_players').update({ placement: 1, in_game: false }).eq('lobby_id', id).eq('user_id', winner).select(),
     ]
     if (runnerUp) {
       placementWrites.push(
-        supabase.from('lobby_players').update({ placement: 2 }).eq('lobby_id', id).eq('user_id', runnerUp).select()
+        supabase.from('lobby_players').update({ placement: 2, in_game: false }).eq('lobby_id', id).eq('user_id', runnerUp).select()
       )
     }
     await Promise.all(placementWrites)
@@ -970,7 +970,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       const eliminationIndex = newVotedOff.length - 1
       const placement = MAX_PLAYERS - eliminationIndex
       await supabase.from('lobby_players')
-        .update({ placement })
+        .update({ placement, in_game: false })
         .eq('lobby_id', id)
         .eq('user_id', justEliminated)
     }
@@ -1050,7 +1050,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       .limit(spotsNeeded * 3)
     if (!profiles || profiles.length === 0) return
     const shuffled = shuffleArray(profiles).slice(0, spotsNeeded)
-    const inserts = shuffled.map(p => ({ lobby_id: lobbyId, user_id: p.id }))
+    const inserts = shuffled.map(p => ({ lobby_id: lobbyId, user_id: p.id, in_game: true }))
     await supabase.from('lobby_players').insert(inserts)
     loadPlayers(lobbyId)
   }

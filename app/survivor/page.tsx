@@ -24,6 +24,22 @@ export default function SurvivorPage() {
     setLobbies(data || [])
   }
 
+  async function hasActiveGame(userId: string) {
+    const { data, error } = await supabase
+      .from('lobby_players')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('in_game', true)
+      .maybeSingle()
+
+    if (error) {
+      console.error('CHECK PLAYER ERROR:', error)
+      return true
+    }
+
+    return !!data
+  }
+
   useEffect(() => {
     fetchLobbies()
     const interval = setInterval(fetchLobbies, 5000)
@@ -36,15 +52,7 @@ export default function SurvivorPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 
-    const { data: existing, error: existingError } = await supabase
-      .from('lobby_players')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (existingError) console.error('CHECK PLAYER ERROR:', existingError)
-
-    if (existing) {
+    if (await hasActiveGame(user.id)) {
       alert('You are already in a game')
       setLoading(false)
       return
@@ -88,7 +96,7 @@ export default function SurvivorPage() {
 
     const { error: joinError } = await supabase
       .from('lobby_players')
-      .insert({ lobby_id: targetLobbyId, user_id: user.id })
+      .insert({ lobby_id: targetLobbyId, user_id: user.id, in_game: true })
 
     if (joinError) {
       console.error('JOIN ERROR:', joinError)
