@@ -25,20 +25,50 @@ export default function SurvivorPage() {
   }
 
   async function hasActiveGame(userId: string) {
-    const { data, error } = await supabase
+    const { data: memberships, error } = await supabase
       .from('lobby_players')
-      .select('id')
+      .select('id, lobby_id')
       .eq('user_id', userId)
       .eq('in_game', true)
-      .limit(1)
-      .maybeSingle()
 
     if (error) {
       console.error('CHECK PLAYER ERROR:', error)
       return true
     }
 
-    return !!data
+    const lobbyIds = [...new Set((memberships || []).map(row => row.lobby_id).filter(Boolean))]
+    if (lobbyIds.length === 0) return false
+
+    const { data: activeLobbies, error: lobbyError } = await supabase
+      .from('lobbies')
+      .select('id, finished_at, status')
+      .in('id', lobbyIds)
+
+    if (lobbyError) {
+      console.error('CHECK LOBBY ERROR:', lobbyError)
+      return true
+    }
+
+    const finishedLobbyIds = new Set(
+      (activeLobbies || [])
+        .filter(lobby => lobby.finished_at || lobby.status === 'finished')
+        .map(lobby => lobby.id)
+    )
+
+    const staleMembershipIds = (memberships || [])
+      .filter(row => finishedLobbyIds.has(row.lobby_id))
+      .map(row => row.id)
+
+    if (staleMembershipIds.length > 0) {
+      const { error: cleanupError } = await supabase
+        .from('lobby_players')
+        .update({ in_game: false })
+        .in('id', staleMembershipIds)
+
+      if (cleanupError) console.error('CLEANUP PLAYER ERROR:', cleanupError)
+    }
+
+    return (memberships || []).some(row => !finishedLobbyIds.has(row.lobby_id))
   }
 
   useEffect(() => {
@@ -95,11 +125,22 @@ export default function SurvivorPage() {
       return
     }
 
-    const { data: membership, error: joinError } = await supabase
+    let { data: membership, error: joinError } = await supabase
       .from('lobby_players')
       .insert({ lobby_id: targetLobbyId, user_id: user.id, in_game: true })
       .select('id')
       .single()
+
+    if (joinError) {
+      await hasActiveGame(user.id)
+      const retry = await supabase
+        .from('lobby_players')
+        .insert({ lobby_id: targetLobbyId, user_id: user.id, in_game: true })
+        .select('id')
+        .single()
+      membership = retry.data
+      joinError = retry.error
+    }
 
     if (joinError || !membership) {
       console.error('JOIN ERROR:', joinError)
