@@ -275,6 +275,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [dotCount,      setDotCount]      = useState(1)
   const [countdown,     setCountdown]     = useState<number>(0)
   const [isPaused,      setIsPaused]      = useState(false)
+  const [showTimerModal, setShowTimerModal] = useState(false)
+  const [timerAmount, setTimerAmount] = useState('5')
+  const [timerUnit, setTimerUnit] = useState<'seconds' | 'minutes'>('minutes')
 
   const [rank,     setRank]     = useState<string | null>(null)
   const [coins,    setCoins]    = useState<number | null>(null)
@@ -461,7 +464,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   // ─── Auto scroll (lobby chat only) ──────────────────────────────────────
 
   useEffect(() => {
-    if (lobbyChatRef.current) lobbyChatRef.current.scrollTop = lobbyChatRef.current.scrollHeight
+    if (lobbyChatRef.current) lobbyChatRef.current.scrollTop = 0
   }, [lobbyMessages])
 
   useEffect(() => {
@@ -521,7 +524,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       if (advancingRef.current) return
       if (!l.day_ends_at) return
       const remaining = new Date(l.day_ends_at).getTime() - Date.now()
-      if (remaining > 5000) return
+      if (remaining > 0) return
 
       const id = l.id
       if (!id) return
@@ -538,7 +541,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       advanceDay(id).finally(() => {
         setTimeout(() => { advancingRef.current = false }, 10000)
       })
-    }, 5000)
+    }, 1000)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -870,7 +873,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     })
 
     const now = new Date()
-    const dayEndsAt = new Date(now.getTime() + DAY_DURATION_MS)
+    const dayDurationMs = getDayDurationMs(lobbyData)
+    const dayEndsAt = new Date(now.getTime() + dayDurationMs)
 
     await supabase.from('lobbies').update({
       started_at: now.toISOString(),
@@ -889,11 +893,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     const { data: freshLobby } = await supabase.from('lobbies').select('*').eq('id', id).maybeSingle()
     if (!freshLobby) return
     if (freshLobby.is_finale || freshLobby.finished_at) return
-    if (freshLobby.day_ends_at && new Date(freshLobby.day_ends_at).getTime() > Date.now() + 10000) return
+    if (freshLobby.day_ends_at && new Date(freshLobby.day_ends_at).getTime() > Date.now()) return
 
     const l = freshLobby
     const newDay = (l.current_day ?? 1) + 1
-    const dayEndsAt = new Date(Date.now() + DAY_DURATION_MS)
+    const dayEndsAt = new Date(Date.now() + getDayDurationMs(l))
 
     const prevDay = newDay - 1
     const existingResults: ChallengeResult[] = l.challenge_results ?? []
@@ -1055,6 +1059,30 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     loadPlayers(lobbyId)
   }
 
+  async function saveDayTimer() {
+    if (!lobbyId || gameStarted) return
+    const amount = Number(timerAmount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert('Enter a timer length greater than 0.')
+      return
+    }
+
+    const dayDurationMs = Math.round(amount * (timerUnit === 'minutes' ? 60_000 : 1_000))
+    const { error } = await supabase
+      .from('lobbies')
+      .update({ day_duration_ms: dayDurationMs })
+      .eq('id', lobbyId)
+
+    if (error) {
+      console.error('SET TIMER ERROR:', error)
+      alert('Could not set the timer. Make sure the day_duration_ms column exists on lobbies.')
+      return
+    }
+
+    setShowTimerModal(false)
+    loadLobby(lobbyId)
+  }
+
   async function castVote() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || !voteTarget || !lobbyId || hasVotedToday) return
@@ -1096,7 +1124,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     const start = new Date(lobby.started_at).getTime()
     const hoursPassed = (new Date(createdAt).getTime() - start) / (1000 * 60 * 60)
     if (hoursPassed < 0) return 0
-    return Math.floor(hoursPassed / (DAY_DURATION_MS / 1000 / 3600)) + 1
+    return Math.floor(hoursPassed / (getDayDurationMs(lobby) / 1000 / 3600)) + 1
+  }
+
+  function getDayDurationMs(source: any): number {
+    const duration = Number(source?.day_duration_ms)
+    return Number.isFinite(duration) && duration > 0 ? duration : DAY_DURATION_MS
   }
 
   function avatarBorderClass(player: Player): string {
@@ -1190,6 +1223,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }
 
   return (
+    <>
     <main
       className="min-h-screen text-white flex gap-5 px-5 pb-5 pt-8 justify-center"
       style={{ backgroundImage: 'url(/castawaywallpaper.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}
@@ -1383,12 +1417,20 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   <h2 className="text-2xl font-black uppercase tracking-widest text-center">Players</h2>
                   <div className="flex items-center gap-2 justify-end" style={{ minWidth: '6rem' }}>
                     {!gameStarted && !hasFilled && (
-                      <button
-                        onClick={fillGame}
-                        className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow"
-                      >
-                        Fill Game
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setShowTimerModal(true)}
+                          className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow"
+                        >
+                          Set Timer
+                        </button>
+                        <button
+                          onClick={fillGame}
+                          className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow"
+                        >
+                          Fill Game
+                        </button>
+                      </>
                     )}
                     <button className="flex items-center gap-1.5 bg-sky-400 hover:bg-sky-500 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow">
                       <img src="/info.png" alt="Info" className="w-4 h-4" />
@@ -1444,8 +1486,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
                   <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
                     <h3 className="font-bold text-base mb-2 uppercase tracking-widest shrink-0">Lobby Chat</h3>
-                    <div ref={lobbyChatRef} className="overflow-y-auto space-y-2 mb-2 pr-1 flex-1 min-h-0">
-                      {lobbyMessages.map(m => {
+                    <div ref={lobbyChatRef} className="overflow-y-auto mb-2 pr-1 flex-1 min-h-0 flex flex-col-reverse gap-2">
+                      {[...lobbyMessages].reverse().map(m => {
                         const isOnline = onlineUserIds.has(m.sender_id)
                         return (
                           <div key={m.id} className="bg-[#c8a96e] p-2 rounded text-sm">
@@ -2125,5 +2167,45 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         </div>
       </div>
     </main>
+    {showTimerModal && !gameStarted && (
+      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4">
+        <div className="w-full max-w-sm rounded-xl border border-[#a07840] p-5 text-zinc-900 shadow-2xl" style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN }}>
+          <h2 className="text-xl font-black uppercase tracking-widest mb-4">Set Timer</h2>
+          <div className="flex gap-2 mb-4">
+            <input
+              value={timerAmount}
+              onChange={e => setTimerAmount(e.target.value)}
+              type="number"
+              min="1"
+              step="1"
+              className="flex-1 bg-[#b8955a] border border-[#a07840] rounded-lg p-2 font-bold outline-none focus:ring-2 focus:ring-amber-700"
+            />
+            <select
+              value={timerUnit}
+              onChange={e => setTimerUnit(e.target.value as 'seconds' | 'minutes')}
+              className="bg-[#b8955a] border border-[#a07840] rounded-lg p-2 font-bold outline-none focus:ring-2 focus:ring-amber-700 cursor-pointer"
+            >
+              <option value="seconds">Seconds</option>
+              <option value="minutes">Minutes</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setShowTimerModal(false)}
+              className="px-3 py-2 rounded-lg bg-[#b8955a] border border-[#a07840] text-sm font-bold hover:bg-[#a07840] transition cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={saveDayTimer}
+              className="px-3 py-2 rounded-lg bg-green-600 text-white text-sm font-bold hover:bg-green-700 transition cursor-pointer"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
