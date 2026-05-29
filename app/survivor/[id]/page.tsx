@@ -694,12 +694,14 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     if (votedOffList.length === 0) { setVoteHistory([]); return }
 
-    const { data: allVotes } = await supabase
+    const { data: allVotes, error: votesError } = await supabase
       .from('votes')
       .select('voter_id, target_id, day')
       .eq('lobby_id', id)
       .lt('day', 9999)
       .order('day', { ascending: true })
+
+    if (votesError) console.error('VOTE HISTORY LOAD ERROR:', votesError)
 
     const votes = allVotes ?? []
 
@@ -713,27 +715,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       : { data: [] }
     const nameMap = Object.fromEntries((profileData || []).map((p: any) => [p.id, p.username]))
 
-    const votingDaysSorted = [...new Set(votes.map((v: any) => v.day as number))].sort((a, b) => a - b)
-
     const votesByDay: Record<number, Record<string, number>> = {}
     for (const v of votes as any[]) {
-      if (!votesByDay[v.day]) votesByDay[v.day] = {}
-      votesByDay[v.day][v.target_id] = (votesByDay[v.day][v.target_id] || 0) + 1
+      const voteDay = Number(v.day)
+      if (!Number.isFinite(voteDay)) continue
+      if (!votesByDay[voteDay]) votesByDay[voteDay] = {}
+      votesByDay[voteDay][v.target_id] = (votesByDay[voteDay][v.target_id] || 0) + 1
     }
 
     const history: VoteRecord[] = votedOffList.map((eliminatedId, idx) => {
-      const day = votingDaysSorted[idx]
-
-      if (day === undefined) {
-        return {
-          day: idx + 2,
-          voted_off: eliminatedId,
-          username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
-          vote_counts: {},
-          rocks_drawn: true,
-        }
-      }
-
+      const day = idx + 2
       const dayCounts = votesByDay[day] ?? {}
       const totalVotes = Object.values(dayCounts).reduce((s, n) => s + n, 0)
 
