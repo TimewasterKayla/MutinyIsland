@@ -114,14 +114,14 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
 
   useEffect(() => {
     if (!isLockedRef.current && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      scrollRef.current.scrollTop = 0
     }
   }, [tribeMessages.length, scrollRef])
 
   function handleScroll() {
     const el = scrollRef.current
     if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+    const atBottom = Math.abs(el.scrollTop) < 40
     if (atBottom) {
       isLockedRef.current = false
       if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current)
@@ -145,8 +145,8 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
   return (
     <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pr-1 min-h-0">
-        <div className="space-y-2">
-        {tribeMessages.map(m => {
+        <div className="flex flex-col-reverse gap-2">
+        {[...tribeMessages].reverse().map(m => {
           const isOnline  = onlineUserIds.has(m.sender_id)
           const isWhisper = !!m.is_whisper
           const isSentByMe = m.sender_id === currentUserId
@@ -701,22 +701,22 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       .lt('day', 9999)
       .order('day', { ascending: true })
 
-    if (!allVotes || allVotes.length === 0) { setVoteHistory([]); return }
+    const votes = allVotes ?? []
 
     const allUserIds = [...new Set([
       ...votedOffList,
-      ...allVotes.map((v: any) => v.voter_id),
-      ...allVotes.map((v: any) => v.target_id),
+      ...votes.map((v: any) => v.voter_id),
+      ...votes.map((v: any) => v.target_id),
     ])]
     const { data: profileData } = allUserIds.length > 0
       ? await supabase.from('profiles').select('id, username').in('id', allUserIds)
       : { data: [] }
     const nameMap = Object.fromEntries((profileData || []).map((p: any) => [p.id, p.username]))
 
-    const votingDaysSorted = [...new Set(allVotes.map((v: any) => v.day as number))].sort((a, b) => a - b)
+    const votingDaysSorted = [...new Set(votes.map((v: any) => v.day as number))].sort((a, b) => a - b)
 
     const votesByDay: Record<number, Record<string, number>> = {}
-    for (const v of allVotes as any[]) {
+    for (const v of votes as any[]) {
       if (!votesByDay[v.day]) votesByDay[v.day] = {}
       votesByDay[v.day][v.target_id] = (votesByDay[v.day][v.target_id] || 0) + 1
     }
