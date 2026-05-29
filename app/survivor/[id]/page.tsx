@@ -114,14 +114,14 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
 
   useEffect(() => {
     if (!isLockedRef.current && scrollRef.current) {
-      scrollRef.current.scrollTop = 0
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [tribeMessages.length, scrollRef])
 
   function handleScroll() {
     const el = scrollRef.current
     if (!el) return
-    const atBottom = Math.abs(el.scrollTop) < 40
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
     if (atBottom) {
       isLockedRef.current = false
       if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current)
@@ -145,8 +145,9 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
   return (
     <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pr-1 min-h-0">
-        <div className="flex flex-col-reverse gap-2">
-        {[...tribeMessages].reverse().map(m => {
+        <div className="flex flex-col justify-end min-h-full">
+        <div className="space-y-2">
+        {tribeMessages.map(m => {
           const isOnline  = onlineUserIds.has(m.sender_id)
           const isWhisper = !!m.is_whisper
           const isSentByMe = m.sender_id === currentUserId
@@ -185,6 +186,7 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
             </div>
           )
         })}
+        </div>
         </div>
       </div>
 
@@ -691,6 +693,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   async function loadVoteHistory(id: string) {
     const l = lobbyRef.current
     const votedOffList: string[] = l?.voted_off ?? []
+    const votedOffDays: number[] = (l?.voted_off_days ?? []).map((day: any) => Number(day))
 
     if (votedOffList.length === 0) { setVoteHistory([]); return }
 
@@ -716,15 +719,27 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     const nameMap = Object.fromEntries((profileData || []).map((p: any) => [p.id, p.username]))
 
     const votesByDay: Record<number, Record<string, number>> = {}
+    const voteDaysByTarget: Record<string, number[]> = {}
     for (const v of votes as any[]) {
       const voteDay = Number(v.day)
       if (!Number.isFinite(voteDay)) continue
       if (!votesByDay[voteDay]) votesByDay[voteDay] = {}
       votesByDay[voteDay][v.target_id] = (votesByDay[voteDay][v.target_id] || 0) + 1
+      if (!voteDaysByTarget[v.target_id]) voteDaysByTarget[v.target_id] = []
+      if (!voteDaysByTarget[v.target_id].includes(voteDay)) voteDaysByTarget[v.target_id].push(voteDay)
     }
 
+    Object.values(voteDaysByTarget).forEach(days => days.sort((a, b) => a - b))
+    const usedDays = new Set<number>()
+
     const history: VoteRecord[] = votedOffList.map((eliminatedId, idx) => {
-      const day = idx + 2
+      const storedDay = votedOffDays[idx]
+      const inferredDay = voteDaysByTarget[eliminatedId]?.find(day => !usedDays.has(day))
+      const day = Number.isFinite(storedDay) && storedDay > 0
+        ? storedDay
+        : inferredDay ?? idx + 2
+      usedDays.add(day)
+
       const dayCounts = votesByDay[day] ?? {}
       const totalVotes = Object.values(dayCounts).reduce((s, n) => s + n, 0)
 
@@ -874,6 +889,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       tribe_assignments: tribeAssignments,
       challenge_results: [],
       voted_off: [],
+      voted_off_days: [],
       status: 'active',
     }).eq('id', id)
 
@@ -919,6 +935,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     }
 
     let newVotedOff: string[] = l.voted_off ?? []
+    let newVotedOffDays: number[] = l.voted_off_days ?? []
     const { data: dayVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).eq('day', prevDay)
 
@@ -964,6 +981,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (justEliminated && !(l.voted_off ?? []).includes(justEliminated)) {
       const eliminationIndex = newVotedOff.length - 1
       const placement = MAX_PLAYERS - eliminationIndex
+      newVotedOffDays = [...newVotedOffDays, prevDay]
       await supabase.from('lobby_players')
         .update({ placement, in_game: false })
         .eq('lobby_id', id)
@@ -986,6 +1004,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       day_ends_at: dayEndsAt.toISOString(),
       challenge_results: newResults,
       voted_off: newVotedOff,
+      voted_off_days: newVotedOffDays,
       tribe_assignments: newAssignments,
       ...(enterFinale ? { is_finale: true } : {}),
     }).eq('id', id)
@@ -1652,7 +1671,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   {/* Right: Reunion Chat + Jury Vote */}
                   <div className="w-1/2 flex flex-col min-h-0 h-full gap-3">
 
-                    <div className={`flex flex-col min-h-0 ${isFinished ? 'flex-1' : 'h-[60%]'}`}>
+                    <div className={`flex flex-col min-h-0 ${isFinished || !(isFinale && juryIds.includes(_uid)) ? 'flex-1' : 'h-[60%]'}`}>
                       <h2 className="text-xl font-bold mb-2 shrink-0 uppercase tracking-widest">Reunion Chat</h2>
                       <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
                         <div ref={reunionChatRef} className="flex-1 overflow-y-auto pr-1 min-h-0">
@@ -1709,8 +1728,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
                     {/* Jury vote — shown during finale only, hidden once finished */}
                     {isFinale && !isFinished && juryIds.includes(_uid) && (
-                      <div className="shrink-0 p4 rounded-xl border border-[#a07840]" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
-                        <p className="font-black uppercase tracking-widest text-sm mb-3 text-zinc-800">Cast Your Jury Vote</p>
+                      <div className="flex-1 min-h-0 p-4 rounded-xl border border-[#a07840] flex flex-col items-center justify-center text-center" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
+                        <p className="font-black uppercase tracking-widest text-sm mb-3 text-zinc-800">Vote for a Winner</p>
                         {hasFinaleVoted ? (
                           <div className="text-center">
                             <p className="font-bold text-zinc-700 text-sm">
@@ -1730,7 +1749,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                             </button>
                           </div>
                         ) : (
-                          <div className="flex flex-col gap-2">
+                          <div className="flex flex-col gap-2 w-full max-w-xs">
                             {activePlayers.map(p => (
                               <button
                                 key={p.user_id}
@@ -2036,7 +2055,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
           {/* ── SUMMARY TAB ── */}
           {activeTab === 'Summary' && (() => {
-            const orderedActive = [...activePlayers].sort((a, b) => a.username.localeCompare(b.username))
+            const orderedActive = [...activePlayers].sort((a, b) => {
+              if (isFinished) {
+                return (getPlayerPlacement(a.user_id) ?? 99) - (getPlayerPlacement(b.user_id) ?? 99)
+              }
+              return a.username.localeCompare(b.username)
+            })
             const orderedVotedOff = [...votedOffIds]
               .map(id => players.find(p => p.user_id === id))
               .filter(Boolean) as Player[]
