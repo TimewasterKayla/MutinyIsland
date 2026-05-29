@@ -413,13 +413,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     loadMessages(lobbyId)
     loadLobbyMessages(lobbyId)
     loadReunionMessages(lobbyId)
+    loadPlacementMap(lobbyId)
 
+    // FIX 1: loadPlacementMap added to polling interval so it stays fresh
     const interval = setInterval(() => {
       loadPlayers(lobbyId)
       loadMessages(lobbyId)
       loadLobbyMessages(lobbyId)
       loadReunionMessages(lobbyId)
       loadLobby(lobbyId)
+      loadPlacementMap(lobbyId)
     }, 3000)
     return () => clearInterval(interval)
   }, [lobbyId])
@@ -603,7 +606,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     if (!lobbyId) return
     loadPlacementMap(lobbyId)
-  }, [lobbyId, votedOffIds.length, isFinished])
+  }, [lobbyId])
 
   // ─── If active tab becomes locked, redirect to Players ───────────────────
 
@@ -760,8 +763,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }
 
   // ─── Load placement map from lobby_players.placement ─────────────────────
-  // Placements are written by advanceDay (each elimination) and resolveFinale
-  // (1st and 2nd). Reading from DB means jury sizes can change freely.
 
   async function loadPlacementMap(id: string) {
     const { data, error } = await supabase
@@ -836,15 +837,15 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     // Write placements for finalists: winner = 1, runner-up = 2
     const runnerUp = activeIds.find(uid => uid !== winner) ?? null
-const placementWrites = [
-  supabase.from('lobby_players').update({ placement: 1 }).eq('lobby_id', id).eq('user_id', winner).select(),
-]
-if (runnerUp) {
-  placementWrites.push(
-    supabase.from('lobby_players').update({ placement: 2 }).eq('lobby_id', id).eq('user_id', runnerUp).select()
-  )
-}
-await Promise.all(placementWrites)
+    const placementWrites = [
+      supabase.from('lobby_players').update({ placement: 1 }).eq('lobby_id', id).eq('user_id', winner).select(),
+    ]
+    if (runnerUp) {
+      placementWrites.push(
+        supabase.from('lobby_players').update({ placement: 2 }).eq('lobby_id', id).eq('user_id', runnerUp).select()
+      )
+    }
+    await Promise.all(placementWrites)
 
     const { error } = await supabase.from('lobbies').update({
       finished_at: new Date().toISOString(),
@@ -966,8 +967,6 @@ await Promise.all(placementWrites)
     // Write placement for newly eliminated player into lobby_players
     const justEliminated = newVotedOff[newVotedOff.length - 1]
     if (justEliminated && !(l.voted_off ?? []).includes(justEliminated)) {
-      // placement = MAX_PLAYERS - (0-based elimination index)
-      // 1st boot (index 0) = 18th place, 2nd boot (index 1) = 17th, etc.
       const eliminationIndex = newVotedOff.length - 1
       const placement = MAX_PLAYERS - eliminationIndex
       await supabase.from('lobby_players')
@@ -1100,7 +1099,6 @@ await Promise.all(placementWrites)
     return Math.floor(hoursPassed / (DAY_DURATION_MS / 1000 / 3600)) + 1
   }
 
-  // Returns border Tailwind class + inline style for gold/silver/default avatar borders
   function avatarBorderClass(player: Player): string {
     if (!isFinished) return 'border-[#a07840] group-hover:border-amber-800'
     const p = placementMap[player.user_id]
@@ -1245,20 +1243,19 @@ await Promise.all(placementWrites)
               The game will start soon!
             </p>
           ) : isFinished ? (
-            /* ── GAME OVER: show winner ── */
-            <div className="flex flex-col items-center gap-2 px-4 text-center">
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-800 animate-pulse">
-                🏆 Game Over
+            // FIX 3: both sides get trophy, no crown, everything centered
+            <div className="flex flex-col items-center justify-center gap-2 px-4 text-center w-full">
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-800 animate-pulse text-center w-full">
+                🏆 Game Over 🏆
               </p>
               {winnerUsername && (
                 <>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-amber-900 mt-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-amber-900 mt-1 text-center">
                     Winner
                   </p>
-                  <p className="font-black text-xl leading-tight text-zinc-900 break-all">
+                  <p className="font-black text-xl leading-tight text-zinc-900 break-all text-center">
                     {winnerUsername}
                   </p>
-                  <span className="text-2xl">👑</span>
                 </>
               )}
             </div>
@@ -1531,7 +1528,7 @@ await Promise.all(placementWrites)
                       </div>
                     </div>
 
-                    {/* Jury gallery — placements pulled directly from placementMap (Supabase) */}
+                    {/* Jury gallery */}
                     {juryIds.length > 0 && (() => {
                       function ordinalSuffix(n: number): string {
                         const s = ['th','st','nd','rd']
@@ -1539,7 +1536,6 @@ await Promise.all(placementWrites)
                         return n + (s[(v - 20) % 10] || s[v] || s[0])
                       }
 
-                      // Build ordered list sorted by placement ascending (3rd, 4th, ...)
                       const juryWithPlacements = juryIds
                         .map(uid => ({ uid, placement: placementMap[uid] ?? null }))
                         .sort((a, b) => {
@@ -1639,35 +1635,36 @@ await Promise.all(placementWrites)
                           </div>
                         </div>
 
-                        {/* View-only after game finishes; active during finale */}
-                        {isFinished ? (
-                          <div className="mt-2 shrink-0 text-center py-2 rounded bg-[#a07840]/40">
-                            <p className="text-xs font-bold uppercase tracking-widest text-amber-900">
-                              🏆 Season Complete — Chat Closed
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2 mt-2 shrink-0">
-                            <input
-                              value={reunionText}
-                              onChange={e => setReunionText(e.target.value)}
-                              disabled={!canReunionChat}
-                              className="flex-1 bg-[#c8a96e] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
-                              placeholder={canReunionChat ? 'Type message...' : 'Only jury & finalists can chat'}
-                              onKeyDown={e => { if (e.key === 'Enter') sendReunionMessage() }}
-                            />
-                            <button onClick={sendReunionMessage} disabled={!canReunionChat}
-                              className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer">
-                              Send
-                            </button>
-                          </div>
-                        )}
+                        {/* FIX 4: always show input, disabled + placeholder change when finished */}
+                        <div className="flex gap-2 mt-2 shrink-0">
+                          <input
+                            value={reunionText}
+                            onChange={e => { if (!isFinished) setReunionText(e.target.value) }}
+                            disabled={!canReunionChat && !isFinished ? true : isFinished ? true : false}
+                            className="flex-1 bg-[#c8a96e] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
+                            placeholder={
+                              isFinished
+                                ? '🏆 Season Complete — Chat Closed'
+                                : canReunionChat
+                                  ? 'Type message...'
+                                  : 'Only jury & finalists can chat'
+                            }
+                            onKeyDown={e => { if (e.key === 'Enter' && !isFinished && canReunionChat) sendReunionMessage() }}
+                          />
+                          <button
+                            onClick={sendReunionMessage}
+                            disabled={!canReunionChat || isFinished}
+                            className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer"
+                          >
+                            Send
+                          </button>
+                        </div>
                       </div>
                     </div>
 
                     {/* Jury vote — shown during finale only, hidden once finished */}
                     {isFinale && !isFinished && juryIds.includes(_uid) && (
-                      <div className="shrink-0 p-4 rounded-xl border border-[#a07840]" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
+                      <div className="shrink-0 p4 rounded-xl border border-[#a07840]" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
                         <p className="font-black uppercase tracking-widest text-sm mb-3 text-zinc-800">Cast Your Jury Vote</p>
                         {hasFinaleVoted ? (
                           <div className="text-center">
@@ -2019,7 +2016,6 @@ await Promise.all(placementWrites)
                       const isWinner   = isFinished && player.user_id === lobby?.winner_id
                       const placement  = placementMap[player.user_id] ?? null
 
-                      // Gold border for 1st, silver for 2nd
                       const borderClass = isFinished && placement === 1
                         ? 'border-[#FFD700]'
                         : isFinished && placement === 2
@@ -2054,8 +2050,9 @@ await Promise.all(placementWrites)
                           <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                             {player.username}
                           </p>
+                          {/* FIX 1 (summary badges): show badge if placement exists and either voted off or game finished */}
                           {(() => {
-                            if (!placement) return null
+                            if (placement === null) return null
                             if (!isVotedOff && !isFinished) return null
 
                             const bgColor = placement === 1 ? '#d97706'
