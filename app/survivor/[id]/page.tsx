@@ -420,7 +420,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       loadLobbyMessages(lobbyId)
       loadReunionMessages(lobbyId)
       loadLobby(lobbyId)
-      loadPlacementMap(lobbyId) 
     }, 3000)
     return () => clearInterval(interval)
   }, [lobbyId])
@@ -604,7 +603,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     if (!lobbyId) return
     loadPlacementMap(lobbyId)
-  }, [lobbyId])
+  }, [lobbyId, votedOffIds.length, isFinished])
 
   // ─── If active tab becomes locked, redirect to Players ───────────────────
 
