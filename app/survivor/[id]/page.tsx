@@ -22,7 +22,7 @@ type Message = {
   created_at?: string
   topic?: string
   is_whisper?: boolean
-  whisper_to?: string | null   // user_id of recipient
+  whisper_to?: string | null
 }
 
 type Tab = 'Players' | 'Camp' | 'Challenge Beach' | 'Tiki Court' | 'Summary'
@@ -30,9 +30,9 @@ type CampSubPage = 'Malolo Tribe' | 'Kaliki Tribe' | 'Jungle' | 'Water Well'
 
 type ChallengeResult = {
   day: number
-  immunity_winner: 'malolo' | 'kaliki' | 'raro' | string  // string = user_id for individual immunity post-merge
+  immunity_winner: 'malolo' | 'kaliki' | 'raro' | string
   reward_winner: 'malolo' | 'kaliki' | 'raro' | string
-  individual_immunity?: string  // user_id of immune player post-merge
+  individual_immunity?: string
 }
 
 type VoteRecord = {
@@ -85,7 +85,7 @@ function formatCountdown(ms: number): string {
   return `${m}:${s}`
 }
 
-// ─── ChatPanel (top-level so it's never recreated on parent re-render) ───────
+// ─── ChatPanel ───────────────────────────────────────────────────────────────
 
 type ChatPanelProps = {
   tribeKey: string
@@ -144,8 +144,6 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
 
   return (
     <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
-      {/* overflow-y-auto + no justify-end so the user can freely scroll up.
-          A bottom-anchor div at the end ensures new messages stay visible. */}
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pr-1 min-h-0">
         <div className="space-y-2">
         {tribeMessages.map(m => {
@@ -153,13 +151,9 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
           const isWhisper = !!m.is_whisper
           const isSentByMe = m.sender_id === currentUserId
           return (
-            <div
-              key={m.id}
-              className="p-3 rounded bg-[#b8955a]"
-            >
+            <div key={m.id} className="p-3 rounded bg-[#b8955a]">
               <div className="flex justify-between mb-1">
                 <span className="inline-flex items-center gap-1.5">
-                  {/* Whispers: show only the crimson italic tag, no dot or username */}
                   {isWhisper ? (
                     isSentByMe ? (
                       <span className="font-bold text-sm italic" style={{ color: '#dc143c' }}>
@@ -194,7 +188,6 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
         </div>
       </div>
 
-      {/* Send row */}
       <div className="flex gap-2 mt-2 shrink-0">
         <input
           value={text}
@@ -213,7 +206,6 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
         </button>
       </div>
 
-      {/* Whisper row */}
       {canChat && (
         <div className="mt-1.5 shrink-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -264,7 +256,6 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
 export default function SeasonPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
 
-  // Core state
   const [lobbyId,         setLobbyId]         = useState<string | null>(null)
   const [currentUserId,   setCurrentUserId]   = useState<string | null>(null)
   const [players,         setPlayers]         = useState<Player[]>([])
@@ -280,25 +271,20 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [activeTab,       setActiveTab]       = useState<Tab>('Players')
   const [campPage,        setCampPage]        = useState<CampSubPage>('Malolo Tribe')
 
-  // Presence & UI
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set())
   const [dotCount,      setDotCount]      = useState(1)
   const [countdown,     setCountdown]     = useState<number>(0)
   const [isPaused,      setIsPaused]      = useState(false)
 
-  // Profile sidebar
   const [rank,     setRank]     = useState<string | null>(null)
   const [coins,    setCoins]    = useState<number | null>(null)
   const [crowns,   setCrowns]   = useState<number | null>(null)
   const [joinedAt, setJoinedAt] = useState<string | null>(null)
 
-  // Vote history
   const [voteHistory, setVoteHistory] = useState<VoteRecord[]>([])
 
-  // Fill game (testing util)
   const [hasFilled, setHasFilled] = useState(false)
 
-  // Finale
   const [reunionText,      setReunionText]      = useState('')
   const [reunionMessages,  setReunionMessages]  = useState<Message[]>([])
   const [finaleVoteTarget, setFinaleVoteTarget] = useState('')
@@ -307,7 +293,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   const campPageSetRef = useRef(false)
 
-  // Refs
   const chatRef          = useRef<HTMLDivElement>(null)
   const lobbyChatRef     = useRef<HTMLDivElement>(null)
   const lobbyRef         = useRef<any>(null)
@@ -338,10 +323,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const isFinale   = !!lobby?.is_finale
   const isFinished = !!lobby?.finished_at
   const finalists  = activePlayers
-  // Jury = voted off after merge
-  const preMergeBootCount = MAX_PLAYERS - MERGE_AT  // 8 for 18-player game
+  const preMergeBootCount = MAX_PLAYERS - MERGE_AT
   const juryIds    = votedOffIds.filter((_, idx) => idx >= preMergeBootCount)
-  // Anyone who can chat in reunion: jury + finalists
   const canReunionChat = juryIds.includes(_uid) || activePlayers.some(p => p.user_id === _uid)
 
   const todayResult = challengeResults.find(r => r.day === currentDay - 1) ?? null
@@ -349,11 +332,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     ? (todayResult.immunity_winner === TRIBE_1 ? TRIBE_2 : TRIBE_1)
     : null
 
-  // Individual immunity: the user_id stored in today's result post-merge
   const todayIndividualImmune = (isMerged && todayResult?.individual_immunity) ? todayResult.individual_immunity : null
   const iAmImmune = todayIndividualImmune === _uid
 
-  // FIX 2: Challenge Beach is accessible at final 3 — we just change what's shown inside
   const isFinalThree = gameStarted && remainingCount === 3 && !isFinale && !isFinished
   const canAccessChallengeBeach = gameStarted && remainingCount > 0 && !isFinale && !isFinished
 
@@ -367,7 +348,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const tabAccessible = (tab: Tab): boolean => {
     if (tab === 'Players') return true
     if (tab === 'Summary') return true
-    if (isFinale || isFinished) return false  // only Players + Summary in finale
+    if (isFinale || isFinished) return false
     if (!gameStarted) return false
     if (tab === 'Tiki Court') return canAccessTikiCourt
     if (tab === 'Challenge Beach') return canAccessChallengeBeach
@@ -467,6 +448,15 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (lobbyChatRef.current) lobbyChatRef.current.scrollTop = lobbyChatRef.current.scrollHeight
   }, [lobbyMessages])
 
+  // ─── CHANGE 3: Reunion chat — scroll to bottom on new messages ───────────
+  // We use flex-col-reverse so newest messages appear at the bottom and older
+  // ones are pushed upward, matching the requested scroll behaviour.
+  useEffect(() => {
+    if (reunionChatRef.current) {
+      reunionChatRef.current.scrollTop = reunionChatRef.current.scrollHeight
+    }
+  }, [reunionMessages])
+
   // ─── Presence ────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -508,26 +498,34 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }, [])
 
   // ─── Day advancement ─────────────────────────────────────────────────────
-  // Use a dedicated interval (not the countdown state) so we always have a
-  // fresh closure and never miss the transition at final 3.
-  // The interval fires every 5 seconds and checks if it's time to advance.
+  // CHANGE 1: The finale also uses the same timer. When it runs out, resolveFinale
+  // is called which declares a winner (randomising ties / no-votes).
 
   useEffect(() => {
     const interval = setInterval(() => {
       if (isPausedRef.current) return
       const l = lobbyRef.current
       if (!l?.started_at) return
-      if (l.is_finale || l.finished_at) return
+      if (l.finished_at) return
       if (advancingRef.current) return
       if (!l.day_ends_at) return
       const remaining = new Date(l.day_ends_at).getTime() - Date.now()
-      if (remaining > 5000) return  // still time left
+      if (remaining > 5000) return
 
       const id = l.id
       if (!id) return
+
+      // CHANGE 1: During finale, resolve the winner instead of advancing day
+      if (l.is_finale) {
+        advancingRef.current = true
+        resolveFinale(id).finally(() => {
+          setTimeout(() => { advancingRef.current = false }, 10000)
+        })
+        return
+      }
+
       advancingRef.current = true
       advanceDay(id).finally(() => {
-        // Short cooldown to prevent double-fire; advanceDay itself checks DB
         setTimeout(() => { advancingRef.current = false }, 10000)
       })
     }, 5000)
@@ -546,12 +544,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         if (data) { setHasFinaleVoted(true); setFinaleVoteTarget(data.target_id) }
       })
   }, [lobbyId, currentUserId, isFinale])
-
-  // ─── Auto-scroll reunion chat ─────────────────────────────────────────────
-
-  useEffect(() => {
-    if (reunionChatRef.current) reunionChatRef.current.scrollTop = reunionChatRef.current.scrollHeight
-  }, [reunionMessages])
 
   const lastLoadedVoteDayRef = useRef<number>(0)
 
@@ -676,22 +668,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     setLobbyMessages(data.map(m => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
   }
 
-  // ─── FIX 1: Overhauled vote history loader ────────────────────────────────
-  // The old approach tried to match eliminated players to vote days by searching
-  // for any day where they received a vote — this broke when multiple players
-  // were voted on the same day, or when the day numbering shifted.
-  //
-  // New approach: votes are cast on day N and the elimination from those votes
-  // is resolved when the day advances (i.e. elimination i corresponds to votes
-  // cast on day i+1, since day 1 has no vote).
-  // We simply zip votedOffIds[i] with the (i+1)-th voting day in sorted order.
   async function loadVoteHistory(id: string) {
     const l = lobbyRef.current
     const votedOffList: string[] = l?.voted_off ?? []
 
     if (votedOffList.length === 0) { setVoteHistory([]); return }
 
-    // Fetch all non-finale votes
     const { data: allVotes } = await supabase
       .from('votes')
       .select('voter_id, target_id, day')
@@ -701,7 +683,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     if (!allVotes || allVotes.length === 0) { setVoteHistory([]); return }
 
-    // Resolve all usernames
     const allUserIds = [...new Set([
       ...votedOffList,
       ...allVotes.map((v: any) => v.voter_id),
@@ -712,25 +693,18 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       : { data: [] }
     const nameMap = Object.fromEntries((profileData || []).map((p: any) => [p.id, p.username]))
 
-    // Get the sorted list of days that had votes cast
-    // Day 1 never has a vote (no tribal on day 1), so voting days are 2, 3, 4...
-    // Each unique voting day corresponds to one elimination round.
     const votingDaysSorted = [...new Set(allVotes.map((v: any) => v.day as number))].sort((a, b) => a - b)
 
-    // Group votes by day
     const votesByDay: Record<number, Record<string, number>> = {}
     for (const v of allVotes as any[]) {
       if (!votesByDay[v.day]) votesByDay[v.day] = {}
       votesByDay[v.day][v.target_id] = (votesByDay[v.day][v.target_id] || 0) + 1
     }
 
-    // Zip: votedOffList[i] was eliminated in the i-th voting round
-    // (i.e. the i-th entry in votingDaysSorted)
     const history: VoteRecord[] = votedOffList.map((eliminatedId, idx) => {
       const day = votingDaysSorted[idx]
 
       if (day === undefined) {
-        // More eliminations than voting days recorded — shouldn't happen, but handle gracefully
         return {
           day: idx + 2,
           voted_off: eliminatedId,
@@ -753,7 +727,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         }
       }
 
-      // Build display map: username -> vote count
       const vote_counts: Record<string, number> = {}
       Object.entries(dayCounts).forEach(([targetId, count]) => {
         const name = nameMap[targetId] || targetId.slice(0, 8)
@@ -804,6 +777,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     await resolveFinale(lobbyId)
   }
 
+  // CHANGE 1: resolveFinale now handles ties and no-votes by randomising among finalists
   async function resolveFinale(id: string) {
     const l = lobbyRef.current
     if (!l || l.finished_at) return
@@ -812,11 +786,26 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     const jury = (l.voted_off ?? []).filter((_: any, idx: number) => idx >= preMerge)
     const { data: finaleVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).eq('day', 9999)
-    if (!finaleVotes || finaleVotes.length < jury.length) return
+
+    // Only auto-resolve when timer fires (all jury members voted, or time ran out)
+    // When called from castFinaleVote, only resolve if all jury have voted
+    const calledFromTimer = !finaleVotes || finaleVotes.length < jury.length
+    if (!calledFromTimer && finaleVotes && finaleVotes.length < jury.length) return
+
     const counts: Record<string, number> = {}
-    finaleVotes.forEach((v: any) => { counts[v.target_id] = (counts[v.target_id] || 0) + 1 })
-    const winner = Object.entries(counts).sort((a, b) => (b[1] as number) - (a[1] as number))[0]?.[0]
+    ;(finaleVotes ?? []).forEach((v: any) => { counts[v.target_id] = (counts[v.target_id] || 0) + 1 })
+
+    let winner: string | null = null
+    if (Object.keys(counts).length === 0) {
+      // No votes — randomise
+      winner = activeIds[Math.floor(Math.random() * activeIds.length)]
+    } else {
+      const maxVotes = Math.max(...Object.values(counts))
+      const tied = Object.keys(counts).filter(uid => counts[uid] === maxVotes)
+      winner = tied[Math.floor(Math.random() * tied.length)]
+    }
     if (!winner) return
+
     await supabase.from('lobbies').update({
       finished_at: new Date().toISOString(),
       winner_id: winner,
@@ -852,20 +841,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     loadLobby(id)
   }
 
-  // FIX 3: Overhauled advanceDay to correctly handle the final-3-to-finale transition.
-  // Key changes:
-  // 1. Re-fetch the lobby fresh from the DB at the start to avoid stale lobbyRef data.
-  // 2. The finale trigger (is_finale: true) is now set when exactly 3 players remain
-  //    BEFORE elimination (i.e. we're at final 3 and about to vote someone out),
-  //    which means after the elimination we'll have 2 finalists.
-  //    The actual check is: activeAfterElim.length <= 2.
-  // 3. Removed the redundant lobbyRef stale-read guard — we fetch fresh data instead.
   async function advanceDay(id: string) {
-    // Always fetch fresh lobby state to avoid stale ref issues
     const { data: freshLobby } = await supabase.from('lobbies').select('*').eq('id', id).maybeSingle()
     if (!freshLobby) return
     if (freshLobby.is_finale || freshLobby.finished_at) return
-    // Another client already advanced
     if (freshLobby.day_ends_at && new Date(freshLobby.day_ends_at).getTime() > Date.now() + 10000) return
 
     const l = freshLobby
@@ -922,7 +901,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           }
         }
       } else {
-        // No votes cast — auto-eliminate from losing tribe (or random if merged)
         const activeThenIds = Object.keys(l.tribe_assignments ?? {}).filter(uid => !(l.voted_off ?? []).includes(uid))
         const isMergedThen = activeThenIds.length <= MERGE_AT
 
@@ -945,14 +923,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     const activeAfterElim = Object.keys(l.tribe_assignments ?? {})
       .filter(uid => !newVotedOff.includes(uid))
 
-    // Merge assignment: anyone still active gets raro
     let newAssignments = l.tribe_assignments ?? {}
     if (activeAfterElim.length <= MERGE_AT) {
       newAssignments = { ...newAssignments }
       activeAfterElim.forEach(uid => { newAssignments[uid] = TRIBE_RARO })
     }
 
-    // FIX 3: Trigger finale when 2 or fewer players remain after elimination
     const enterFinale = activeAfterElim.length <= 2
 
     const { error: updateError } = await supabase.from('lobbies').update({
@@ -1073,7 +1049,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     player: Player, size?: 'sm' | 'md', showName?: boolean
   }) {
     const isVotedOff = votedOffIds.includes(player.user_id)
+    const isWinner   = isFinished && player.user_id === lobby?.winner_id
     const sizeClass = size === 'sm' ? 'text-sm' : 'text-lg'
+    // CHANGE 5: Do not grey out the winner
+    const shouldGreyOut = isVotedOff && !isWinner
     return (
       <div
         onClick={() => router.push(`/profile/${player.username}`)}
@@ -1081,7 +1060,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       >
         <div
           className="w-full aspect-[3/4] rounded-md overflow-hidden border-2 border-[#a07840] group-hover:border-amber-800 transition"
-          style={{ filter: isVotedOff ? 'grayscale(100%)' : 'none' }}
+          style={{ filter: shouldGreyOut ? 'grayscale(100%)' : 'none' }}
         >
           {player.avatar_url ? (
             <img src={player.avatar_url} alt={player.username} className="w-full h-full object-cover" />
@@ -1192,12 +1171,18 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
             <p className="text-xs font-bold uppercase tracking-widest text-amber-800 text-center px-4">
               The game will start soon!
             </p>
-          ) : (isFinale || isFinished) ? (
+          ) : isFinished ? (
             <p className="text-xs font-bold uppercase tracking-widest text-amber-800 text-center px-4 animate-pulse">
-              {isFinished ? '🏆 Game Over' : '🌟 Finale'}
+              🏆 Game Over
             </p>
           ) : (
+            // CHANGE 1: Show clock during finale too (same as normal days)
             <>
+              {isFinale && (
+                <p className="text-xs font-bold uppercase tracking-widest text-amber-800 animate-pulse">
+                  🌟 Finale
+                </p>
+              )}
               <p className="text-xs font-bold uppercase tracking-widest text-amber-800">Clock</p>
               <p className={`font-black text-4xl tracking-[0.15em] tabular-nums transition-colors ${isPaused ? 'text-amber-700' : 'text-zinc-900'}`}>
                 {formatCountdown(countdown)}
@@ -1286,24 +1271,38 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           {/* ── PLAYERS TAB ── */}
           {activeTab === 'Players' && (
             <div className="p-5 h-full flex flex-col text-zinc-900">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-24" />
-                <h2 className="text-2xl font-black uppercase tracking-widest text-center">Players</h2>
-                <div className="flex items-center gap-2 justify-end" style={{ minWidth: '6rem' }}>
-                  {!gameStarted && !hasFilled && (
-                    <button
-                      onClick={fillGame}
-                      className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow"
-                    >
-                      Fill Game
+
+              {/* CHANGE 6: Hide "Players" heading during finale */}
+              {!isFinale && !isFinished && (
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-24" />
+                  <h2 className="text-2xl font-black uppercase tracking-widest text-center">Players</h2>
+                  <div className="flex items-center gap-2 justify-end" style={{ minWidth: '6rem' }}>
+                    {!gameStarted && !hasFilled && (
+                      <button
+                        onClick={fillGame}
+                        className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow"
+                      >
+                        Fill Game
+                      </button>
+                    )}
+                    <button className="flex items-center gap-1.5 bg-sky-400 hover:bg-sky-500 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow">
+                      <img src="/info.png" alt="Info" className="w-4 h-4" />
+                      Info
                     </button>
-                  )}
+                  </div>
+                </div>
+              )}
+
+              {/* CHANGE 6: During finale/finished show minimal top row with just the Info button */}
+              {(isFinale || isFinished) && (
+                <div className="flex items-center justify-end mb-2">
                   <button className="flex items-center gap-1.5 bg-sky-400 hover:bg-sky-500 transition text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow">
                     <img src="/info.png" alt="Info" className="w-4 h-4" />
                     Info
                   </button>
                 </div>
-              </div>
+              )}
 
               {!gameStarted ? (
                 <>
@@ -1380,13 +1379,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   </div>
                 </>
               ) : (isFinale || isFinished) ? (
-                /* ── FINALE view ── */
+                /* ── FINALE / FINISHED view ── */
                 <div className="flex gap-5 flex-1 min-h-0 overflow-hidden">
-                  {/* Left: finalists */}
-                  <div className="w-1/2 flex flex-col min-h-0">
-                    <h2 className="text-2xl font-black uppercase tracking-widest mb-4 text-center" style={{ color: '#7c3aed' }}>
-                      Finalists
-                    </h2>
+
+                  {/* Left: finalists + jury */}
+                  <div className="w-1/2 flex flex-col min-h-0 overflow-y-auto">
+
+                    {/* Winner banner */}
                     {isFinished && (() => {
                       const winner = players.find(p => p.user_id === lobby?.winner_id)
                       return winner ? (
@@ -1396,22 +1395,156 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         </div>
                       ) : null
                     })()}
-                    <div className="flex justify-center gap-6">
-                      {activePlayers.map(p => (
-                        <div key={p.user_id} style={{ width: '120px' }}>
-                          <PlayerAvatar player={p} size="md" />
-                        </div>
-                      ))}
+
+                    {/* CHANGE 4 + CHANGE 2: Finalists with placement badges */}
+                    <div className="mb-5">
+                      <h2 className="text-lg font-black uppercase tracking-widest mb-3 text-center" style={{ color: '#7c3aed' }}>
+                        Finalists
+                      </h2>
+                      <div className="flex justify-center gap-6">
+                        {activePlayers.map(p => {
+                          const isWinner = isFinished && p.user_id === lobby?.winner_id
+                          const isRunnerUp = isFinished && !isWinner
+                          return (
+                            <div key={p.user_id} className="flex flex-col items-center gap-1" style={{ width: '120px' }}>
+                              <div
+                                onClick={() => router.push(`/profile/${p.username}`)}
+                                className="cursor-pointer group w-full"
+                              >
+                                <div className="w-full aspect-[3/4] rounded-md overflow-hidden border-2 border-[#a07840] group-hover:border-amber-800 transition">
+                                  {p.avatar_url ? (
+                                    <img src={p.avatar_url} alt={p.username} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
+                                      <span className="text-lg font-black text-amber-900">{p.username.slice(0, 1).toUpperCase()}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
+                                {p.username}
+                              </p>
+                              {/* CHANGE 2: Gold 1st / Silver 2nd badge */}
+                              {isFinished && (
+                                <div
+                                  className="rounded px-3 py-1 text-xs font-black text-white uppercase tracking-wide text-center w-full"
+                                  style={{ backgroundColor: isWinner ? '#d97706' : '#9ca3af' }}
+                                >
+                                  {isWinner ? '🥇 1st' : '🥈 2nd'}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                    {/* Jury vote section */}
+
+                    {/* CHANGE 4: Jury gallery */}
+                    {juryIds.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-black uppercase tracking-widest mb-3 text-center text-zinc-700">
+                          Jury
+                        </h3>
+                        <div className="flex flex-wrap justify-center gap-2">
+                          {juryIds.map((uid, idx) => {
+                            const juryPlayer = players.find(p => p.user_id === uid)
+                            if (!juryPlayer) return null
+                            // Jury placement: juryIds[0] = earliest jury member = highest number
+                            // juryIds[0] was the (preMergeBootCount+1)-th voted off overall
+                            // Their placement = total players - (preMergeBootCount + idx)
+                            const placement = MAX_PLAYERS - preMergeBootCount - idx
+                            return (
+                              <div key={uid} className="flex flex-col items-center gap-0.5" style={{ width: '72px' }}>
+                                <div
+                                  onClick={() => router.push(`/profile/${juryPlayer.username}`)}
+                                  className="cursor-pointer group w-full"
+                                >
+                                  <div className="w-full aspect-[3/4] rounded-md overflow-hidden border-2 border-[#a07840] group-hover:border-amber-800 transition" style={{ filter: 'none' }}>
+                                    {juryPlayer.avatar_url ? (
+                                      <img src={juryPlayer.avatar_url} alt={juryPlayer.username} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
+                                        <span className="text-xs font-black text-amber-900">{juryPlayer.username.slice(0, 1).toUpperCase()}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <p className="text-[9px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
+                                  {juryPlayer.username}
+                                </p>
+                                <div
+                                  className="rounded px-1 py-0.5 text-[8px] font-bold text-white uppercase tracking-wide text-center w-full"
+                                  style={{ backgroundColor: '#71717a' }}
+                                >
+                                  JURY - {placement}th
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right: Reunion Chat + Jury Vote */}
+                  <div className="w-1/2 flex flex-col min-h-0 h-full gap-3">
+
+                    {/* CHANGE 7: Reunion chat — smaller when voting is shown, full height when finished */}
+                    <div className={`flex flex-col min-h-0 ${isFinished ? 'flex-1' : 'h-[45%]'}`}>
+                      <h2 className="text-xl font-bold mb-2 shrink-0 uppercase tracking-widest">Reunion Chat</h2>
+                      <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
+                        {/* CHANGE 3: Messages flow upward — newest at bottom. Use normal order + scroll to bottom. */}
+                        <div ref={reunionChatRef} className="flex-1 overflow-y-auto pr-1 min-h-0">
+                          <div className="flex flex-col justify-end min-h-full">
+                            <div className="space-y-2">
+                              {reunionMessages.map(m => {
+                                const isOnline = onlineUserIds.has(m.sender_id)
+                                return (
+                                  <div key={m.id} className="bg-[#b8955a] p-3 rounded">
+                                    <div className="flex justify-between mb-1">
+                                      <span className="inline-flex items-center gap-1.5">
+                                        <span className="inline-block w-2 h-2 rounded-full shrink-0"
+                                          style={{ backgroundColor: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 4px #22c55e' : 'none' }} />
+                                        <span className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
+                                          onClick={() => router.push(`/profile/${m.username}`)}>
+                                          {m.username}
+                                        </span>
+                                      </span>
+                                    </div>
+                                    <p className="text-sm">{m.content}</p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 mt-2 shrink-0">
+                          <input
+                            value={reunionText}
+                            onChange={e => setReunionText(e.target.value)}
+                            disabled={!canReunionChat}
+                            className="flex-1 bg-[#c8a96e] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
+                            placeholder={canReunionChat ? 'Type message...' : 'Only jury & finalists can chat'}
+                            onKeyDown={e => { if (e.key === 'Enter') sendReunionMessage() }}
+                          />
+                          <button onClick={sendReunionMessage} disabled={!canReunionChat}
+                            className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer">
+                            Send
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CHANGE 7: Jury vote section — shown during finale, hidden after finished */}
                     {isFinale && !isFinished && juryIds.includes(_uid) && (
-                      <div className="mt-6 p-4 rounded-xl border border-[#a07840]" style={{ background: '#b8955a' }}>
+                      <div className="shrink-0 p-4 rounded-xl border border-[#a07840]" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
                         <p className="font-black uppercase tracking-widest text-sm mb-3 text-zinc-800">Cast Your Jury Vote</p>
                         {hasFinaleVoted ? (
                           <div className="text-center">
                             <p className="font-bold text-zinc-700 text-sm">
                               You voted for <span className="text-amber-800">{players.find(p => p.user_id === finaleVoteTarget)?.username}</span>
                             </p>
+                            {/* CHANGE 7: Allow editing jury vote */}
                             <button
                               onClick={async () => {
                                 if (!lobbyId || !currentUserId) return
@@ -1440,48 +1573,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         )}
                       </div>
                     )}
-                  </div>
-                  {/* Right: Reunion Chat */}
-                  <div className="w-1/2 flex flex-col min-h-0 h-full">
-                    <h2 className="text-xl font-bold mb-3 shrink-0 uppercase tracking-widest">Reunion Chat</h2>
-                    <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
-                      <div ref={reunionChatRef} className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
-                        {reunionMessages.map(m => {
-                          const isOnline = onlineUserIds.has(m.sender_id)
-                          return (
-                            <div key={m.id} className="bg-[#b8955a] p-3 rounded">
-                              <div className="flex justify-between mb-1">
-                                <span className="inline-flex items-center gap-1.5">
-                                  <span className="inline-block w-2 h-2 rounded-full shrink-0"
-                                    style={{ backgroundColor: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 4px #22c55e' : 'none' }} />
-                                  <span className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
-                                    onClick={() => router.push(`/profile/${m.username}`)}>
-                                    {m.username}
-                                  </span>
-                                </span>
-                              </div>
-                              <p className="text-sm">{m.content}</p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                      {!isFinished && (
-                        <div className="flex gap-2 mt-2 shrink-0">
-                          <input
-                            value={reunionText}
-                            onChange={e => setReunionText(e.target.value)}
-                            disabled={!canReunionChat}
-                            className="flex-1 bg-[#c8a96e] p-2 rounded text-sm disabled:opacity-50 outline-none focus:ring-2 focus:ring-amber-700 placeholder:text-zinc-600"
-                            placeholder={canReunionChat ? 'Type message...' : 'Only jury & finalists can chat'}
-                            onKeyDown={e => { if (e.key === 'Enter') sendReunionMessage() }}
-                          />
-                          <button onClick={sendReunionMessage} disabled={!canReunionChat}
-                            className="bg-yellow-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-yellow-800 transition cursor-pointer">
-                            Send
-                          </button>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
               ) : isMerged ? (
@@ -1681,7 +1772,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 </div>
               )}
 
-              {/* FIX 2: At final 3, only show yesterday's immunity winner — no challenge buttons */}
               {!isFinalThree && (
                 <div className="flex gap-4 justify-center">
                   <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-yellow-600 text-white border-2 border-yellow-700 hover:bg-yellow-700 transition shadow-md cursor-pointer">
@@ -1797,8 +1887,11 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   <div className="grid grid-cols-6 gap-2">
                     {gridPlayers.map((player, idx) => {
                       const isVotedOff = votedOffIds.includes(player.user_id)
+                      const isWinner   = isFinished && player.user_id === lobby?.winner_id
                       const votedOffPosition = votedOffReversed.findIndex(p => p.user_id === player.user_id)
                       const placement = isVotedOff ? (activePlayers.length + 1 + votedOffPosition) : null
+                      // CHANGE 5: Don't grey out the winner
+                      const shouldGreyOut = isVotedOff && !isWinner
                       return (
                         <div key={player.user_id} className="flex flex-col items-center gap-1">
                           <div
@@ -1807,7 +1900,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                           >
                             <div
                               className="w-full aspect-[3/4] rounded-md overflow-hidden border-2 border-[#a07840] group-hover:border-amber-800 transition"
-                              style={{ filter: isVotedOff ? 'grayscale(100%)' : 'none' }}
+                              style={{ filter: shouldGreyOut ? 'grayscale(100%)' : 'none' }}
                             >
                               {player.avatar_url ? (
                                 <img src={player.avatar_url} alt={player.username} className="w-full h-full object-cover" />
