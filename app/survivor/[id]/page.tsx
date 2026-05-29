@@ -1101,7 +1101,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   function avatarBorderClass(player: Player): string {
     if (!isFinished) return 'border-[#a07840] group-hover:border-amber-800'
-    const p = placementMap[player.user_id]
+    const p = getPlayerPlacement(player.user_id)
     if (p === 1) return 'border-[#FFD700]'
     if (p === 2) return 'border-[#C0C0C0]'
     return 'border-[#a07840] group-hover:border-amber-800'
@@ -1109,10 +1109,32 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   function avatarBorderStyle(player: Player): React.CSSProperties {
     if (!isFinished) return {}
-    const p = placementMap[player.user_id]
+    const p = getPlayerPlacement(player.user_id)
     if (p === 1) return { borderColor: '#FFD700', boxShadow: '0 0 8px 2px rgba(255,215,0,0.6)' }
     if (p === 2) return { borderColor: '#C0C0C0', boxShadow: '0 0 6px 1px rgba(192,192,192,0.5)' }
     return {}
+  }
+
+  function getPlayerPlacement(userId: string): number | null {
+    const storedPlacement = placementMap[userId]
+    if (storedPlacement != null) return Number(storedPlacement)
+
+    const eliminatedIndex = votedOffIds.indexOf(userId)
+    if (eliminatedIndex !== -1) {
+      const totalPlayers = players.length || Object.keys(tribeAssign).length || MAX_PLAYERS
+      return totalPlayers - eliminatedIndex
+    }
+
+    if (!isFinished) return null
+    if (userId === lobby?.winner_id) return 1
+    if (activePlayers.some(p => p.user_id === userId)) return 2
+    return null
+  }
+
+  function ordinalSuffix(n: number): string {
+    const s = ['th','st','nd','rd']
+    const v = n % 100
+    return n + (s[(v - 20) % 10] || s[v] || s[0])
   }
 
   // ─── Avatar helper ───────────────────────────────────────────────────────
@@ -1480,7 +1502,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                             : activePlayers
                           return sorted.map(p => {
                             const isWinner = isFinished && p.user_id === lobby?.winner_id
-                            const placement = placementMap[p.user_id]
+                            const placement = getPlayerPlacement(p.user_id)
                             const borderClass = placement === 1
                               ? 'border-[#FFD700]'
                               : placement === 2
@@ -1530,16 +1552,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
                     {/* Jury gallery */}
                     {juryIds.length > 0 && (() => {
-                      function ordinalSuffix(n: number): string {
-                        const s = ['th','st','nd','rd']
-                        const v = n % 100
-                        return n + (s[(v - 20) % 10] || s[v] || s[0])
-                      }
-
                       // Most recently eliminated = last in juryIds = top-left, so reverse
                       const juryWithPlacements = [...juryIds]
                         .reverse()
-                        .map(uid => ({ uid, placement: placementMap[uid] ?? null }))
+                        .map(uid => ({ uid, placement: getPlayerPlacement(uid) }))
 
                       const row1 = juryWithPlacements.slice(0, 4)
                       const row2 = juryWithPlacements.slice(4, 8)
@@ -1996,12 +2012,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
             const voteHistoryNewestFirst = [...voteHistory].reverse()
 
-            function ordinal(n: number): string {
-              const s = ['th','st','nd','rd']
-              const v = n % 100
-              return n + (s[(v - 20) % 10] || s[v] || s[0])
-            }
-
             return (
               <div className="p-5 h-full text-zinc-900 flex gap-5">
                 <div className="flex-1 min-w-0">
@@ -2010,7 +2020,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     {gridPlayers.map((player) => {
                       const isVotedOff = votedOffIds.includes(player.user_id)
                       const isWinner   = isFinished && player.user_id === lobby?.winner_id
-                      const placement  = placementMap[player.user_id] ?? null
+                      const placement  = getPlayerPlacement(player.user_id)
 
                       const borderClass = isFinished && placement === 1
                         ? 'border-[#FFD700]'
@@ -2058,7 +2068,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
                             const label = placement === 1 ? '🥇 1st'
                               : placement === 2 ? '🥈 2nd'
-                              : ordinal(placement)
+                              : ordinalSuffix(placement)
 
                             return (
                               <div
