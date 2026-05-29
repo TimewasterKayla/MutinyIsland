@@ -1388,57 +1388,52 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   {/* Left: finalists + jury */}
                   <div className="w-1/2 flex flex-col min-h-0 overflow-y-auto">
 
-                    {/* Winner banner */}
-                    {isFinished && (() => {
-                      const winner = players.find(p => p.user_id === lobby?.winner_id)
-                      return winner ? (
-                        <div className="text-center mb-4 p-3 rounded-xl border border-yellow-600" style={{ background: '#b8955a' }}>
-                          <p className="text-xs font-bold uppercase tracking-widest text-yellow-700 mb-1">🏆 Winner</p>
-                          <p className="text-2xl font-black text-zinc-900">{winner.username}</p>
-                        </div>
-                      ) : null
-                    })()}
-
-                    {/* CHANGE 4 + CHANGE 2: Finalists with placement badges */}
+                    {/* Finalists — winner always on left, runner-up on right */}
                     <div className="mb-5">
                       <h2 className="text-lg font-black uppercase tracking-widest mb-3 text-center" style={{ color: '#7c3aed' }}>
                         Finalists
                       </h2>
                       <div className="flex justify-center gap-6">
-                        {activePlayers.map(p => {
-                          const isWinner = isFinished && p.user_id === lobby?.winner_id
-                          const isRunnerUp = isFinished && !isWinner
-                          return (
-                            <div key={p.user_id} className="flex flex-col items-center gap-1" style={{ width: '120px' }}>
-                              <div
-                                onClick={() => router.push(`/profile/${p.username}`)}
-                                className="cursor-pointer group w-full"
-                              >
-                                <div className="w-full aspect-[3/4] rounded-md overflow-hidden border-2 border-[#a07840] group-hover:border-amber-800 transition">
-                                  {p.avatar_url ? (
-                                    <img src={p.avatar_url} alt={p.username} className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
-                                      <span className="text-lg font-black text-amber-900">{p.username.slice(0, 1).toUpperCase()}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
-                                {p.username}
-                              </p>
-                              {/* CHANGE 2: Gold 1st / Silver 2nd badge */}
-                              {isFinished && (
+                        {(() => {
+                          // Sort so winner is always first (left); order doesn't matter pre-finish
+                          const sorted = isFinished
+                            ? [...activePlayers].sort((a, b) =>
+                                a.user_id === lobby?.winner_id ? -1 : b.user_id === lobby?.winner_id ? 1 : 0
+                              )
+                            : activePlayers
+                          return sorted.map(p => {
+                            const isWinner = isFinished && p.user_id === lobby?.winner_id
+                            return (
+                              <div key={p.user_id} className="flex flex-col items-center gap-1" style={{ width: '120px' }}>
                                 <div
-                                  className="rounded px-3 py-1 text-xs font-black text-white uppercase tracking-wide text-center w-full"
-                                  style={{ backgroundColor: isWinner ? '#d97706' : '#9ca3af' }}
+                                  onClick={() => router.push(`/profile/${p.username}`)}
+                                  className="cursor-pointer group w-full"
                                 >
-                                  {isWinner ? '🥇 1st' : '🥈 2nd'}
+                                  <div className="w-full aspect-[3/4] rounded-md overflow-hidden border-2 border-[#a07840] group-hover:border-amber-800 transition">
+                                    {p.avatar_url ? (
+                                      <img src={p.avatar_url} alt={p.username} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
+                                        <span className="text-lg font-black text-amber-900">{p.username.slice(0, 1).toUpperCase()}</span>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          )
-                        })}
+                                <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
+                                  {p.username}
+                                </p>
+                                {isFinished && (
+                                  <div
+                                    className="rounded px-3 py-1 text-xs font-black text-white uppercase tracking-wide text-center w-full"
+                                    style={{ backgroundColor: isWinner ? '#d97706' : '#9ca3af' }}
+                                  >
+                                    {isWinner ? '🥇 1st' : '🥈 2nd'}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })
+                        })()}
                       </div>
                     </div>
 
