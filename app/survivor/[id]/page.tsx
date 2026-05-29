@@ -1536,14 +1536,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         return n + (s[(v - 20) % 10] || s[v] || s[0])
                       }
 
-                      const juryWithPlacements = juryIds
+                      // Most recently eliminated = last in juryIds = top-left, so reverse
+                      const juryWithPlacements = [...juryIds]
+                        .reverse()
                         .map(uid => ({ uid, placement: placementMap[uid] ?? null }))
-                        .sort((a, b) => {
-                          if (a.placement === null && b.placement === null) return 0
-                          if (a.placement === null) return 1
-                          if (b.placement === null) return -1
-                          return a.placement - b.placement
-                        })
 
                       const row1 = juryWithPlacements.slice(0, 4)
                       const row2 = juryWithPlacements.slice(4, 8)
