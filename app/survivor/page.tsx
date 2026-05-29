@@ -30,6 +30,7 @@ export default function SurvivorPage() {
       .select('id')
       .eq('user_id', userId)
       .eq('in_game', true)
+      .limit(1)
       .maybeSingle()
 
     if (error) {
@@ -94,12 +95,15 @@ export default function SurvivorPage() {
       return
     }
 
-    const { error: joinError } = await supabase
+    const { data: membership, error: joinError } = await supabase
       .from('lobby_players')
       .insert({ lobby_id: targetLobbyId, user_id: user.id, in_game: true })
+      .select('id')
+      .single()
 
-    if (joinError) {
+    if (joinError || !membership) {
       console.error('JOIN ERROR:', joinError)
+      alert('Could not join that game. If you were in an older game, the lobby_players unique constraint may need to be updated in Supabase.')
       setLoading(false)
       return
     }
