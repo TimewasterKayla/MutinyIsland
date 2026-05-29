@@ -107,14 +107,11 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
   const [whisperTarget, setWhisperTarget] = useState('')
   const [whisperError,  setWhisperError]  = useState(false)
 
-  // FIX 4: Track whether the user has manually scrolled up so we don't
-  // hijack their scroll position every time a new message arrives.
   const isLockedRef      = useRef(false)
   const unlockTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const tribeMessages = messages.filter(m => m.topic === tribeKey)
 
-  // Auto-scroll to bottom only when not locked
   useEffect(() => {
     if (!isLockedRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -126,13 +123,10 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
     if (!el) return
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
     if (atBottom) {
-      // User scrolled back to bottom — unlock auto-scroll immediately
       isLockedRef.current = false
       if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current)
     } else {
-      // User scrolled up — lock auto-scroll
       isLockedRef.current = true
-      // Clear any pending unlock
       if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current)
     }
   }
@@ -150,8 +144,6 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
 
   return (
     <div className="bg-[#b8955a]/50 rounded-xl p-3 flex flex-col flex-1 min-h-0">
-      {/* Fix 6: flex flex-col + justify-end ensures messages start at the bottom
-          and new messages appear at the bottom pushing older ones up */}
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pr-1 min-h-0 flex flex-col justify-end">
         <div className="space-y-2">
         {tribeMessages.map(m => {
@@ -165,8 +157,6 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
             >
               <div className="flex justify-between mb-1">
                 <span className="inline-flex items-center gap-1.5">
-                  {/* Fix 2: Only show the online dot for non-whispers, or for whispers I sent.
-                      Incoming whispers (received) hide the dot entirely. */}
                   {(!isWhisper || isSentByMe) && (
                     <span
                       className="inline-block w-2 h-2 rounded-full shrink-0"
@@ -175,7 +165,6 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
                   )}
                   {isWhisper ? (
                     isSentByMe ? (
-                      // Fix 1: Sent whisper — show "MyUsername" (non-italic) then "[Whisper to X]" (italic, crimson)
                       <>
                         <span
                           className="text-yellow-800 font-bold text-sm cursor-pointer hover:underline"
@@ -188,7 +177,6 @@ function ChatPanel({ tribeKey, canChat, messages, text, setText, onSend, scrollR
                         </span>
                       </>
                     ) : (
-                      // Fix 2+3: Received whisper — just the crimson italic tag, no dot
                       <span className="font-bold text-sm italic" style={{ color: '#dc143c' }}>
                         {`[Whisper from ${m.username}]`}
                       </span>
@@ -295,7 +283,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [lobby,           setLobby]           = useState<any>(null)
   const [isPlayerInLobby, setIsPlayerInLobby] = useState(false)
   const [activeTab,       setActiveTab]       = useState<Tab>('Players')
-  // FIX 3: Start as null so we can set the default based on the player's tribe
   const [campPage,        setCampPage]        = useState<CampSubPage>('Malolo Tribe')
 
   // Presence & UI
@@ -323,7 +310,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [hasFinaleVoted,   setHasFinaleVoted]   = useState(false)
   const reunionChatRef = useRef<HTMLDivElement>(null)
 
-  // FIX 3: Track whether the camp page has been explicitly set by the tribe effect
   const campPageSetRef = useRef(false)
 
   // Refs
@@ -372,15 +358,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const todayIndividualImmune = (isMerged && todayResult?.individual_immunity) ? todayResult.individual_immunity : null
   const iAmImmune = todayIndividualImmune === _uid
 
+  // FIX 2: Challenge Beach is accessible at final 3 — we just change what's shown inside
+  const isFinalThree = gameStarted && remainingCount === 3 && !isFinale && !isFinished
+  const canAccessChallengeBeach = gameStarted && remainingCount > 0 && !isFinale && !isFinished
+
   const canAccessTikiCourt = (() => {
     if (!gameStarted || currentDay < 2 || !iAmActive) return false
     if (isFinale || isFinished) return false
     if (isMerged) return true
     return myTribe === losingTribe
   })()
-
-  // Challenge Beach locked when <=3 players remain OR in finale
-  const canAccessChallengeBeach = gameStarted && remainingCount > 3 && !isFinale && !isFinished
 
   const tabAccessible = (tab: Tab): boolean => {
     if (tab === 'Players') return true
@@ -396,8 +383,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     ? ['Malolo Tribe', 'Jungle', 'Water Well']
     : ['Malolo Tribe', 'Kaliki Tribe', 'Jungle', 'Water Well']
 
-  // FIX 3: When the player's tribe is first known, snap the camp page to their tribe.
-  // campPageSetRef ensures this only fires once (not on every re-render).
   useEffect(() => {
     if (campPageSetRef.current) return
     if (!myTribe || !gameStarted) return
@@ -405,7 +390,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (myTribe === TRIBE_2) {
       setCampPage('Kaliki Tribe')
     } else {
-      // TRIBE_1 or TRIBE_RARO (post-merge) both map to the main camp page
       setCampPage('Malolo Tribe')
     }
   }, [myTribe, gameStarted])
@@ -482,7 +466,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       })
   }, [me?.username])
 
-  // ─── Auto scroll (lobby chat only — tribe chat scroll is inside ChatPanel) ──
+  // ─── Auto scroll (lobby chat only) ──────────────────────────────────────
 
   useEffect(() => {
     if (lobbyChatRef.current) lobbyChatRef.current.scrollTop = lobbyChatRef.current.scrollHeight
@@ -529,18 +513,33 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   }, [])
 
   // ─── Day advancement ─────────────────────────────────────────────────────
+  // FIX 3: Use a ref-based approach to avoid stale closure issues.
+  // The effect reads isPausedRef and lobbyRef directly so it always has
+  // fresh values without needing them as deps (which caused double-fires).
 
   useEffect(() => {
-    if (!gameStarted || !lobbyId || !currentUserId) return
     if (countdown > 0) return
-    if (isPaused) return
+    if (!gameStarted) return
+    if (!lobbyId || !currentUserId) return
+
+    const l = lobbyRef.current
+    if (!l) return
+    // If the lobby is already in finale or finished, don't advance
+    if (l.is_finale || l.finished_at) return
+    // Respect pause
+    if (isPausedRef.current) return
+    // Prevent concurrent advances
     if (advancingRef.current) return
+    // Double-check: if lobby already has a future day_ends_at, skip
+    // (another client may have already advanced)
+    if (l.day_ends_at && new Date(l.day_ends_at).getTime() > Date.now() + 10000) return
 
     advancingRef.current = true
     advanceDay(lobbyId).finally(() => {
-      setTimeout(() => { advancingRef.current = false }, 5000)
+      setTimeout(() => { advancingRef.current = false }, 8000)
     })
-  }, [countdown, gameStarted, currentUserId, lobbyId, isPaused])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdown])
 
   // ─── Check if already finale-voted ──────────────────────────────────────
 
@@ -560,17 +559,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (reunionChatRef.current) reunionChatRef.current.scrollTop = reunionChatRef.current.scrollHeight
   }, [reunionMessages])
 
-  // ─── Fix 4: Reset parchment state when the day changes ──────────────────
-  // We track the last day we loaded votes for. When currentDay changes,
-  // clear the parchment immediately so stale data never shows.
   const lastLoadedVoteDayRef = useRef<number>(0)
 
-  // ─── Check if already voted today + restore voted name on refresh ─────────
+  // ─── Check if already voted today ─────────────────────────────────────────
 
   useEffect(() => {
     if (!lobbyId || !currentUserId || !currentDay) return
 
-    // If the day has advanced, wipe the previous round's state right away
     if (currentDay !== lastLoadedVoteDayRef.current) {
       setHasVotedToday(false)
       setVotedName(null)
@@ -596,7 +591,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
             .maybeSingle()
           setVotedName(profile?.username ?? 'Unknown')
         } else {
-          // Explicitly clear in case a stale value slipped through
           setHasVotedToday(false)
           setVotedName(null)
           setVoteTarget('')
@@ -608,8 +602,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   useEffect(() => {
     if (!lobbyId || !gameStarted) return
-    loadVoteHistory(lobbyId, currentDay)
-  }, [lobbyId, gameStarted, votedOffIds.length, currentDay])
+    loadVoteHistory(lobbyId)
+  }, [lobbyId, gameStarted, votedOffIds.length])
 
   // ─── If active tab becomes locked, redirect to Players ───────────────────
 
@@ -670,7 +664,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       .order('created_at', { ascending: true })
     if (error || !data || data.length === 0) { setMessages([]); return }
     const uid = currentUserIdRef.current
-    // Keep non-whispers, plus whispers where I'm the sender or recipient
     const visible = data.filter((m: any) =>
       !m.is_whisper || m.sender_id === uid || m.whisper_to === uid
     )
@@ -689,86 +682,96 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     setLobbyMessages(data.map(m => ({ ...m, username: profileMap[m.sender_id] || 'Unknown' })))
   }
 
-  async function loadVoteHistory(id: string, knownCurrentDay?: number) {
+  // ─── FIX 1: Overhauled vote history loader ────────────────────────────────
+  // The old approach tried to match eliminated players to vote days by searching
+  // for any day where they received a vote — this broke when multiple players
+  // were voted on the same day, or when the day numbering shifted.
+  //
+  // New approach: votes are cast on day N and the elimination from those votes
+  // is resolved when the day advances (i.e. elimination i corresponds to votes
+  // cast on day i+1, since day 1 has no vote).
+  // We simply zip votedOffIds[i] with the (i+1)-th voting day in sorted order.
+  async function loadVoteHistory(id: string) {
     const l = lobbyRef.current
     const votedOffList: string[] = l?.voted_off ?? []
 
     if (votedOffList.length === 0) { setVoteHistory([]); return }
 
-    // Use the passed-in day (from state, always fresh) or fall back to lobbyRef
-    const currentDayVal = knownCurrentDay ?? l?.current_day ?? 1
-    // Votes are cast during a day and tallied when that day ends (day advances).
-    // The eliminated player for round N is determined by votes cast on day N.
-    // When we're on day D, rounds 2..D-1 are fully complete.
-    // We include up to day D (current day) because the just-completed round's
-    // votes are on day D-1 but the lobby may already be on day D.
-    // Safest: just fetch ALL votes and filter out day 9999 (finale votes).
+    // Fetch all non-finale votes
     const { data: allVotes } = await supabase
       .from('votes')
       .select('voter_id, target_id, day')
       .eq('lobby_id', id)
-      .lt('day', 9999)           // exclude finale jury votes
+      .lt('day', 9999)
       .order('day', { ascending: true })
 
-    // Resolve all usernames we'll need
+    if (!allVotes || allVotes.length === 0) { setVoteHistory([]); return }
+
+    // Resolve all usernames
     const allUserIds = [...new Set([
       ...votedOffList,
-      ...(allVotes ?? []).map((v: any) => v.voter_id),
-      ...(allVotes ?? []).map((v: any) => v.target_id),
+      ...allVotes.map((v: any) => v.voter_id),
+      ...allVotes.map((v: any) => v.target_id),
     ])]
     const { data: profileData } = allUserIds.length > 0
       ? await supabase.from('profiles').select('id, username').in('id', allUserIds)
       : { data: [] }
     const nameMap = Object.fromEntries((profileData || []).map((p: any) => [p.id, p.username]))
 
-    // Group votes by day: day -> { target_id -> count }
+    // Get the sorted list of days that had votes cast
+    // Day 1 never has a vote (no tribal on day 1), so voting days are 2, 3, 4...
+    // Each unique voting day corresponds to one elimination round.
+    const votingDaysSorted = [...new Set(allVotes.map((v: any) => v.day as number))].sort((a, b) => a - b)
+
+    // Group votes by day
     const votesByDay: Record<number, Record<string, number>> = {}
-    ;(allVotes ?? []).forEach((v: any) => {
+    for (const v of allVotes as any[]) {
       if (!votesByDay[v.day]) votesByDay[v.day] = {}
       votesByDay[v.day][v.target_id] = (votesByDay[v.day][v.target_id] || 0) + 1
-    })
+    }
 
-    // For each eliminated player (in order), find the earliest day where they
-    // received at least one vote. Each day is consumed by at most one elimination.
-    const usedDays = new Set<number>()
+    // Zip: votedOffList[i] was eliminated in the i-th voting round
+    // (i.e. the i-th entry in votingDaysSorted)
+    const history: VoteRecord[] = votedOffList.map((eliminatedId, idx) => {
+      const day = votingDaysSorted[idx]
 
-    const history: VoteRecord[] = votedOffList.map((eliminatedId) => {
-      // Find earliest unused day where this person received any votes
-      const matchDay = Object.keys(votesByDay)
-        .map(Number)
-        .filter(day => !usedDays.has(day) && (votesByDay[day][eliminatedId] ?? 0) > 0)
-        .sort((a, b) => a - b)[0]
-
-      if (matchDay !== undefined) {
-        usedDays.add(matchDay)
-        const dayCounts = votesByDay[matchDay]
-        // Build display map: username -> vote count (all targets that day)
-        const vote_counts: Record<string, number> = {}
-        Object.entries(dayCounts).forEach(([targetId, count]) => {
-          const name = nameMap[targetId] || targetId.slice(0, 8)
-          vote_counts[name] = count
-        })
+      if (day === undefined) {
+        // More eliminations than voting days recorded — shouldn't happen, but handle gracefully
         return {
-          day: matchDay,
+          day: idx + 2,
           voted_off: eliminatedId,
           username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
-          vote_counts,
-          rocks_drawn: false,
+          vote_counts: {},
+          rocks_drawn: true,
         }
       }
 
-      // Truly no votes found for this person on any day — must have been rocks
-      const fallbackDay = Object.keys(votesByDay)
-        .map(Number)
-        .filter(d => !usedDays.has(d))
-        .sort((a, b) => a - b)[0] ?? (usedDays.size + 2)
-      usedDays.add(fallbackDay)
+      const dayCounts = votesByDay[day] ?? {}
+      const totalVotes = Object.values(dayCounts).reduce((s, n) => s + n, 0)
+
+      if (totalVotes === 0) {
+        return {
+          day,
+          voted_off: eliminatedId,
+          username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
+          vote_counts: {},
+          rocks_drawn: true,
+        }
+      }
+
+      // Build display map: username -> vote count
+      const vote_counts: Record<string, number> = {}
+      Object.entries(dayCounts).forEach(([targetId, count]) => {
+        const name = nameMap[targetId] || targetId.slice(0, 8)
+        vote_counts[name] = count
+      })
+
       return {
-        day: fallbackDay,
+        day,
         voted_off: eliminatedId,
         username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
-        vote_counts: {},
-        rocks_drawn: true,
+        vote_counts,
+        rocks_drawn: false,
       }
     })
 
@@ -855,12 +858,23 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     loadLobby(id)
   }
 
+  // FIX 3: Overhauled advanceDay to correctly handle the final-3-to-finale transition.
+  // Key changes:
+  // 1. Re-fetch the lobby fresh from the DB at the start to avoid stale lobbyRef data.
+  // 2. The finale trigger (is_finale: true) is now set when exactly 3 players remain
+  //    BEFORE elimination (i.e. we're at final 3 and about to vote someone out),
+  //    which means after the elimination we'll have 2 finalists.
+  //    The actual check is: activeAfterElim.length <= 2.
+  // 3. Removed the redundant lobbyRef stale-read guard — we fetch fresh data instead.
   async function advanceDay(id: string) {
-    const l = lobbyRef.current
-    if (!l) return
-    if (l.is_finale || l.finished_at) return
-    if (l.day_ends_at && new Date(l.day_ends_at).getTime() > Date.now() + 10000) return
+    // Always fetch fresh lobby state to avoid stale ref issues
+    const { data: freshLobby } = await supabase.from('lobbies').select('*').eq('id', id).maybeSingle()
+    if (!freshLobby) return
+    if (freshLobby.is_finale || freshLobby.finished_at) return
+    // Another client already advanced
+    if (freshLobby.day_ends_at && new Date(freshLobby.day_ends_at).getTime() > Date.now() + 10000) return
 
+    const l = freshLobby
     const newDay = (l.current_day ?? 1) + 1
     const dayEndsAt = new Date(Date.now() + DAY_DURATION_MS)
 
@@ -870,11 +884,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     let newResults = existingResults
     if (!alreadyHasResult && prevDay >= 1) {
-      const remaining = Object.entries(l.tribe_assignments ?? {})
-        .filter(([uid]) => !(l.voted_off ?? []).includes(uid))
-        .map(([, tribe]) => tribe)
-      const uniqueTribes = [...new Set(remaining)]
-
       const activeThenIds = Object.keys(l.tribe_assignments ?? {}).filter(uid => !(l.voted_off ?? []).includes(uid))
       const isMergedThen = activeThenIds.length <= MERGE_AT
 
@@ -886,11 +895,14 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           reward_winner: immunePlayer,
           individual_immunity: immunePlayer,
         }]
-      } else if (uniqueTribes.length >= 2) {
-        const tribes = uniqueTribes as ('malolo' | 'kaliki' | 'raro')[]
-        const immunityWinner = tribes[Math.floor(Math.random() * tribes.length)]
-        const rewardWinner   = tribes[Math.floor(Math.random() * tribes.length)]
-        newResults = [...existingResults, { day: prevDay, immunity_winner: immunityWinner, reward_winner: rewardWinner }]
+      } else {
+        const remaining = activeThenIds.map(uid => l.tribe_assignments[uid])
+        const uniqueTribes = [...new Set(remaining)] as ('malolo' | 'kaliki' | 'raro')[]
+        if (uniqueTribes.length >= 2) {
+          const immunityWinner = uniqueTribes[Math.floor(Math.random() * uniqueTribes.length)]
+          const rewardWinner   = uniqueTribes[Math.floor(Math.random() * uniqueTribes.length)]
+          newResults = [...existingResults, { day: prevDay, immunity_winner: immunityWinner, reward_winner: rewardWinner }]
+        }
       }
     }
 
@@ -916,15 +928,19 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           }
         }
       } else {
-        const losingTribeKey = newResults.find(r => r.day === prevDay)?.immunity_winner === TRIBE_1
-          ? TRIBE_2
-          : TRIBE_1
-        const eligible = Object.entries(l.tribe_assignments ?? {})
-          .filter(([uid, tribe]) => !newVotedOff.includes(uid) && tribe === losingTribeKey)
-          .map(([uid]) => uid)
-        const pool = eligible.length > 0
-          ? eligible
-          : Object.keys(l.tribe_assignments ?? {}).filter(uid => !newVotedOff.includes(uid))
+        // No votes cast — auto-eliminate from losing tribe (or random if merged)
+        const activeThenIds = Object.keys(l.tribe_assignments ?? {}).filter(uid => !(l.voted_off ?? []).includes(uid))
+        const isMergedThen = activeThenIds.length <= MERGE_AT
+
+        let pool: string[]
+        if (isMergedThen) {
+          pool = activeThenIds.filter(uid => uid !== prevDayImmune)
+        } else {
+          const immunityWinnerTribe = newResults.find(r => r.day === prevDay)?.immunity_winner
+          const losingTribeKey = immunityWinnerTribe === TRIBE_1 ? TRIBE_2 : TRIBE_1
+          pool = activeThenIds.filter(uid => l.tribe_assignments[uid] === losingTribeKey)
+          if (pool.length === 0) pool = activeThenIds
+        }
         if (pool.length > 0) {
           const eliminated = pool[Math.floor(Math.random() * pool.length)]
           newVotedOff = [...newVotedOff, eliminated]
@@ -934,14 +950,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     const activeAfterElim = Object.keys(l.tribe_assignments ?? {})
       .filter(uid => !newVotedOff.includes(uid))
-    const merging = activeAfterElim.length <= MERGE_AT
+
+    // Merge assignment: anyone still active gets raro
     let newAssignments = l.tribe_assignments ?? {}
-    if (merging) {
+    if (activeAfterElim.length <= MERGE_AT) {
       newAssignments = { ...newAssignments }
       activeAfterElim.forEach(uid => { newAssignments[uid] = TRIBE_RARO })
     }
 
-    const enterFinale = activeAfterElim.length === 2
+    // FIX 3: Trigger finale when 2 or fewer players remain after elimination
+    const enterFinale = activeAfterElim.length <= 2
 
     await supabase.from('lobbies').update({
       current_day: newDay,
@@ -1487,7 +1505,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         <div key={rowIdx} className="flex justify-center gap-2">
                           {row.map(p => (
                             <div key={p.user_id} style={{ width: 'calc(11.11% - 8px)' }}>
-                              <PlayerAvatar player={p} size="sm" />
+                              <PlayerAvatar key={p.user_id} player={p} size="sm" />
                             </div>
                           ))}
                         </div>
@@ -1516,7 +1534,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     <div className="flex flex-wrap justify-center gap-2">
                       {tribe2Players.map(p => (
                         <div key={p.user_id} style={{ width: 'calc(11.11% - 8px)' }}>
-                          <PlayerAvatar player={p} size="sm" />
+                          <PlayerAvatar key={p.user_id} player={p} size="sm" />
                         </div>
                       ))}
                     </div>
@@ -1663,16 +1681,26 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 </div>
               )}
 
-              <div className="flex gap-4 justify-center">
-                <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-yellow-600 text-white border-2 border-yellow-700 hover:bg-yellow-700 transition shadow-md cursor-pointer">
-                  Immunity Challenge
-                </button>
-                {!isMerged && (
-                  <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-[#8b6840] text-[#f0ddb0] border-2 border-[#6b4820] hover:bg-[#7a5830] transition shadow-md cursor-pointer">
-                    Reward Challenge
+              {/* FIX 2: At final 3, only show yesterday's immunity winner — no challenge buttons */}
+              {!isFinalThree && (
+                <div className="flex gap-4 justify-center">
+                  <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-yellow-600 text-white border-2 border-yellow-700 hover:bg-yellow-700 transition shadow-md cursor-pointer">
+                    Immunity Challenge
                   </button>
-                )}
-              </div>
+                  {!isMerged && (
+                    <button className="px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide bg-[#8b6840] text-[#f0ddb0] border-2 border-[#6b4820] hover:bg-[#7a5830] transition shadow-md cursor-pointer">
+                      Reward Challenge
+                    </button>
+                  )}
+                </div>
+              )}
+              {isFinalThree && (
+                <div className="text-center">
+                  <p className="text-sm font-bold uppercase tracking-widest text-zinc-600 italic">
+                    Final Tribal Council — no further challenges
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -1842,10 +1870,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     <>
                       <h3 className="font-black uppercase tracking-widest text-sm mt-1">Tribal History</h3>
                       <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: '40vh' }}>
-                        {voteHistoryNewestFirst.map(record => (
-                          <div key={record.day} className="rounded-xl p-3 border border-[#a07840] text-xs" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
+                        {voteHistoryNewestFirst.map((record, i) => (
+                          <div key={`${record.day}-${i}`} className="rounded-xl p-3 border border-[#a07840] text-xs" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
                             <p className="font-black uppercase tracking-wide text-sm mb-1">Day {record.day}</p>
-                            {/* FIX 5: No emoji before the voted-off username */}
                             <p className="font-bold text-red-800 uppercase tracking-wide mb-1">{record.username}</p>
                             {record.rocks_drawn ? (
                               <p className="text-zinc-700 uppercase font-bold tracking-wide text-xs">
