@@ -955,9 +955,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           pool = activeThenIds.filter(uid => uid !== prevDayImmune)
         } else {
           const immunityWinnerTribe = newResults.find(r => r.day === prevDay)?.immunity_winner
-          const losingTribeKey = immunityWinnerTribe === TRIBE_1 ? TRIBE_2 : TRIBE_1
-          pool = activeThenIds.filter(uid => l.tribe_assignments[uid] === losingTribeKey)
-          if (pool.length === 0) pool = activeThenIds
+          const activeTribes = [...new Set(activeThenIds.map(uid => l.tribe_assignments[uid]).filter(Boolean))]
+          const losingTribes = activeTribes.filter(tribe => tribe !== immunityWinnerTribe)
+          pool = activeThenIds.filter(uid => losingTribes.includes(l.tribe_assignments[uid]))
         }
 
         return pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null
@@ -1251,7 +1251,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     <>
     <main
       className="min-h-screen text-white flex gap-5 px-5 pb-5 pt-8 justify-center"
-      style={{ backgroundImage: 'url(/castawaywallpaper.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}
+      style={{ backgroundImage: `url(${activeTab === 'Tiki Court' ? '/tikicourt.jpg' : '/castawaywallpaper.jpg'})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}
     >
       {/* ══ LEFT COLUMN ══ */}
       <aside className="w-64 shrink-0 flex flex-col gap-4" style={{ height: 'calc(78vh + 2.5rem)' }}>
