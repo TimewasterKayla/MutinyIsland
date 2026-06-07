@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 type Profile = {
@@ -13,6 +14,7 @@ type Profile = {
   crowns: number | null
   rank: string | null
   created_at: string | null
+  joined_at: string | null
 }
 
 type Message = {
@@ -118,6 +120,7 @@ export default function ProfilePage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const router = useRouter()
   const [usernameParam, setUsernameParam] = useState<string>('')
   const [profile, setProfile] = useState<Profile | null>(null)
   const [isOwnProfile, setIsOwnProfile] = useState<boolean>(false)
@@ -259,7 +262,6 @@ export default function ProfilePage({
 
   async function loadMessages() {
     if (!currentUserId) return
-    // Load only root messages (no parent_id) for inbox list
     const { data, error } = await supabase
       .from('inbox_messages')
       .select('*, profiles!inbox_messages_sender_id_fkey(username)')
@@ -276,7 +278,6 @@ export default function ProfilePage({
 
     setMessages(msgs)
 
-    // Unread = any message in a thread (root or reply) that is unread and recipient is me
     const { data: unreadData } = await supabase
       .from('inbox_messages')
       .select('id')
@@ -304,7 +305,6 @@ export default function ProfilePage({
 
     setThreadMessages(msgs)
 
-    // Mark all unread messages in thread where I am recipient
     const unreadIds = msgs.filter((m) => !m.read && m.recipient_id === currentUserId).map((m) => m.id)
     if (unreadIds.length > 0) {
       await supabase.from('inbox_messages').update({ read: true }).in('id', unreadIds)
@@ -343,7 +343,6 @@ export default function ProfilePage({
       return
     }
 
-    // Step 1: Insert root message without thread_id (trigger will set it, or we patch after)
     const { data: inserted, error: sendErr } = await supabase
       .from('inbox_messages')
       .insert({
@@ -364,7 +363,6 @@ export default function ProfilePage({
       return
     }
 
-    // Step 2: If trigger didn't set thread_id, set it manually
     await supabase
       .from('inbox_messages')
       .update({ thread_id: inserted.id })
@@ -390,7 +388,6 @@ export default function ProfilePage({
     if (!body) return
     setReplySending(true)
 
-    // Find the other participant from thread
     const lastMsg = threadMessages[threadMessages.length - 1]
     const replyToId = lastMsg.sender_id === currentUserId ? lastMsg.recipient_id : lastMsg.sender_id
 
@@ -917,8 +914,15 @@ export default function ProfilePage({
     ? ['about', 'inbox', 'posts', 'friends', 'wins', 'inventory']
     : ['about', 'posts', 'friends', 'wins']
 
-  // Inventory placeholder items
   const inventoryPlaceholders = Array.from({ length: 5 })
+
+  const displayDateJoined = profile.joined_at
+    ? new Date(profile.joined_at).toLocaleDateString('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+      })
+    : null
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-6 pt-16">
@@ -969,13 +973,7 @@ export default function ProfilePage({
             <div className="bg-zinc-800 rounded-xl px-4 py-3 border border-zinc-700">
               <span className="text-zinc-400">Date Joined:</span>{' '}
               <span className="font-semibold text-white">
-                {profile.created_at
-                  ? new Date(profile.created_at).toLocaleDateString('en-US', {
-                      month: '2-digit',
-                      day: '2-digit',
-                      year: 'numeric',
-                    })
-                  : 'Unknown'}
+                {displayDateJoined ?? 'Unknown'}
               </span>
             </div>
           </div>
@@ -1178,48 +1176,48 @@ export default function ProfilePage({
                     {messages.map((msg) => (
                       <li
                         key={msg.id}
-                        className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3"
+                        className="bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden"
                       >
-                        <div className="flex items-center gap-4">
-                          {/* Unread dot */}
-                          {!msg.read && (
-                            <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
-                          )}
-
-                          {/* "From username" badge using messagebox image as background */}
-                          <div className="relative flex-shrink-0 flex items-center justify-center" style={{ minWidth: '80px' }}>
+                        <div className="flex items-stretch min-h-[52px]">
+                          {/* LEFT: messagebox image fills entire left section */}
+                          <div className="relative flex-shrink-0 flex items-center justify-center" style={{ width: '130px' }}>
                             <Image
                               src="/messagebox.jpg"
                               alt=""
-                              width={120}
-                              height={32}
-                              className="absolute inset-0 w-full h-full object-fill"
+                              fill
+                              className="object-cover"
                               style={{ pointerEvents: 'none' }}
                             />
-                            <span
-                              className="relative z-10 text-xs font-semibold text-white px-3 py-1 whitespace-nowrap"
-                              style={{ textShadow: '0 1px 4px #000, 0 0 8px #000' }}
+                            {/* Unread dot — top-left corner over the image */}
+                            {!msg.read && (
+                              <span className="absolute top-2 left-2 w-2 h-2 rounded-full bg-red-500 z-10" />
+                            )}
+                            {/* @username clickable, centered over image */}
+                            <button
+                              onClick={() => router.push(`/profile/${msg.sender_username}`)}
+                              className="relative z-10 text-xs font-bold text-white px-2 py-1 text-center leading-tight hover:text-yellow-300 transition cursor-pointer"
+                              style={{ textShadow: '0 1px 6px #000, 0 0 12px #000' }}
                             >
-                              From {msg.sender_username}
-                            </span>
+                              @{msg.sender_username}
+                            </button>
                           </div>
 
-                          {/* Spacer + title */}
-                          <button
-                            onClick={() => openThread(msg)}
-                            className="text-white underline hover:text-green-400 transition text-left cursor-pointer font-medium text-sm truncate max-w-[220px] ml-2"
-                            title={msg.title}
-                          >
-                            {msg.title}
-                          </button>
-
-                          {/* Date pushed to right */}
-                          <div className="ml-auto text-sm text-zinc-400 flex-shrink-0">
-                            {new Date(msg.created_at).toLocaleDateString('en-US', {
-                              month: '2-digit',
-                              day: '2-digit',
-                              year: '2-digit',
-                            })}
+                          {/* RIGHT: title + date */}
+                          <div className="flex flex-1 items-center px-4 gap-3">
+                            <button
+                              onClick={() => openThread(msg)}
+                              className="text-white underline hover:text-green-400 transition text-left cursor-pointer font-medium text-sm truncate flex-1"
+                              title={msg.title}
+                            >
+                              {msg.title}
+                            </button>
+                            <div className="text-xs text-zinc-400 flex-shrink-0">
+                              {new Date(msg.created_at).toLocaleDateString('en-US', {
+                                month: '2-digit',
+                                day: '2-digit',
+                                year: '2-digit',
+                              })}
+                            </div>
                           </div>
                         </div>
                       </li>
@@ -1271,7 +1269,6 @@ export default function ProfilePage({
 
                     <div className="flex-1 flex flex-col mb-2">
                       <label className="text-xs text-zinc-400 block mb-1">Message</label>
-                      {/* Bold / Italic toolbar */}
                       <div className="flex gap-2 mb-2">
                         <button
                           type="button"
@@ -1309,8 +1306,8 @@ export default function ProfilePage({
                 {/* ---- THREAD VIEW OVERLAY ---- */}
                 {openThreadId && (
                   <div className="absolute inset-0 bg-zinc-900 rounded-2xl p-6 z-20 flex flex-col">
-                    {/* Header */}
-                    <div className="flex items-center gap-3 mb-4">
+                    {/* Header: Back + Title */}
+                    <div className="flex items-center gap-3 mb-1">
                       <button
                         onClick={() => {
                           setOpenThreadId(null)
@@ -1327,61 +1324,26 @@ export default function ProfilePage({
                     </div>
 
                     {/* Thread messages */}
-                    <div className="flex-1 overflow-y-auto space-y-0 mb-4">
+                    <div className="flex-1 overflow-y-auto space-y-3 mb-4 pt-2">
                       {threadMessages.map((m, idx) => {
                         const isRoot = m.parent_id === null
-                        const isFirstReply = !isRoot && (idx === 0 || threadMessages[idx - 1].parent_id === null)
                         const isMe = m.sender_id === currentUserId
 
                         return (
-                          <div key={m.id}>
-                            {/* Divider before first reply */}
-                            {isFirstReply && (
-                              <div className="flex items-center gap-3 my-4">
-                                <div className="flex-1 h-px bg-zinc-700" />
-                                <span className="text-xs text-zinc-500 flex-shrink-0">Reply</span>
-                                <div className="flex-1 h-px bg-zinc-700" />
-                              </div>
-                            )}
-
+                          <div key={m.id} className="bg-zinc-700/50 rounded-xl px-4 py-3 w-full">
                             {isRoot ? (
-                              /* ---- Root message: plain readable layout ---- */
-                              <div className="mb-2">
-                                {/* Sender + date meta row */}
-                                <div className="flex items-center gap-2 mb-3">
-                                  <span className="text-sm text-zinc-400">
-                                    From{' '}
-                                    <span className="text-white font-semibold">{m.sender_username}</span>
-                                  </span>
-                                  <span className="text-zinc-600">·</span>
-                                  <span className="text-xs text-zinc-500">
-                                    {new Date(m.created_at).toLocaleString('en-US', {
-                                      month: '2-digit',
-                                      day: '2-digit',
-                                      year: '2-digit',
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })}
-                                  </span>
-                                </div>
-                                {/* Body */}
-                                <div
-                                  className="text-sm leading-relaxed text-zinc-100"
-                                  dangerouslySetInnerHTML={{ __html: m.body }}
-                                />
-                              </div>
-                            ) : (
-                              /* ---- Reply message: plain readable layout ---- */
-                              <div className="mb-4">
+                              /* ---- Root message ---- */
+                              <>
+                                {/* Sender + date on same line, directly below title */}
                                 <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-sm text-zinc-400">
-                                    From{' '}
-                                    <span className={`font-semibold ${isMe ? 'text-green-400' : 'text-white'}`}>
-                                      {isMe ? 'You' : m.sender_username}
-                                    </span>
-                                  </span>
-                                  <span className="text-zinc-600">·</span>
-                                  <span className="text-xs text-zinc-500">
+                                  <button
+                                    onClick={() => router.push(`/profile/${m.sender_username}`)}
+                                    className="text-sm font-semibold text-green-400 hover:text-green-300 transition cursor-pointer"
+                                  >
+                                    @{m.sender_username}
+                                  </button>
+                                  <span className="text-zinc-500 text-xs">·</span>
+                                  <span className="text-xs text-zinc-400">
                                     {new Date(m.created_at).toLocaleString('en-US', {
                                       month: '2-digit',
                                       day: '2-digit',
@@ -1395,11 +1357,33 @@ export default function ProfilePage({
                                   className="text-sm leading-relaxed text-zinc-100"
                                   dangerouslySetInnerHTML={{ __html: m.body }}
                                 />
-                                {/* Divider after each reply (except last) */}
-                                {idx < threadMessages.length - 1 && (
-                                  <div className="mt-4 h-px bg-zinc-800" />
-                                )}
-                              </div>
+                              </>
+                            ) : (
+                              /* ---- Reply message ---- */
+                              <>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <button
+                                    onClick={() => router.push(`/profile/${m.sender_username}`)}
+                                    className={`text-sm font-semibold hover:opacity-80 transition cursor-pointer ${isMe ? 'text-green-400' : 'text-zinc-200'}`}
+                                  >
+                                    @{isMe ? currentUsername : m.sender_username}
+                                  </button>
+                                  {/* Date pushed to right for replies */}
+                                  <span className="ml-auto text-xs text-zinc-400 flex-shrink-0">
+                                    {new Date(m.created_at).toLocaleString('en-US', {
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                      year: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </span>
+                                </div>
+                                <div
+                                  className="text-sm leading-relaxed text-zinc-100"
+                                  dangerouslySetInnerHTML={{ __html: m.body }}
+                                />
+                              </>
                             )}
                           </div>
                         )
