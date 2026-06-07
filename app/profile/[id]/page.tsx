@@ -343,7 +343,7 @@ export default function ProfilePage({
       return
     }
 
-    // Insert root message; thread_id will be set to its own id via DB trigger, or we do it in two steps
+    // Step 1: Insert root message without thread_id (trigger will set it, or we patch after)
     const { data: inserted, error: sendErr } = await supabase
       .from('inbox_messages')
       .insert({
@@ -353,23 +353,23 @@ export default function ProfilePage({
         body,
         read: false,
         parent_id: null,
-        thread_id: null, // will update immediately after
       })
-      .select()
+      .select('id')
       .single()
 
     if (sendErr || !inserted) {
-      console.error(sendErr)
+      console.error('Send error:', sendErr)
       alert('Failed to send message.')
       setComposeSending(false)
       return
     }
 
-    // Set thread_id = own id (root of thread)
+    // Step 2: If trigger didn't set thread_id, set it manually
     await supabase
       .from('inbox_messages')
       .update({ thread_id: inserted.id })
       .eq('id', inserted.id)
+      .is('thread_id', null)
 
     setComposeSending(false)
     setShowCompose(false)
@@ -405,11 +405,11 @@ export default function ProfilePage({
         thread_id: openThreadId,
         parent_id: lastMsg.id,
       })
-      .select()
+      .select('id')
       .single()
 
     if (error || !inserted) {
-      console.error(error)
+      console.error('Reply error:', error)
       alert('Failed to send reply.')
       setReplySending(false)
       return
@@ -1180,25 +1180,41 @@ export default function ProfilePage({
                         key={msg.id}
                         className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          {/* Left: unread dot + from + title */}
-                          <div className="flex items-center gap-2 min-w-0">
-                            {!msg.read && (
-                              <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
-                            )}
-                            <span className="text-sm text-zinc-300 flex-shrink-0">
-                              From <span className="text-white font-semibold">{msg.sender_username}</span>
-                            </span>
-                            <button
-                              onClick={() => openThread(msg)}
-                              className="text-white underline hover:text-green-400 transition text-left cursor-pointer font-medium text-sm truncate max-w-[220px]"
-                              title={msg.title}
+                        <div className="flex items-center gap-4">
+                          {/* Unread dot */}
+                          {!msg.read && (
+                            <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+                          )}
+
+                          {/* "From username" badge using messagebox image as background */}
+                          <div className="relative flex-shrink-0 flex items-center justify-center" style={{ minWidth: '80px' }}>
+                            <Image
+                              src="/messagebox.png"
+                              alt=""
+                              width={120}
+                              height={32}
+                              className="absolute inset-0 w-full h-full object-fill"
+                              style={{ pointerEvents: 'none' }}
+                            />
+                            <span
+                              className="relative z-10 text-xs font-semibold text-white px-3 py-1 whitespace-nowrap"
+                              style={{ textShadow: '0 1px 4px #000, 0 0 8px #000' }}
                             >
-                              {msg.title}
-                            </button>
+                              From {msg.sender_username}
+                            </span>
                           </div>
-                          {/* Right: date */}
-                          <div className="text-sm text-zinc-400 flex-shrink-0">
+
+                          {/* Spacer + title */}
+                          <button
+                            onClick={() => openThread(msg)}
+                            className="text-white underline hover:text-green-400 transition text-left cursor-pointer font-medium text-sm truncate max-w-[220px] ml-2"
+                            title={msg.title}
+                          >
+                            {msg.title}
+                          </button>
+
+                          {/* Date pushed to right */}
+                          <div className="ml-auto text-sm text-zinc-400 flex-shrink-0">
                             {new Date(msg.created_at).toLocaleDateString('en-US', {
                               month: '2-digit',
                               day: '2-digit',
@@ -1219,7 +1235,7 @@ export default function ProfilePage({
                         onClick={() => setShowCompose(false)}
                         className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-1.5 rounded-lg cursor-pointer transition text-sm"
                       >
-                        ← Back
+                        Back
                       </button>
                       <h2 className="text-2xl font-bold">New Message</h2>
                     </div>
@@ -1305,44 +1321,86 @@ export default function ProfilePage({
                         }}
                         className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-1.5 rounded-lg cursor-pointer transition text-sm flex-shrink-0"
                       >
-                        ← Back
+                        Back
                       </button>
                       <h2 className="text-lg font-bold truncate">{threadTitle}</h2>
                     </div>
 
                     {/* Thread messages */}
-                    <div className="flex-1 overflow-y-auto space-y-3 mb-4">
-                      {threadMessages.map((m) => {
+                    <div className="flex-1 overflow-y-auto space-y-0 mb-4">
+                      {threadMessages.map((m, idx) => {
+                        const isRoot = m.parent_id === null
+                        const isFirstReply = !isRoot && (idx === 0 || threadMessages[idx - 1].parent_id === null)
                         const isMe = m.sender_id === currentUserId
+
                         return (
-                          <div
-                            key={m.id}
-                            className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
-                          >
-                            <div
-                              className={`max-w-[75%] rounded-2xl px-4 py-3 ${
-                                isMe
-                                  ? 'bg-green-600 text-white rounded-br-sm'
-                                  : 'bg-zinc-800 border border-zinc-700 text-white rounded-bl-sm'
-                              }`}
-                            >
-                              <div className="text-xs font-semibold mb-1 opacity-70">
-                                {isMe ? 'You' : m.sender_username}
+                          <div key={m.id}>
+                            {/* Divider before first reply */}
+                            {isFirstReply && (
+                              <div className="flex items-center gap-3 my-4">
+                                <div className="flex-1 h-px bg-zinc-700" />
+                                <span className="text-xs text-zinc-500 flex-shrink-0">Reply</span>
+                                <div className="flex-1 h-px bg-zinc-700" />
                               </div>
-                              <div
-                                className="text-sm leading-relaxed"
-                                dangerouslySetInnerHTML={{ __html: m.body }}
-                              />
-                              <div className="text-xs opacity-50 mt-1 text-right">
-                                {new Date(m.created_at).toLocaleString('en-US', {
-                                  month: '2-digit',
-                                  day: '2-digit',
-                                  year: '2-digit',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
+                            )}
+
+                            {isRoot ? (
+                              /* ---- Root message: plain readable layout ---- */
+                              <div className="mb-2">
+                                {/* Sender + date meta row */}
+                                <div className="flex items-center gap-2 mb-3">
+                                  <span className="text-sm text-zinc-400">
+                                    From{' '}
+                                    <span className="text-white font-semibold">{m.sender_username}</span>
+                                  </span>
+                                  <span className="text-zinc-600">·</span>
+                                  <span className="text-xs text-zinc-500">
+                                    {new Date(m.created_at).toLocaleString('en-US', {
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                      year: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </span>
+                                </div>
+                                {/* Body */}
+                                <div
+                                  className="text-sm leading-relaxed text-zinc-100"
+                                  dangerouslySetInnerHTML={{ __html: m.body }}
+                                />
                               </div>
-                            </div>
+                            ) : (
+                              /* ---- Reply message: plain readable layout ---- */
+                              <div className="mb-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-sm text-zinc-400">
+                                    From{' '}
+                                    <span className={`font-semibold ${isMe ? 'text-green-400' : 'text-white'}`}>
+                                      {isMe ? 'You' : m.sender_username}
+                                    </span>
+                                  </span>
+                                  <span className="text-zinc-600">·</span>
+                                  <span className="text-xs text-zinc-500">
+                                    {new Date(m.created_at).toLocaleString('en-US', {
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                      year: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </span>
+                                </div>
+                                <div
+                                  className="text-sm leading-relaxed text-zinc-100"
+                                  dangerouslySetInnerHTML={{ __html: m.body }}
+                                />
+                                {/* Divider after each reply (except last) */}
+                                {idx < threadMessages.length - 1 && (
+                                  <div className="mt-4 h-px bg-zinc-800" />
+                                )}
+                              </div>
+                            )}
                           </div>
                         )
                       })}
@@ -1438,7 +1496,7 @@ export default function ProfilePage({
                         <div
                           key={i}
                           className="w-16 h-16 rounded-xl flex-shrink-0"
-                          style={{ backgroundColor: '#c8b89a', opacity: 0.35 }}
+                          style={{ backgroundColor: '#d4b896', opacity: 0.6 }}
                         />
                       ))}
                     </div>
