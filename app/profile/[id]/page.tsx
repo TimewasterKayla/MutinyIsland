@@ -1161,10 +1161,10 @@ export default function ProfilePage({
                       setRecipientError('')
                       if (composeEditorRef.current) composeEditorRef.current.innerHTML = ''
                     }}
-                    className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-2 rounded-xl cursor-pointer transition shadow-md"
+                   className="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer transition shadow-md text-sm"
                   >
                     New Message
-                    <span className="text-lg leading-none font-bold">+</span>
+                    <Image src="/MessageSendIcon.png" alt="Send" width={14} height={14} />
                   </button>
                 </div>
 
