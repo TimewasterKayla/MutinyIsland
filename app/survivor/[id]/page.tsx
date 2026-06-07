@@ -444,7 +444,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (!me) return
     supabase
       .from('profiles')
-      .select('rank, coins, crowns, created_at')
+      .select('rank, coins, crowns, joined_at')
       .eq('username', me.username)
       .maybeSingle()
       .then(({ data }) => {
@@ -452,7 +452,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         setRank(data.rank)
         setCoins(data.coins)
         setCrowns(data.crowns)
-        setJoinedAt(data.created_at)
+        setJoinedAt(data.joined_at)
       })
   }, [me?.username])
 
