@@ -1189,7 +1189,7 @@ export default function ProfilePage({
                           {/* "From username" badge using messagebox image as background */}
                           <div className="relative flex-shrink-0 flex items-center justify-center" style={{ minWidth: '80px' }}>
                             <Image
-                              src="/messagebox.png"
+                              src="/messagebox.jpg"
                               alt=""
                               width={120}
                               height={32}
