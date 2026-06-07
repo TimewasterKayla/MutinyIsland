@@ -15,7 +15,18 @@ type Profile = {
   created_at: string | null
 }
 
-type TabType = 'about' | 'messages' | 'posts' | 'friends' | 'wins' | 'inventory'
+type Message = {
+  id: string
+  sender_id: string
+  recipient_id: string
+  title: string
+  body: string
+  read: boolean
+  created_at: string
+  sender_username?: string
+}
+
+type TabType = 'about' | 'inbox' | 'posts' | 'friends' | 'wins' | 'inventory'
 
 const avatars = [
   '/avatars/jess.png',
@@ -109,6 +120,18 @@ export default function ProfilePage({
   const [charCount, setCharCount] = useState<number>(0)
   const [deleteBtn, setDeleteBtn] = useState<{ x: number; y: number; img: HTMLImageElement } | null>(null)
 
+  // Inbox / messaging state
+  const [messages, setMessages] = useState<Message[]>([])
+  const [unreadCount, setUnreadCount] = useState<number>(0)
+  const [showCompose, setShowCompose] = useState<boolean>(false)
+  const [composeRecipient, setComposeRecipient] = useState<string>('')
+  const [composeTitle, setComposeTitle] = useState<string>('')
+  const [composeBody, setComposeBody] = useState<string>('')
+  const [recipientError, setRecipientError] = useState<string>('')
+  const [composeSending, setComposeSending] = useState<boolean>(false)
+  const [openMessage, setOpenMessage] = useState<Message | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
   const editorRef = useRef<HTMLDivElement | null>(null)
   const savedRangeRef = useRef<Range | null>(null)
   const deleteBtnImgRef = useRef<HTMLImageElement | null>(null)
@@ -157,13 +180,111 @@ export default function ProfilePage({
     const { data: { user } } = await supabase.auth.getUser()
     const own = !!user && user.id === data.id
     setIsOwnProfile(own)
+    if (user) setCurrentUserId(user.id)
 
     setActiveTab((prev: TabType) => {
-      if (!own && (prev === 'messages' || prev === 'inventory')) return 'about'
+      if (!own && (prev === 'inbox' || prev === 'inventory')) return 'about'
       return prev
     })
 
     setLoading(false)
+  }
+
+  // -----------------------------
+  // LOAD MESSAGES (own profile only)
+  // -----------------------------
+  useEffect(() => {
+    if (!isOwnProfile || !currentUserId) return
+    loadMessages()
+
+    // Realtime subscription for new messages
+    const channel = supabase
+      .channel('inbox-' + currentUserId)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `recipient_id=eq.${currentUserId}`,
+        },
+        () => { loadMessages() }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [isOwnProfile, currentUserId])
+
+  async function loadMessages() {
+    if (!currentUserId) return
+    const { data, error } = await supabase
+      .from('inbox_messages')
+      .select('*, profiles!inbox_messages_sender_id_fkey(username)')
+      .eq('recipient_id', currentUserId)
+      .order('created_at', { ascending: false })
+
+    if (error) { console.error(error); return }
+
+    const msgs: Message[] = (data || []).map((m: any) => ({
+      ...m,
+      sender_username: m.profiles?.username ?? 'Unknown',
+    }))
+
+    setMessages(msgs)
+    setUnreadCount(msgs.filter((m) => !m.read).length)
+  }
+
+  async function markMessageRead(msg: Message) {
+    if (msg.read) return
+    await supabase.from('inbox_messages').update({ read: true }).eq('id', msg.id)
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, read: true } : m))
+    )
+    setUnreadCount((prev) => Math.max(0, prev - 1))
+  }
+
+  // -----------------------------
+  // SEND MESSAGE
+  // -----------------------------
+  async function sendMessage() {
+    if (!composeRecipient.trim() || !composeTitle.trim() || !composeBody.trim()) return
+    setComposeSending(true)
+    setRecipientError('')
+
+    // Look up recipient
+    const { data: recipientProfile, error: recipientErr } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', composeRecipient.trim())
+      .maybeSingle()
+
+    if (recipientErr || !recipientProfile) {
+      setRecipientError('Username not found')
+      setComposeSending(false)
+      return
+    }
+
+    const { error: sendErr } = await supabase.from('inbox_messages').insert({
+      sender_id: currentUserId,
+      recipient_id: recipientProfile.id,
+      title: composeTitle.trim().slice(0, 60),
+      body: composeBody.trim(),
+      read: false,
+    })
+
+    if (sendErr) {
+      console.error(sendErr)
+      alert('Failed to send message.')
+      setComposeSending(false)
+      return
+    }
+
+    setComposeSending(false)
+    setShowCompose(false)
+    setComposeRecipient('')
+    setComposeTitle('')
+    setComposeBody('')
+    setRecipientError('')
   }
 
   // -----------------------------
@@ -547,10 +668,8 @@ export default function ProfilePage({
     const editor = editorRef.current
     if (!editor) return
 
-    // Editing an existing link
     if (editLinkEl) {
       if (!linkUrl.trim()) {
-        // Empty URL = remove the link, keep the text
         const text = document.createTextNode(editLinkEl.innerText)
         editLinkEl.replaceWith(text)
       } else {
@@ -560,7 +679,6 @@ export default function ProfilePage({
       return
     }
 
-    // Inserting a new link from a selection
     const sel = window.getSelection()
     const range = savedRangeRef.current
 
@@ -575,7 +693,6 @@ export default function ProfilePage({
       return
     }
 
-    // Restore the saved selection
     sel?.removeAllRanges()
     sel?.addRange(range)
 
@@ -590,7 +707,6 @@ export default function ProfilePage({
     try {
       range.surroundContents(a)
     } catch {
-      // surroundContents fails if selection crosses element boundaries — fallback
       const fragment = range.extractContents()
       a.appendChild(fragment)
       range.insertNode(a)
@@ -598,7 +714,6 @@ export default function ProfilePage({
 
     addLinkListeners(a)
 
-    // Move cursor after the link
     const newRange = document.createRange()
     newRange.setStartAfter(a)
     newRange.collapse(true)
@@ -652,7 +767,7 @@ export default function ProfilePage({
   }
 
   const tabs = isOwnProfile
-    ? ['about', 'messages', 'posts', 'friends', 'wins', 'inventory']
+    ? ['about', 'inbox', 'posts', 'friends', 'wins', 'inventory']
     : ['about', 'posts', 'friends', 'wins']
 
   return (
@@ -724,18 +839,24 @@ export default function ProfilePage({
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as TabType)}
-                className={`px-3 py-1 text-xs rounded-t-md border border-zinc-700 transition capitalize cursor-pointer ${
+                className={`relative px-3 py-1 text-xs rounded-t-md border border-zinc-700 transition capitalize cursor-pointer ${
                   activeTab === tab
                     ? 'bg-green-500 text-black font-bold'
                     : 'bg-green-200 text-black hover:bg-green-300'
                 }`}
               >
                 {tab}
+                {/* Unread badge on inbox tab */}
+                {tab === 'inbox' && unreadCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none z-20">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </button>
             ))}
           </div>
 
-          <div className="bg-zinc-900 rounded-2xl p-6 min-h-[550px]">
+          <div className="bg-zinc-900 rounded-2xl p-6 min-h-[550px] relative overflow-hidden">
 
             {activeTab === 'about' && (
               <div>
@@ -902,10 +1023,159 @@ export default function ProfilePage({
               </div>
             )}
 
-            {activeTab === 'messages' && isOwnProfile && (
-              <div>
-                <h2 className="text-3xl font-bold mb-4">Messages</h2>
-                <div className="text-zinc-400">Messages coming soon...</div>
+            {/* ======================== INBOX TAB ======================== */}
+            {activeTab === 'inbox' && isOwnProfile && (
+              <div className="h-full">
+                {/* Header row */}
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-3xl font-bold">Inbox</h2>
+                  <button
+                    onClick={() => {
+                      setShowCompose(true)
+                      setComposeRecipient('')
+                      setComposeTitle('')
+                      setComposeBody('')
+                      setRecipientError('')
+                    }}
+                    className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-2 rounded-xl cursor-pointer transition shadow-md"
+                  >
+                    New Message
+                    <span className="text-lg leading-none font-bold">+</span>
+                  </button>
+                </div>
+
+                {/* Message list */}
+                {messages.length === 0 ? (
+                  <div className="text-zinc-400 italic mt-6">No messages yet.</div>
+                ) : (
+                  <ul className="space-y-2">
+                    {messages.map((msg) => (
+                      <li
+                        key={msg.id}
+                        className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {!msg.read && (
+                            <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+                          )}
+                          <button
+                            onClick={() => {
+                              setOpenMessage(msg)
+                              markMessageRead(msg)
+                            }}
+                            className="text-white underline hover:text-green-400 transition text-left truncate cursor-pointer font-medium"
+                          >
+                            {msg.title}
+                          </button>
+                        </div>
+                        <div className="text-xs text-zinc-500 flex-shrink-0">
+                          from <span className="text-zinc-300">{msg.sender_username}</span>
+                          {' · '}
+                          {new Date(msg.created_at).toLocaleDateString('en-US', {
+                            month: '2-digit',
+                            day: '2-digit',
+                            year: '2-digit',
+                          })}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* ---- COMPOSE OVERLAY ---- */}
+                {showCompose && (
+                  <div className="absolute inset-0 bg-zinc-900 rounded-2xl p-6 z-20 flex flex-col">
+                    <div className="flex items-center gap-3 mb-5">
+                      <button
+                        onClick={() => setShowCompose(false)}
+                        className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-1.5 rounded-lg cursor-pointer transition text-sm"
+                      >
+                        ← Back
+                      </button>
+                      <h2 className="text-2xl font-bold">New Message</h2>
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="text-xs text-zinc-400 block mb-1">To (username)</label>
+                      <input
+                        value={composeRecipient}
+                        onChange={(e) => {
+                          setComposeRecipient(e.target.value)
+                          setRecipientError('')
+                        }}
+                        placeholder="Enter a username"
+                        className="w-full p-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white outline-none focus:border-green-500 transition"
+                      />
+                      {recipientError && (
+                        <p className="text-red-400 italic text-xs mt-1">{recipientError}</p>
+                      )}
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="text-xs text-zinc-400 block mb-1">
+                        Title <span className="text-zinc-500">({composeTitle.length}/60)</span>
+                      </label>
+                      <input
+                        value={composeTitle}
+                        onChange={(e) => setComposeTitle(e.target.value.slice(0, 60))}
+                        placeholder="Message title"
+                        maxLength={60}
+                        className="w-full p-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white outline-none focus:border-green-500 transition"
+                      />
+                    </div>
+
+                    <div className="flex-1 flex flex-col mb-4">
+                      <label className="text-xs text-zinc-400 block mb-1">Message</label>
+                      <textarea
+                        value={composeBody}
+                        onChange={(e) => setComposeBody(e.target.value)}
+                        placeholder="Write your message..."
+                        className="flex-1 w-full p-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white outline-none focus:border-green-500 transition resize-none"
+                      />
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        onClick={sendMessage}
+                        disabled={composeSending || !composeRecipient.trim() || !composeTitle.trim() || !composeBody.trim()}
+                        className="bg-green-500 hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold px-6 py-2 rounded-xl cursor-pointer transition"
+                      >
+                        {composeSending ? 'Sending...' : 'Send'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ---- VIEW MESSAGE OVERLAY ---- */}
+                {openMessage && (
+                  <div className="absolute inset-0 bg-zinc-900 rounded-2xl p-6 z-20 flex flex-col">
+                    <div className="flex items-center gap-3 mb-5">
+                      <button
+                        onClick={() => setOpenMessage(null)}
+                        className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-1.5 rounded-lg cursor-pointer transition text-sm"
+                      >
+                        ← Back
+                      </button>
+                      <div>
+                        <h2 className="text-xl font-bold">{openMessage.title}</h2>
+                        <p className="text-xs text-zinc-400">
+                          From <span className="text-zinc-200">{openMessage.sender_username}</span>
+                          {' · '}
+                          {new Date(openMessage.created_at).toLocaleString('en-US', {
+                            month: '2-digit',
+                            day: '2-digit',
+                            year: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex-1 bg-zinc-800 rounded-xl p-4 text-white overflow-y-auto whitespace-pre-wrap border border-zinc-700">
+                      {openMessage.body}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
