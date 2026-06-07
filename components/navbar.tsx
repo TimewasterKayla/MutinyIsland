@@ -142,6 +142,10 @@ export default function Navbar() {
           Shop
         </button>
 
+        <button onClick={() => router.push('/map')} className={btnStyle}>
+  Map
+</button>
+
         <button onClick={() => router.push('/leaderboards')} className={btnStyle}>
           Leaderboards
         </button>
