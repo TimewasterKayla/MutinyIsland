@@ -17,9 +17,6 @@ export default function Navbar() {
 
   usePresence(userId)
 
-  // -----------------------------
-  // GET USER + PROFILE (COINS + CROWNS)
-  // -----------------------------
   async function getUser() {
     const { data: userData } = await supabase.auth.getUser()
 
@@ -63,9 +60,6 @@ export default function Navbar() {
     }
   }, [])
 
-  // -----------------------------
-  // ONLINE USERS
-  // -----------------------------
   async function fetchOnlineUsers() {
     const { data } = await supabase
       .from('user_presence')
@@ -101,12 +95,10 @@ export default function Navbar() {
   }
 
   const btnStyle =
-    'px-4 py-2 rounded-lg bg-black/40 border border-yellow-700 hover:bg-yellow-700/40 active:scale-95 transition cursor-pointer text-white shadow-md backdrop-blur-sm'
+    'px-3 py-2 rounded-lg bg-black/40 border border-yellow-700 hover:bg-yellow-700/40 active:scale-95 transition cursor-pointer text-white shadow-md backdrop-blur-sm text-sm whitespace-nowrap'
 
   return (
-    <nav
-      className="w-full px-6 py-3 flex items-center justify-between border-b border-yellow-900 text-white relative"
-    >
+    <nav className="w-full px-6 py-3 flex items-center gap-4 border-b border-yellow-900 text-white relative">
 
       {/* BACKGROUND IMAGE */}
       <div
@@ -122,81 +114,41 @@ export default function Navbar() {
       <div className="absolute inset-0 -z-10 bg-black/40" />
 
       {/* LEFT */}
-<div className="w-1/3 flex items-center gap-2 text-sm">
-  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-  <span>{onlineCount} online</span>
-</div>
+      <div className="flex items-center gap-2 text-sm shrink-0">
+        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+        <span>{onlineCount} online</span>
+      </div>
 
       {/* CENTER */}
-      <div className="w-1/3 flex justify-center gap-3 flex-wrap">
-
-        <button onClick={() => router.push('/home')} className={btnStyle}>
-          Home
-        </button>
-
-        <button onClick={() => router.push('/games')} className={btnStyle}>
-          Games
-        </button>
-
-        <button onClick={() => router.push('/shop')} className={btnStyle}>
-          Shop
-        </button>
-
-        <button onClick={() => router.push('/map')} className={btnStyle}>
-  Map
-</button>
-
-        <button onClick={() => router.push('/leaderboards')} className={btnStyle}>
-          Leaderboards
-        </button>
-
+      <div className="flex-1 flex justify-center gap-2">
+        <button onClick={() => router.push('/home')} className={btnStyle}>Home</button>
+        <button onClick={() => router.push('/games')} className={btnStyle}>Games</button>
+        <button onClick={() => router.push('/shop')} className={btnStyle}>Shop</button>
+        <button onClick={() => router.push('/map')} className={btnStyle}>Map</button>
+        <button onClick={() => router.push('/leaderboards')} className={btnStyle}>Leaderboards</button>
         {username && (
-          <button
-            onClick={() => router.push(`/profile/${username}`)}
-            className={btnStyle}
-          >
+          <button onClick={() => router.push(`/profile/${username}`)} className={btnStyle}>
             {username}'s Profile
           </button>
         )}
-
       </div>
 
       {/* RIGHT */}
-      <div className="w-1/3 flex justify-end items-center gap-4">
+      <div className="flex justify-end items-center gap-3 shrink-0">
 
         {/* CROWNS */}
         {username && (
           <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-lg border border-gray-400 crown-shimmer">
-
-            <Image
-              src="/crown.png"
-              alt="Crowns"
-              width={18}
-              height={18}
-            />
-
-            <span className="text-gray-200 font-semibold">
-              {crowns}
-            </span>
-
+            <Image src="/crown.png" alt="Crowns" width={18} height={18} />
+            <span className="text-gray-200 font-semibold">{crowns}</span>
           </div>
         )}
 
         {/* COINS */}
         {username && (
           <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-lg border border-yellow-700">
-
-            <Image
-              src="/coin.png"
-              alt="Coins"
-              width={18}
-              height={18}
-            />
-
-            <span className="text-yellow-300 font-semibold">
-              {coins}
-            </span>
-
+            <Image src="/coin.png" alt="Coins" width={18} height={18} />
+            <span className="text-yellow-300 font-semibold">{coins}</span>
           </div>
         )}
 
@@ -207,7 +159,7 @@ export default function Navbar() {
           </button>
         )}
 
-        {/* LOGIN / LOGOUT TOGGLE */}
+        {/* LOGIN / LOGOUT */}
         {username ? (
           <button
             onClick={logout}
