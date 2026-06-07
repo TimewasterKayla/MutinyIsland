@@ -23,7 +23,10 @@ type Message = {
   body: string
   read: boolean
   created_at: string
+  thread_id: string | null
+  parent_id: string | null
   sender_username?: string
+  recipient_username?: string
 }
 
 type TabType = 'about' | 'inbox' | 'posts' | 'friends' | 'wins' | 'inventory'
@@ -84,6 +87,32 @@ function buildYouTubeHTML(
   ></iframe></div></div>`
 }
 
+// -----------------------------
+// SIMPLE RICH TEXT EXEC BUTTON
+// -----------------------------
+function RichButton({
+  onAction,
+  className,
+  title,
+  children,
+}: {
+  onAction: () => void
+  className?: string
+  title?: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => { e.preventDefault(); onAction() }}
+      title={title}
+      className={`w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer text-xs ${className ?? ''}`}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function ProfilePage({
   params,
 }: {
@@ -129,10 +158,21 @@ export default function ProfilePage({
   const [composeBody, setComposeBody] = useState<string>('')
   const [recipientError, setRecipientError] = useState<string>('')
   const [composeSending, setComposeSending] = useState<boolean>(false)
-  const [openMessage, setOpenMessage] = useState<Message | null>(null)
+
+  // Thread view state
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null)
+  const [threadMessages, setThreadMessages] = useState<Message[]>([])
+  const [threadTitle, setThreadTitle] = useState<string>('')
+  const [showReply, setShowReply] = useState<boolean>(false)
+  const [replyBody, setReplyBody] = useState<string>('')
+  const [replySending, setReplySending] = useState<boolean>(false)
+
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentUsername, setCurrentUsername] = useState<string>('')
 
   const editorRef = useRef<HTMLDivElement | null>(null)
+  const composeEditorRef = useRef<HTMLDivElement | null>(null)
+  const replyEditorRef = useRef<HTMLDivElement | null>(null)
   const savedRangeRef = useRef<Range | null>(null)
   const deleteBtnImgRef = useRef<HTMLImageElement | null>(null)
   const mutationObserverRef = useRef<MutationObserver | null>(null)
@@ -180,7 +220,10 @@ export default function ProfilePage({
     const { data: { user } } = await supabase.auth.getUser()
     const own = !!user && user.id === data.id
     setIsOwnProfile(own)
-    if (user) setCurrentUserId(user.id)
+    if (user) {
+      setCurrentUserId(user.id)
+      setCurrentUsername(data.username)
+    }
 
     setActiveTab((prev: TabType) => {
       if (!own && (prev === 'inbox' || prev === 'inventory')) return 'about'
@@ -197,7 +240,6 @@ export default function ProfilePage({
     if (!isOwnProfile || !currentUserId) return
     loadMessages()
 
-    // Realtime subscription for new messages
     const channel = supabase
       .channel('inbox-' + currentUserId)
       .on(
@@ -205,7 +247,7 @@ export default function ProfilePage({
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'messages',
+          table: 'inbox_messages',
           filter: `recipient_id=eq.${currentUserId}`,
         },
         () => { loadMessages() }
@@ -217,10 +259,12 @@ export default function ProfilePage({
 
   async function loadMessages() {
     if (!currentUserId) return
+    // Load only root messages (no parent_id) for inbox list
     const { data, error } = await supabase
       .from('inbox_messages')
       .select('*, profiles!inbox_messages_sender_id_fkey(username)')
       .eq('recipient_id', currentUserId)
+      .is('parent_id', null)
       .order('created_at', { ascending: false })
 
     if (error) { console.error(error); return }
@@ -231,27 +275,62 @@ export default function ProfilePage({
     }))
 
     setMessages(msgs)
-    setUnreadCount(msgs.filter((m) => !m.read).length)
+
+    // Unread = any message in a thread (root or reply) that is unread and recipient is me
+    const { data: unreadData } = await supabase
+      .from('inbox_messages')
+      .select('id')
+      .eq('recipient_id', currentUserId)
+      .eq('read', false)
+
+    setUnreadCount((unreadData || []).length)
   }
 
-  async function markMessageRead(msg: Message) {
-    if (msg.read) return
-    await supabase.from('inbox_messages').update({ read: true }).eq('id', msg.id)
-    setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, read: true } : m))
-    )
-    setUnreadCount((prev) => Math.max(0, prev - 1))
+  async function loadThread(threadId: string) {
+    if (!currentUserId) return
+    const { data, error } = await supabase
+      .from('inbox_messages')
+      .select('*, sender:profiles!inbox_messages_sender_id_fkey(username), recipient:profiles!inbox_messages_recipient_id_fkey(username)')
+      .eq('thread_id', threadId)
+      .order('created_at', { ascending: true })
+
+    if (error) { console.error(error); return }
+
+    const msgs: Message[] = (data || []).map((m: any) => ({
+      ...m,
+      sender_username: m.sender?.username ?? 'Unknown',
+      recipient_username: m.recipient?.username ?? 'Unknown',
+    }))
+
+    setThreadMessages(msgs)
+
+    // Mark all unread messages in thread where I am recipient
+    const unreadIds = msgs.filter((m) => !m.read && m.recipient_id === currentUserId).map((m) => m.id)
+    if (unreadIds.length > 0) {
+      await supabase.from('inbox_messages').update({ read: true }).in('id', unreadIds)
+      setUnreadCount((prev) => Math.max(0, prev - unreadIds.length))
+      setMessages((prev) =>
+        prev.map((m) => (m.thread_id === threadId || m.id === threadId) ? { ...m, read: true } : m)
+      )
+    }
+  }
+
+  function openThread(msg: Message) {
+    const tid = msg.thread_id ?? msg.id
+    setOpenThreadId(tid)
+    setThreadTitle(msg.title)
+    loadThread(tid)
   }
 
   // -----------------------------
-  // SEND MESSAGE
+  // SEND NEW MESSAGE
   // -----------------------------
   async function sendMessage() {
-    if (!composeRecipient.trim() || !composeTitle.trim() || !composeBody.trim()) return
+    const body = composeEditorRef.current?.innerHTML?.trim() ?? ''
+    if (!composeRecipient.trim() || !composeTitle.trim() || !body) return
     setComposeSending(true)
     setRecipientError('')
 
-    // Look up recipient
     const { data: recipientProfile, error: recipientErr } = await supabase
       .from('profiles')
       .select('id')
@@ -264,20 +343,33 @@ export default function ProfilePage({
       return
     }
 
-    const { error: sendErr } = await supabase.from('inbox_messages').insert({
-      sender_id: currentUserId,
-      recipient_id: recipientProfile.id,
-      title: composeTitle.trim().slice(0, 60),
-      body: composeBody.trim(),
-      read: false,
-    })
+    // Insert root message; thread_id will be set to its own id via DB trigger, or we do it in two steps
+    const { data: inserted, error: sendErr } = await supabase
+      .from('inbox_messages')
+      .insert({
+        sender_id: currentUserId,
+        recipient_id: recipientProfile.id,
+        title: composeTitle.trim().slice(0, 60),
+        body,
+        read: false,
+        parent_id: null,
+        thread_id: null, // will update immediately after
+      })
+      .select()
+      .single()
 
-    if (sendErr) {
+    if (sendErr || !inserted) {
       console.error(sendErr)
       alert('Failed to send message.')
       setComposeSending(false)
       return
     }
+
+    // Set thread_id = own id (root of thread)
+    await supabase
+      .from('inbox_messages')
+      .update({ thread_id: inserted.id })
+      .eq('id', inserted.id)
 
     setComposeSending(false)
     setShowCompose(false)
@@ -285,6 +377,56 @@ export default function ProfilePage({
     setComposeTitle('')
     setComposeBody('')
     setRecipientError('')
+    if (composeEditorRef.current) composeEditorRef.current.innerHTML = ''
+    loadMessages()
+  }
+
+  // -----------------------------
+  // SEND REPLY
+  // -----------------------------
+  async function sendReply() {
+    if (!openThreadId || !currentUserId) return
+    const body = replyEditorRef.current?.innerHTML?.trim() ?? ''
+    if (!body) return
+    setReplySending(true)
+
+    // Find the other participant from thread
+    const lastMsg = threadMessages[threadMessages.length - 1]
+    const replyToId = lastMsg.sender_id === currentUserId ? lastMsg.recipient_id : lastMsg.sender_id
+
+    const { data: inserted, error } = await supabase
+      .from('inbox_messages')
+      .insert({
+        sender_id: currentUserId,
+        recipient_id: replyToId,
+        title: threadTitle,
+        body,
+        read: false,
+        thread_id: openThreadId,
+        parent_id: lastMsg.id,
+      })
+      .select()
+      .single()
+
+    if (error || !inserted) {
+      console.error(error)
+      alert('Failed to send reply.')
+      setReplySending(false)
+      return
+    }
+
+    setReplySending(false)
+    setShowReply(false)
+    setReplyBody('')
+    if (replyEditorRef.current) replyEditorRef.current.innerHTML = ''
+    loadThread(openThreadId)
+  }
+
+  async function markMessageRead(msg: Message) {
+    if (msg.read) return
+    await supabase.from('inbox_messages').update({ read: true }).eq('id', msg.id)
+    setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, read: true } : m)))
+    setUnreadCount((prev) => Math.max(0, prev - 1))
   }
 
   // -----------------------------
@@ -494,6 +636,11 @@ export default function ProfilePage({
   function exec(command: string, value?: string) {
     document.execCommand(command, false, value)
     editorRef.current?.focus()
+  }
+
+  function execOn(ref: React.RefObject<HTMLDivElement | null>, command: string) {
+    ref.current?.focus()
+    document.execCommand(command, false, undefined)
   }
 
   // -----------------------------
@@ -770,6 +917,9 @@ export default function ProfilePage({
     ? ['about', 'inbox', 'posts', 'friends', 'wins', 'inventory']
     : ['about', 'posts', 'friends', 'wins']
 
+  // Inventory placeholder items
+  const inventoryPlaceholders = Array.from({ length: 5 })
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-6 pt-16">
 
@@ -846,7 +996,6 @@ export default function ProfilePage({
                 }`}
               >
                 {tab}
-                {/* Unread badge on inbox tab */}
                 {tab === 'inbox' && unreadCount > 0 && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none z-20">
                     {unreadCount > 9 ? '9+' : unreadCount}
@@ -858,6 +1007,7 @@ export default function ProfilePage({
 
           <div className="bg-zinc-900 rounded-2xl p-6 min-h-[550px] relative overflow-hidden">
 
+            {/* ======================== ABOUT TAB ======================== */}
             {activeTab === 'about' && (
               <div>
                 <div className="flex items-center justify-between mb-4 pl-4">
@@ -897,24 +1047,14 @@ export default function ProfilePage({
                     />
 
                     <div className="flex gap-2 mt-2 items-center">
-
-                      {/* BOLD */}
                       <button
                         onMouseDown={(e) => { e.preventDefault(); exec('bold') }}
                         className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold cursor-pointer"
-                      >
-                        B
-                      </button>
-
-                      {/* ITALIC */}
+                      >B</button>
                       <button
                         onMouseDown={(e) => { e.preventDefault(); exec('italic') }}
                         className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic cursor-pointer"
-                      >
-                        I
-                      </button>
-
-                      {/* IMAGE */}
+                      >I</button>
                       <button
                         onMouseDown={(e) => {
                           e.preventDefault()
@@ -929,8 +1069,6 @@ export default function ProfilePage({
                       >
                         <Image src="/picture.png" alt="img" width={14} height={14} />
                       </button>
-
-                      {/* LINK */}
                       <button
                         onMouseDown={(e) => {
                           e.preventDefault()
@@ -944,8 +1082,6 @@ export default function ProfilePage({
                       >
                         <Image src="/link.png" alt="Link" width={14} height={14} />
                       </button>
-
-                      {/* ALIGN LEFT */}
                       <button
                         onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }}
                         className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
@@ -953,8 +1089,6 @@ export default function ProfilePage({
                       >
                         <Image src="/left.png" alt="left" width={14} height={14} />
                       </button>
-
-                      {/* ALIGN CENTER */}
                       <button
                         onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
                         className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
@@ -962,8 +1096,6 @@ export default function ProfilePage({
                       >
                         <Image src="/center.png" alt="center" width={14} height={14} />
                       </button>
-
-                      {/* ALIGN RIGHT */}
                       <button
                         onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
                         className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
@@ -971,8 +1103,6 @@ export default function ProfilePage({
                       >
                         <Image src="/right.png" alt="right" width={14} height={14} />
                       </button>
-
-                      {/* YOUTUBE */}
                       <button
                         onMouseDown={(e) => {
                           e.preventDefault()
@@ -989,13 +1119,9 @@ export default function ProfilePage({
                       >
                         <Image src="/youtube.png" alt="YouTube" width={14} height={14} />
                       </button>
-
                     </div>
 
-                    {/* CHARACTER COUNTER */}
-                    <div className="mt-2 text-xs text-zinc-400">
-                      {charCount}/1000
-                    </div>
+                    <div className="mt-2 text-xs text-zinc-400">{charCount}/1000</div>
 
                     <div className="flex justify-end gap-2 mt-3">
                       <button
@@ -1010,7 +1136,6 @@ export default function ProfilePage({
                       >
                         Cancel
                       </button>
-
                       <button
                         onClick={saveAboutMe}
                         className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded-lg font-bold cursor-pointer transition"
@@ -1036,6 +1161,7 @@ export default function ProfilePage({
                       setComposeTitle('')
                       setComposeBody('')
                       setRecipientError('')
+                      if (composeEditorRef.current) composeEditorRef.current.innerHTML = ''
                     }}
                     className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-2 rounded-xl cursor-pointer transition shadow-md"
                   >
@@ -1052,30 +1178,33 @@ export default function ProfilePage({
                     {messages.map((msg) => (
                       <li
                         key={msg.id}
-                        className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+                        className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {!msg.read && (
-                            <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
-                          )}
-                          <button
-                            onClick={() => {
-                              setOpenMessage(msg)
-                              markMessageRead(msg)
-                            }}
-                            className="text-white underline hover:text-green-400 transition text-left truncate cursor-pointer font-medium"
-                          >
-                            {msg.title}
-                          </button>
-                        </div>
-                        <div className="text-xs text-zinc-500 flex-shrink-0">
-                          from <span className="text-zinc-300">{msg.sender_username}</span>
-                          {' · '}
-                          {new Date(msg.created_at).toLocaleDateString('en-US', {
-                            month: '2-digit',
-                            day: '2-digit',
-                            year: '2-digit',
-                          })}
+                        <div className="flex items-center justify-between gap-3">
+                          {/* Left: unread dot + from + title */}
+                          <div className="flex items-center gap-2 min-w-0">
+                            {!msg.read && (
+                              <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+                            )}
+                            <span className="text-sm text-zinc-300 flex-shrink-0">
+                              From <span className="text-white font-semibold">{msg.sender_username}</span>
+                            </span>
+                            <button
+                              onClick={() => openThread(msg)}
+                              className="text-white underline hover:text-green-400 transition text-left cursor-pointer font-medium text-sm truncate max-w-[220px]"
+                              title={msg.title}
+                            >
+                              {msg.title}
+                            </button>
+                          </div>
+                          {/* Right: date */}
+                          <div className="text-sm text-zinc-400 flex-shrink-0">
+                            {new Date(msg.created_at).toLocaleDateString('en-US', {
+                              month: '2-digit',
+                              day: '2-digit',
+                              year: '2-digit',
+                            })}
+                          </div>
                         </div>
                       </li>
                     ))}
@@ -1124,20 +1253,35 @@ export default function ProfilePage({
                       />
                     </div>
 
-                    <div className="flex-1 flex flex-col mb-4">
+                    <div className="flex-1 flex flex-col mb-2">
                       <label className="text-xs text-zinc-400 block mb-1">Message</label>
-                      <textarea
-                        value={composeBody}
-                        onChange={(e) => setComposeBody(e.target.value)}
-                        placeholder="Write your message..."
-                        className="flex-1 w-full p-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white outline-none focus:border-green-500 transition resize-none"
+                      {/* Bold / Italic toolbar */}
+                      <div className="flex gap-2 mb-2">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); execOn(composeEditorRef, 'bold') }}
+                          className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold cursor-pointer"
+                        >B</button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); execOn(composeEditorRef, 'italic') }}
+                          className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic cursor-pointer"
+                        >I</button>
+                      </div>
+                      <div
+                        ref={composeEditorRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        data-placeholder="Write your message..."
+                        className="flex-1 w-full p-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white outline-none focus:border-green-500 transition overflow-y-auto min-h-[120px]"
+                        style={{ whiteSpace: 'pre-wrap' }}
                       />
                     </div>
 
                     <div className="flex justify-end">
                       <button
                         onClick={sendMessage}
-                        disabled={composeSending || !composeRecipient.trim() || !composeTitle.trim() || !composeBody.trim()}
+                        disabled={composeSending || !composeRecipient.trim() || !composeTitle.trim()}
                         className="bg-green-500 hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold px-6 py-2 rounded-xl cursor-pointer transition"
                       >
                         {composeSending ? 'Sending...' : 'Send'}
@@ -1146,34 +1290,115 @@ export default function ProfilePage({
                   </div>
                 )}
 
-                {/* ---- VIEW MESSAGE OVERLAY ---- */}
-                {openMessage && (
+                {/* ---- THREAD VIEW OVERLAY ---- */}
+                {openThreadId && (
                   <div className="absolute inset-0 bg-zinc-900 rounded-2xl p-6 z-20 flex flex-col">
-                    <div className="flex items-center gap-3 mb-5">
+                    {/* Header */}
+                    <div className="flex items-center gap-3 mb-4">
                       <button
-                        onClick={() => setOpenMessage(null)}
-                        className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-1.5 rounded-lg cursor-pointer transition text-sm"
+                        onClick={() => {
+                          setOpenThreadId(null)
+                          setThreadMessages([])
+                          setShowReply(false)
+                          setReplyBody('')
+                          if (replyEditorRef.current) replyEditorRef.current.innerHTML = ''
+                        }}
+                        className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-1.5 rounded-lg cursor-pointer transition text-sm flex-shrink-0"
                       >
                         ← Back
                       </button>
-                      <div>
-                        <h2 className="text-xl font-bold">{openMessage.title}</h2>
-                        <p className="text-xs text-zinc-400">
-                          From <span className="text-zinc-200">{openMessage.sender_username}</span>
-                          {' · '}
-                          {new Date(openMessage.created_at).toLocaleString('en-US', {
-                            month: '2-digit',
-                            day: '2-digit',
-                            year: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </p>
+                      <h2 className="text-lg font-bold truncate">{threadTitle}</h2>
+                    </div>
+
+                    {/* Thread messages */}
+                    <div className="flex-1 overflow-y-auto space-y-3 mb-4">
+                      {threadMessages.map((m) => {
+                        const isMe = m.sender_id === currentUserId
+                        return (
+                          <div
+                            key={m.id}
+                            className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div
+                              className={`max-w-[75%] rounded-2xl px-4 py-3 ${
+                                isMe
+                                  ? 'bg-green-600 text-white rounded-br-sm'
+                                  : 'bg-zinc-800 border border-zinc-700 text-white rounded-bl-sm'
+                              }`}
+                            >
+                              <div className="text-xs font-semibold mb-1 opacity-70">
+                                {isMe ? 'You' : m.sender_username}
+                              </div>
+                              <div
+                                className="text-sm leading-relaxed"
+                                dangerouslySetInnerHTML={{ __html: m.body }}
+                              />
+                              <div className="text-xs opacity-50 mt-1 text-right">
+                                {new Date(m.created_at).toLocaleString('en-US', {
+                                  month: '2-digit',
+                                  day: '2-digit',
+                                  year: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Reply area */}
+                    {!showReply ? (
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => setShowReply(true)}
+                          className="bg-green-500 hover:bg-green-400 text-black font-bold px-5 py-2 rounded-xl cursor-pointer transition"
+                        >
+                          Reply
+                        </button>
                       </div>
-                    </div>
-                    <div className="flex-1 bg-zinc-800 rounded-xl p-4 text-white overflow-y-auto whitespace-pre-wrap border border-zinc-700">
-                      {openMessage.body}
-                    </div>
+                    ) : (
+                      <div className="border-t border-zinc-700 pt-3">
+                        <div className="flex gap-2 mb-2">
+                          <button
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); execOn(replyEditorRef, 'bold') }}
+                            className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold cursor-pointer"
+                          >B</button>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); execOn(replyEditorRef, 'italic') }}
+                            className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic cursor-pointer"
+                          >I</button>
+                        </div>
+                        <div
+                          ref={replyEditorRef}
+                          contentEditable
+                          suppressContentEditableWarning
+                          className="w-full min-h-[80px] p-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white outline-none focus:border-green-500 transition mb-2"
+                          style={{ whiteSpace: 'pre-wrap' }}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setShowReply(false)
+                              if (replyEditorRef.current) replyEditorRef.current.innerHTML = ''
+                            }}
+                            className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded-lg cursor-pointer transition text-sm"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={sendReply}
+                            disabled={replySending}
+                            className="bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-bold px-5 py-1 rounded-xl cursor-pointer transition text-sm"
+                          >
+                            {replySending ? 'Sending...' : 'Send'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1200,10 +1425,25 @@ export default function ProfilePage({
               </div>
             )}
 
+            {/* ======================== INVENTORY TAB ======================== */}
             {activeTab === 'inventory' && isOwnProfile && (
               <div>
-                <h2 className="text-3xl font-bold mb-4">Inventory</h2>
-                <div className="text-zinc-400">Inventory coming soon...</div>
+                <h2 className="text-3xl font-bold mb-6">Inventory</h2>
+
+                {(['Backgrounds', 'Avatars', 'Titles', 'Treasures'] as const).map((section) => (
+                  <div key={section} className="mb-6">
+                    <h3 className="text-center text-lg font-bold text-zinc-200 mb-3">{section}</h3>
+                    <div className="flex gap-3 justify-center">
+                      {inventoryPlaceholders.map((_, i) => (
+                        <div
+                          key={i}
+                          className="w-16 h-16 rounded-xl flex-shrink-0"
+                          style={{ backgroundColor: '#c8b89a', opacity: 0.35 }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1250,7 +1490,6 @@ export default function ProfilePage({
             <h2 className="text-2xl font-bold mb-4">
               {editImageEl ? 'Edit Image' : 'Insert Image'}
             </h2>
-
             <input
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
@@ -1259,7 +1498,6 @@ export default function ProfilePage({
               className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
               autoFocus
             />
-
             <div className="mb-4">
               <label className="text-sm text-zinc-400 mb-1 block">Size</label>
               <select
@@ -1272,19 +1510,11 @@ export default function ProfilePage({
                 <option value="large">Large (Full width)</option>
               </select>
             </div>
-
             <div className="flex justify-end gap-2 mt-4">
               <button
-                onClick={() => {
-                  setShowImageModal(false)
-                  setImageUrl('')
-                  setEditImageEl(null)
-                }}
+                onClick={() => { setShowImageModal(false); setImageUrl(''); setEditImageEl(null) }}
                 className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition"
-              >
-                Cancel
-              </button>
-
+              >Cancel</button>
               <button
                 onClick={() => {
                   if (editImageEl) {
@@ -1292,12 +1522,8 @@ export default function ProfilePage({
                     editImageEl.src = imageUrl.trim()
                     editImageEl.style.width = widthMap[imageSize]
                     editImageEl.style.maxWidth = widthMap[imageSize]
-                    setShowImageModal(false)
-                    setImageUrl('')
-                    setEditImageEl(null)
-                  } else {
-                    insertImage()
-                  }
+                    setShowImageModal(false); setImageUrl(''); setEditImageEl(null)
+                  } else { insertImage() }
                 }}
                 className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition"
               >
@@ -1316,18 +1542,14 @@ export default function ProfilePage({
               <Image src="/link.png" alt="Link" width={20} height={20} />
               {editLinkEl ? 'Edit Link' : 'Insert Link'}
             </h2>
-
             {!editLinkEl && (
               <p className="text-xs text-zinc-400 mb-4">
                 Highlight text in the editor before clicking this button to turn it into a link.
               </p>
             )}
             {editLinkEl && (
-              <p className="text-xs text-zinc-400 mb-4">
-                Update the URL below, or clear it to remove the link.
-              </p>
+              <p className="text-xs text-zinc-400 mb-4">Update the URL below, or clear it to remove the link.</p>
             )}
-
             <input
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
@@ -1336,32 +1558,15 @@ export default function ProfilePage({
               className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
               autoFocus
             />
-
             <div className="flex justify-end gap-2">
-              <button
-                onClick={closeLinkModal}
-                className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition"
-              >
-                Cancel
-              </button>
-
+              <button onClick={closeLinkModal} className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition">Cancel</button>
               {editLinkEl && (
                 <button
-                  onClick={() => {
-                    const text = document.createTextNode(editLinkEl.innerText)
-                    editLinkEl.replaceWith(text)
-                    closeLinkModal()
-                  }}
+                  onClick={() => { const text = document.createTextNode(editLinkEl.innerText); editLinkEl.replaceWith(text); closeLinkModal() }}
                   className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition"
-                >
-                  Remove
-                </button>
+                >Remove</button>
               )}
-
-              <button
-                onClick={insertLink}
-                className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition"
-              >
+              <button onClick={insertLink} className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition">
                 {editLinkEl ? 'Update' : 'Insert'}
               </button>
             </div>
@@ -1377,7 +1582,6 @@ export default function ProfilePage({
               <Image src="/youtube.png" alt="YouTube" width={22} height={22} />
               {editYouTubeWrapper ? 'Edit YouTube Video' : 'Insert YouTube Video'}
             </h2>
-
             <input
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
@@ -1386,7 +1590,6 @@ export default function ProfilePage({
               className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
               autoFocus
             />
-
             <div className="mb-4">
               <label className="text-sm text-zinc-400 mb-1 block">Size</label>
               <select
@@ -1399,7 +1602,6 @@ export default function ProfilePage({
                 <option value="large">Large (Full width)</option>
               </select>
             </div>
-
             <div className="mb-4">
               <label className="text-sm text-zinc-400 mb-1 block">Alignment</label>
               <select
@@ -1412,7 +1614,6 @@ export default function ProfilePage({
                 <option value="right">Right</option>
               </select>
             </div>
-
             <div className="mb-5 flex items-center gap-3">
               <input
                 type="checkbox"
@@ -1425,19 +1626,9 @@ export default function ProfilePage({
                 Autoplay when profile is opened
               </label>
             </div>
-
             <div className="flex justify-end gap-2">
-              <button
-                onClick={closeYouTubeModal}
-                className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={insertYouTube}
-                className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition"
-              >
+              <button onClick={closeYouTubeModal} className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition">Cancel</button>
+              <button onClick={insertYouTube} className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition">
                 {editYouTubeWrapper ? 'Update' : 'Insert'}
               </button>
             </div>
@@ -1449,17 +1640,9 @@ export default function ProfilePage({
       {editing && deleteBtn && (
         <button
           id="img-delete-btn"
-          onMouseLeave={() => {
-            deleteBtnImgRef.current = null
-            setDeleteBtn(null)
-          }}
+          onMouseLeave={() => { deleteBtnImgRef.current = null; setDeleteBtn(null) }}
           onClick={() => deleteImage(deleteBtn.img)}
-          style={{
-            position: 'fixed',
-            top: deleteBtn.y,
-            left: deleteBtn.x,
-            zIndex: 9999,
-          }}
+          style={{ position: 'fixed', top: deleteBtn.y, left: deleteBtn.x, zIndex: 9999 }}
           className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-lg flex items-center justify-center shadow-lg cursor-pointer"
         >
           <Image src="/trash.png" alt="Delete" width={14} height={14} />
