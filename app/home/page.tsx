@@ -495,7 +495,7 @@ export default function HomePage() {
 
           {/* LEFT: PROFILE SIDEBAR (logged in only) */}
           {currentUserId && myProfile && (
-            <div style={{ position: "fixed", top: "50%", transform: "translateY(-50%)", left: "max(1rem, calc(50% - 36rem))", width: "17rem" }}>
+            <div className="w-72 flex-shrink-0 sticky top-8 self-start">
               <div className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800 flex flex-col gap-3 w-full">
 
                 {/* Avatar */}
@@ -553,7 +553,7 @@ export default function HomePage() {
           )}
 
           {/* MIDDLE: MAIN FEED */}
-          <div className="flex-1 min-w-0" style={currentUserId && myProfile ? { marginLeft: '18rem' } : {}}>
+          <div className="flex-1 min-w-0">
 
             <div className="flex justify-between items-center mb-6">
               <h1
@@ -663,7 +663,7 @@ export default function HomePage() {
           </div>
 
           {/* RIGHT SIDEBAR */}
-          <div className="w-64 flex-shrink-0 space-y-4">
+          <div className="w-64 flex-shrink-0 space-y-4 sticky top-8 self-start">
 
             <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl p-4">
               <h2 className="text-base font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
