@@ -63,6 +63,7 @@ export default function HomePage() {
   const [charCount, setCharCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [myProfile, setMyProfile] = useState<any>(null)
 
   // Image modal
   const [showImageModal, setShowImageModal] = useState(false)
@@ -91,14 +92,22 @@ export default function HomePage() {
   const MAX_CHARS = 1000
 
   // -----------------------------
-  // USER
+  // USER + PROFILE
   // -----------------------------
   useEffect(() => {
     const getUser = async () => {
       const { data } = await supabase.auth.getUser()
       const user = data.user
       setCurrentUserId(user?.id || null)
-      if (user) fetchLikedPosts(user.id)
+      if (user) {
+        fetchLikedPosts(user.id)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username, avatar, rank, coins, crowns, created_at')
+          .eq('id', user.id)
+          .single()
+        setMyProfile(profile)
+      }
     }
     getUser()
   }, [])
@@ -357,8 +366,6 @@ export default function HomePage() {
   function insertLink() {
     const editor = editorRef.current
     if (!editor) return
-
-    // Editing an existing link
     if (editLinkEl) {
       if (!linkUrl.trim()) {
         const text = document.createTextNode(editLinkEl.innerText)
@@ -369,25 +376,19 @@ export default function HomePage() {
       closeLinkModal()
       return
     }
-
-    // Inserting a new link from a selection
     const sel = window.getSelection()
     const range = savedRangeRef.current
-
     if (!range || range.collapsed) {
       alert('Please highlight some text first, then click the link button.')
       closeLinkModal()
       return
     }
-
     if (!linkUrl.trim()) {
       closeLinkModal()
       return
     }
-
     sel?.removeAllRanges()
     sel?.addRange(range)
-
     const a = document.createElement('a')
     a.href = linkUrl.trim()
     a.target = '_blank'
@@ -395,7 +396,6 @@ export default function HomePage() {
     a.style.color = '#22c55e'
     a.style.textDecoration = 'underline'
     a.setAttribute('data-editor-link', '1')
-
     try {
       range.surroundContents(a)
     } catch {
@@ -403,15 +403,12 @@ export default function HomePage() {
       a.appendChild(fragment)
       range.insertNode(a)
     }
-
     attachLinkListeners(a)
-
     const newRange = document.createRange()
     newRange.setStartAfter(a)
     newRange.collapse(true)
     sel?.removeAllRanges()
     sel?.addRange(newRange)
-
     editor.focus()
     setCharCount(editor.innerText.length)
     closeLinkModal()
@@ -493,19 +490,85 @@ export default function HomePage() {
       }}
     >
       <div className="w-full min-h-screen" style={{ background: 'rgba(0,0,0,0.55)' }}>
-        <div className="w-full max-w-5xl mx-auto px-4 py-8 flex gap-6 items-start">
+        <div className="w-full max-w-6xl mx-auto px-4 py-8 flex gap-6 items-start">
 
-          {/* LEFT: MAIN FEED */}
+          {/* LEFT: PROFILE SIDEBAR (logged in only) */}
+          {currentUserId && myProfile && (
+            <div className="w-48 flex-shrink-0 sticky top-8">
+              <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 flex flex-col gap-3">
+
+                {/* Avatar */}
+                <div
+                  className="relative w-full aspect-square rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700 cursor-pointer"
+                  onClick={() => router.push(`/profile/${myProfile.username}`)}
+                >
+                  <Image
+                    src={myProfile.avatar || '/avatars/jess.png'}
+                    alt="Avatar"
+                    width={200}
+                    height={200}
+                    className="w-full h-full object-cover"
+                    unoptimized
+                  />
+                </div>
+
+                {/* Username */}
+                <div className="text-center">
+                  <h2
+                    className="text-lg font-bold cursor-pointer hover:text-zinc-300 transition"
+                    style={{ fontFamily: "'Survivant', serif" }}
+                    onClick={() => router.push(`/profile/${myProfile.username}`)}
+                  >
+                    {myProfile.username}
+                  </h2>
+                </div>
+
+                {/* Stats */}
+                <div className="space-y-2 text-xs">
+                  <div className="bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700">
+                    <span className="text-zinc-400">Rank: </span>
+                    <span className="font-semibold text-white">{myProfile.rank || 'Peasant'}</span>
+                  </div>
+                  <div className="bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700">
+                    <span className="text-zinc-400">Doubloons: </span>
+                    <span className="font-semibold text-yellow-400">{myProfile.coins || 0}</span>
+                  </div>
+                  <div className="bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700">
+                    <span className="text-zinc-400">Crowns: </span>
+                    <span className="font-semibold text-amber-300">{myProfile.crowns || 0}</span>
+                  </div>
+                </div>
+
+                {/* View Profile button */}
+                <button
+                  onClick={() => router.push(`/profile/${myProfile.username}`)}
+                  className="w-full text-xs bg-zinc-700 hover:bg-zinc-600 text-white font-semibold py-2 rounded-lg transition cursor-pointer"
+                >
+                  View Profile
+                </button>
+
+              </div>
+            </div>
+          )}
+
+          {/* MIDDLE: MAIN FEED */}
           <div className="flex-1 min-w-0">
 
             <div className="flex justify-between items-center mb-6">
-              <h1 className="text-3xl font-bold">Mutiny Island</h1>
-              <button
-                onClick={() => setShowModal(true)}
-                className="bg-green-500 hover:bg-green-400 text-black font-bold px-4 py-2 rounded cursor-pointer"
+              <h1
+                className="text-5xl font-bold"
+                style={{ fontFamily: "'Survivant', serif" }}
               >
-                New Post
-              </button>
+                Mutiny Island
+              </h1>
+              {currentUserId && (
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="bg-green-500 hover:bg-green-400 text-black font-bold px-4 py-2 rounded cursor-pointer"
+                >
+                  New Post
+                </button>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -692,7 +755,6 @@ export default function HomePage() {
                 >
                   <Image src="/picture.png" alt="img" width={14} height={14} />
                 </button>
-                {/* LINK */}
                 <button
                   onMouseDown={(e) => {
                     e.preventDefault()
@@ -823,7 +885,6 @@ export default function HomePage() {
               <Image src="/link.png" alt="Link" width={20} height={20} />
               {editLinkEl ? 'Edit Link' : 'Insert Link'}
             </h2>
-
             {!editLinkEl && (
               <p className="text-xs text-zinc-400 mb-4">
                 Highlight text in the editor before clicking this button to turn it into a link.
@@ -834,7 +895,6 @@ export default function HomePage() {
                 Update the URL below, or clear it to remove the link.
               </p>
             )}
-
             <input
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
@@ -843,15 +903,8 @@ export default function HomePage() {
               className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
               autoFocus
             />
-
             <div className="flex justify-end gap-2">
-              <button
-                onClick={closeLinkModal}
-                className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition"
-              >
-                Cancel
-              </button>
-
+              <button onClick={closeLinkModal} className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition">Cancel</button>
               {editLinkEl && (
                 <button
                   onClick={() => {
@@ -864,11 +917,7 @@ export default function HomePage() {
                   Remove
                 </button>
               )}
-
-              <button
-                onClick={insertLink}
-                className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition"
-              >
+              <button onClick={insertLink} className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition">
                 {editLinkEl ? 'Update' : 'Insert'}
               </button>
             </div>
