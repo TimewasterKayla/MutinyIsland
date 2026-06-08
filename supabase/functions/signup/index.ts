@@ -20,15 +20,22 @@ Deno.serve(async (req) => {
   try {
     const { email, password, username } = await req.json();
 
-    const supabase = createClient(
+    // Admin client for DB operations
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Anon client for auth signup (triggers confirmation email)
+    const supabaseAnon = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!
     );
 
     // ---------------------------------
     // 1. CHECK USERNAME FIRST
     // ---------------------------------
-    const { data: existing } = await supabase
+    const { data: existing } = await supabaseAdmin
       .from("profiles")
       .select("username")
       .eq("username", username)
@@ -36,40 +43,31 @@ Deno.serve(async (req) => {
 
     if (existing) {
       return new Response(
-        JSON.stringify({
-          error: "Username already taken",
-        }),
+        JSON.stringify({ error: "Username already taken" }),
         {
           status: 400,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
 
     // ---------------------------------
-    // 2. CREATE AUTH USER (email_confirm: false → sends confirmation email)
+    // 2. CREATE AUTH USER via signUp (triggers confirmation email)
     // ---------------------------------
-    const { data: authUser, error: authError } =
-      await supabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: false,
-      });
+    const { data: authData, error: authError } = await supabaseAnon.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { username },
+      },
+    });
 
-    if (authError || !authUser.user) {
+    if (authError || !authData.user) {
       return new Response(
-        JSON.stringify({
-          error: authError?.message || "Auth creation failed",
-        }),
+        JSON.stringify({ error: authError?.message || "Auth creation failed" }),
         {
           status: 400,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
@@ -77,10 +75,10 @@ Deno.serve(async (req) => {
     // ---------------------------------
     // 3. CREATE PROFILE
     // ---------------------------------
-    const { error: profileError } = await supabase
+    const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .insert({
-        id: authUser.user.id,
+        id: authData.user.id,
         username,
         email,
         coins: 0,
@@ -90,20 +88,13 @@ Deno.serve(async (req) => {
     // 4. ROLLBACK IF PROFILE FAILS
     // ---------------------------------
     if (profileError) {
-      await supabase.auth.admin.deleteUser(
-        authUser.user.id
-      );
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
 
       return new Response(
-        JSON.stringify({
-          error: "Profile creation failed",
-        }),
+        JSON.stringify({ error: "Profile creation failed" }),
         {
           status: 400,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
@@ -112,29 +103,19 @@ Deno.serve(async (req) => {
     // SUCCESS
     // ---------------------------------
     return new Response(
-      JSON.stringify({
-        success: true,
-      }),
+      JSON.stringify({ success: true }),
       {
         status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
 
   } catch (err) {
     return new Response(
-      JSON.stringify({
-        error: String(err),
-      }),
+      JSON.stringify({ error: String(err) }),
       {
         status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   }
