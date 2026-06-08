@@ -15,6 +15,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [signupSuccess, setSignupSuccess] = useState(false)
 
   // -----------------------------
   // AUTO REDIRECT IF LOGGED IN
@@ -43,10 +44,11 @@ export default function HomePage() {
     setEmail('')
     setPassword('')
     setUsername('')
+    setSignupSuccess(false)
   }
 
   // -----------------------------
-  // SIGN UP → then auto-login
+  // SIGN UP → show "check your email"
   // -----------------------------
   async function signUp() {
     setLoading(true)
@@ -79,18 +81,8 @@ export default function HomePage() {
         return
       }
 
-      // Auto-login after successful signup
-      const { data: signInData, error: signInError } =
-        await supabase.auth.signInWithPassword({ email, password })
-
-      if (signInError || !signInData.user) {
-        setErrorMessage('Account created! Please log in.')
-        switchMode('login')
-        setLoading(false)
-        return
-      }
-
-      window.location.href = '/home'
+      // Show "check your email" message
+      setSignupSuccess(true)
     } catch (err) {
       console.error(err)
       setErrorMessage('Something went wrong')
@@ -159,17 +151,17 @@ export default function HomePage() {
     <main className="min-h-screen flex items-center justify-center relative overflow-hidden">
 
       {/* PAGE BACKGROUND */}
-<div
-  className="absolute inset-0 -z-10"
-  style={{
-    backgroundImage: "url('/loginscreen.jpg')",
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-  }}
-/>
+      <div
+        className="absolute inset-0 -z-10"
+        style={{
+          backgroundImage: "url('/loginscreen.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
 
-{/* SHIMMER OVERLAY */}
-<div className="ocean-bg absolute inset-0 -z-10 opacity-40" />
+      {/* SHIMMER OVERLAY */}
+      <div className="ocean-bg absolute inset-0 -z-10 opacity-40" />
 
       {/* PARCHMENT CARD */}
       <div className="relative w-full max-w-md">
@@ -192,74 +184,91 @@ export default function HomePage() {
             Welcome aboard!
           </p>
 
-          <div className="w-full space-y-4">
+          {/* CHECK YOUR EMAIL STATE */}
+          {signupSuccess ? (
+            <div className="w-full space-y-4">
+              <p className="text-amber-900 font-semibold">⚓ Almost there!</p>
+              <p className="text-sm text-amber-800">
+                We sent a confirmation email to <strong>{email}</strong>. Click the link in the email to activate your account.
+              </p>
+              <button
+                onClick={() => switchMode('login')}
+                className="w-full bg-amber-800 hover:bg-amber-900 text-amber-50 p-3 rounded font-bold active:scale-95 transition"
+              >
+                Back to Login
+              </button>
+            </div>
+          ) : (
+            <div className="w-full space-y-4">
 
-            {/* EMAIL — signup only */}
-            {mode === 'signup' && (
+              {/* EMAIL — signup only */}
+              {mode === 'signup' && (
+                <input
+                  className="w-full p-3 rounded bg-amber-50/80 border border-amber-800/30 text-amber-900 placeholder-amber-700/60 outline-none focus:ring-2 focus:ring-amber-700/40"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              )}
+
               <input
                 className="w-full p-3 rounded bg-amber-50/80 border border-amber-800/30 text-amber-900 placeholder-amber-700/60 outline-none focus:ring-2 focus:ring-amber-700/40"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
               />
-            )}
 
-            <input
-              className="w-full p-3 rounded bg-amber-50/80 border border-amber-800/30 text-amber-900 placeholder-amber-700/60 outline-none focus:ring-2 focus:ring-amber-700/40"
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
+              <input
+                className="w-full p-3 rounded bg-amber-50/80 border border-amber-800/30 text-amber-900 placeholder-amber-700/60 outline-none focus:ring-2 focus:ring-amber-700/40"
+                placeholder="Password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
 
-            <input
-              className="w-full p-3 rounded bg-amber-50/80 border border-amber-800/30 text-amber-900 placeholder-amber-700/60 outline-none focus:ring-2 focus:ring-amber-700/40"
-              placeholder="Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+              {errorMessage && (
+                <p className="text-red-700 italic text-sm">{errorMessage}</p>
+              )}
 
-            {errorMessage && (
-              <p className="text-red-700 italic text-sm">{errorMessage}</p>
-            )}
+              {mode === 'login' ? (
+                <>
+                  <p
+                    onClick={() => switchMode('signup')}
+                    className="text-sm text-amber-800 hover:text-amber-950 transition cursor-pointer underline underline-offset-2"
+                  >
+                    Click here to sign up
+                  </p>
 
-            {mode === 'login' ? (
-              <>
-                <p
-                  onClick={() => switchMode('signup')}
-                  className="text-sm text-amber-800 hover:text-amber-950 transition cursor-pointer underline underline-offset-2"
-                >
-                  Click here to sign up
-                </p>
+                  <button
+                    onClick={login}
+                    disabled={loading}
+                    className="w-full bg-amber-800 hover:bg-amber-900 text-amber-50 p-3 rounded font-bold active:scale-95 transition disabled:opacity-50"
+                  >
+                    {loading ? 'Loading...' : 'Login'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p
+                    onClick={() => switchMode('login')}
+                    className="text-sm text-amber-800 hover:text-amber-950 transition cursor-pointer underline underline-offset-2"
+                  >
+                    Back to login
+                  </p>
 
-                <button
-                  onClick={login}
-                  disabled={loading}
-                  className="w-full bg-amber-800 hover:bg-amber-900 text-amber-50 p-3 rounded font-bold active:scale-95 transition disabled:opacity-50"
-                >
-                  {loading ? 'Loading...' : 'Login'}
-                </button>
-              </>
-            ) : (
-              <>
-                <p
-                  onClick={() => switchMode('login')}
-                  className="text-sm text-amber-800 hover:text-amber-950 transition cursor-pointer underline underline-offset-2"
-                >
-                  Back to login
-                </p>
+                  <button
+                    onClick={signUp}
+                    disabled={loading}
+                    className="w-full bg-amber-800 hover:bg-amber-900 text-amber-50 p-3 rounded font-bold active:scale-95 transition disabled:opacity-50"
+                  >
+                    {loading ? 'Loading...' : 'Sign Up'}
+                  </button>
+                </>
+              )}
 
-                <button
-                  onClick={signUp}
-                  disabled={loading}
-                  className="w-full bg-amber-800 hover:bg-amber-900 text-amber-50 p-3 rounded font-bold active:scale-95 transition disabled:opacity-50"
-                >
-                  {loading ? 'Loading...' : 'Sign Up'}
-                </button>
-              </>
-            )}
+            </div>
+          )}
 
-          </div>
         </div>
       </div>
 

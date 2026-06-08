@@ -50,13 +50,13 @@ Deno.serve(async (req) => {
     }
 
     // ---------------------------------
-    // 2. CREATE AUTH USER
+    // 2. CREATE AUTH USER (email_confirm: false → sends confirmation email)
     // ---------------------------------
     const { data: authUser, error: authError } =
       await supabase.auth.admin.createUser({
         email,
         password,
-        email_confirm: true,
+        email_confirm: false,
       });
 
     if (authError || !authUser.user) {
