@@ -491,11 +491,11 @@ export default function HomePage() {
       }}
     >
       <div className="w-full min-h-screen" style={{ background: 'rgba(0,0,0,0.55)' }}>
-        <div className="w-full max-w-6xl mx-auto px-4 py-8 flex gap-6 items-center">
+        <div className="w-full max-w-6xl mx-auto px-4 py-8 flex gap-6 items-start">
 
           {/* LEFT: PROFILE SIDEBAR (logged in only) */}
           {currentUserId && myProfile && (
-            <div className="w-56 flex-shrink-0 sticky top-8 flex items-center justify-center">
+            <div style={{ position: "fixed", top: "50%", transform: "translateY(-50%)", left: "max(1rem, calc(50% - 40rem))", width: "14rem" }}>
               <div className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800 flex flex-col gap-3 w-full">
 
                 {/* Avatar */}
@@ -553,7 +553,7 @@ export default function HomePage() {
           )}
 
           {/* MIDDLE: MAIN FEED */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0" style={currentUserId && myProfile ? { marginLeft: '15rem' } : {}}>
 
             <div className="flex justify-between items-center mb-6">
               <h1
