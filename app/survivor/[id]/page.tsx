@@ -1279,9 +1279,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
             )}
           </div>
           <div className="mt-2 text-center">
-  <h1 className="text-xl font-bold text-white font-[var(--font-survivant)]">
-    {me ? me.username : <span className="text-zinc-600">Loading...</span>}
-  </h1>
+  <h1 className="text-xl font-bold text-white" style={{ fontFamily: "'Survivant', serif" }}>
+  {me ? me.username : <span className="text-zinc-600">Loading...</span>}
+</h1>
             {gameStarted && myTribe && (
               <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{
                 color: myTribe === TRIBE_1 ? '#f59e0b' : myTribe === TRIBE_2 ? '#60a5fa' : '#a78bfa'
