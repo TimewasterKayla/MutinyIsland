@@ -42,6 +42,16 @@ Deno.serve(async (req) => {
     })
   }
 
+  // ---------------------------------
+  // CHECK EMAIL IS CONFIRMED
+  // ---------------------------------
+  if (!userData.user.email_confirmed_at) {
+    return new Response(JSON.stringify({ error: 'Please confirm your email before logging in' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
   const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
     email: userData.user.email!,
     password,
