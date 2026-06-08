@@ -118,6 +118,7 @@ export default function HomePage() {
       )
 
       const data = await res.json()
+      console.log('login response:', data)
 
       if (!res.ok) {
         setErrorMessage(data.error || 'Login failed')
