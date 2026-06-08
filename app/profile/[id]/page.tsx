@@ -954,7 +954,7 @@ export default function ProfilePage({
           </div>
 
           <div className="mt-6 text-center">
-            <h1 className="text-3xl font-bold">{profile.username}</h1>
+            <h1 className="text-3xl font-bold font-survivant">{profile.username}</h1>
           </div>
 
           <div className="mt-6 space-y-3 text-sm">

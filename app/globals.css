@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* =========================================
+   🔤 SURVIVANT CUSTOM FONT
+========================================= */
+
+@font-face {
+  font-family: 'Survivant';
+  src: url('/fonts/Survivant.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -10,6 +22,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-survivant: 'Survivant', serif;
 }
 
 @media (prefers-color-scheme: dark) {
