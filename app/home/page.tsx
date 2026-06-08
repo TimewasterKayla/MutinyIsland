@@ -491,12 +491,12 @@ export default function HomePage() {
       }}
     >
       <div className="w-full min-h-screen" style={{ background: 'rgba(0,0,0,0.55)' }}>
-        <div className="w-full max-w-6xl mx-auto px-4 py-8 flex gap-6 items-start">
+        <div className="w-full max-w-6xl mx-auto px-4 py-8 flex gap-6 items-center">
 
           {/* LEFT: PROFILE SIDEBAR (logged in only) */}
           {currentUserId && myProfile && (
-            <div className="w-48 flex-shrink-0 sticky top-8">
-              <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 flex flex-col gap-3">
+            <div className="w-56 flex-shrink-0 sticky top-8 flex items-center justify-center">
+              <div className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800 flex flex-col gap-3 w-full">
 
                 {/* Avatar */}
                 <div
