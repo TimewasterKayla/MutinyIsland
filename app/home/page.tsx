@@ -101,11 +101,12 @@ export default function HomePage() {
       setCurrentUserId(user?.id || null)
       if (user) {
         fetchLikedPosts(user.id)
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('username, avatar, rank, coins, crowns, created_at')
+          .select('username, avatar, rank, coins, crowns, joined_at')
           .eq('id', user.id)
           .single()
+        console.log('profile:', profile, 'error:', profileError)
         setMyProfile(profile)
       }
     }
