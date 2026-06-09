@@ -4,7 +4,7 @@ import localFont from "next/font/local";
 import { useEffect } from "react";
 
 const survivant = localFont({
-  src: "/fonts/Survivant.ttf",
+  src: "../../public/fonts/Survivant.ttf",
   variable: "--font-survivant",
 });
 
