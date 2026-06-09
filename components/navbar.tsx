@@ -114,7 +114,7 @@ export default function Navbar() {
       <div className="absolute inset-0 -z-10 bg-black/40" />
 
       {/* LEFT */}
-      <div className="flex items-center gap-2 text-sm shrink-0">
+      <div className="flex items-center gap-2 text-sm w-72 shrink-0">
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
         <span>{onlineCount} online</span>
       </div>
@@ -134,7 +134,7 @@ export default function Navbar() {
       </div>
 
       {/* RIGHT */}
-      <div className="flex justify-end items-center gap-3 shrink-0">
+      <div className="flex justify-end items-center gap-3 w-72 shrink-0">
 
         {/* CROWNS */}
         {username && (

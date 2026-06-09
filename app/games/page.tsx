@@ -52,7 +52,7 @@ export default function GamesPage() {
             className="text-zinc-200 mt-2 text-center text-sm"
             style={{ textShadow: "1px 2px 6px rgba(0,0,0,0.9)" }}
           >
-            16 Castaways • 2 Crews • Social Strategy
+            18 Castaways • 2 Crews • Social Strategy
           </p>
         </div>
       </a>
