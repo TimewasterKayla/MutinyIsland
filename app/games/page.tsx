@@ -19,7 +19,7 @@ export default function GamesPage() {
       }}
     >
       <h1
-        className="text-5xl font-bold mb-16 tracking-widest uppercase text-center"
+        className="text-8xl font-bold mb-16 tracking-widest uppercase text-center"
         style={{ fontFamily: "var(--font-survivant)" }}
       >
         Games
@@ -27,7 +27,7 @@ export default function GamesPage() {
 
       <a
         href="/survivor"
-        className="relative block w-64 h-64 rounded-2xl overflow-hidden"
+        className="relative block w-64 h-64 rounded-2xl overflow-hidden transition-transform duration-200 hover:scale-110"
       >
         <div
           className="absolute inset-0"
