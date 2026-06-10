@@ -2284,31 +2284,34 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                           return (
                             <div
                               key={`${record.day}-${i}`}
-                              className="rounded-xl p-3 border border-[#a07840] text-xs bg-cover bg-center overflow-hidden"
-                              style={{ backgroundImage: "linear-gradient(rgba(0,0,0,0.38), rgba(0,0,0,0.56)), url('/beachtorches.png')" }}
+                              className="shrink-0 rounded-xl p-3 border border-[#a07840] text-xs bg-cover bg-center overflow-hidden"
+                              style={{
+                                backgroundImage: "linear-gradient(rgba(0,0,0,0.38), rgba(0,0,0,0.56)), url('/beachtorches.png')",
+                                minHeight: '8.75rem',
+                              }}
                             >
                               <p
-                                className="font-black uppercase tracking-wide text-sm mb-1 text-amber-100"
+                                className="font-black uppercase tracking-wide text-sm leading-tight mb-1 text-amber-100"
                                 style={{ textShadow: textGlow('#fef3c7') }}
                               >
                                 Day {record.day}
                               </p>
                               <p
-                                className="font-bold uppercase tracking-wide mb-1"
+                                className="font-bold uppercase tracking-wide leading-tight mb-1"
                                 style={{ color: redTextColor, fontFamily: "'Survivant', serif", textShadow: textGlow(redTextColor) }}
                               >
                                 {record.username} {record.is_winner ? 'wins' : 'voted off'}
                               </p>
                               {tribeKey && (
                                 <p
-                                  className="font-black uppercase tracking-wide mb-1"
+                                  className="font-black uppercase tracking-wide leading-tight mb-1"
                                   style={{ color: tribeTextColor, textShadow: textGlow(tribeTextColor) }}
                                 >
                                   {tribeName(tribeKey)} Tribe
                                 </p>
                               )}
                               <p
-                                className="uppercase font-bold tracking-wide text-xs mb-2"
+                                className="uppercase font-bold tracking-wide text-xs leading-tight mb-2"
                                 style={{ color: paleTextColor, textShadow: textGlow(paleTextColor) }}
                               >
                                 {voteCountSummary(record)}
