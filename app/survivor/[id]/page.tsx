@@ -1238,6 +1238,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     }
     return tab
   }
+  const profileSidebarHeight = '31.5rem'
 
   return (
     <>
@@ -1262,12 +1263,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         {/* ── Profile card: spectator sees filler image, player sees their info ── */}
         {!isPlayerInLobby ? (
           <div
-            className="rounded-2xl overflow-hidden border border-zinc-800 flex items-center justify-center"
+            className="rounded-2xl overflow-hidden border border-zinc-800 flex items-center justify-center shrink-0"
             style={{
               backgroundImage: "url('/castawayprofilefiller.jpg')",
               backgroundSize: 'cover',
               backgroundPosition: 'center',
-              minHeight: '12rem',
+              height: profileSidebarHeight,
             }}
           >
             <h2
@@ -1281,7 +1282,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
             </h2>
           </div>
         ) : (
-          <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 flex flex-col gap-3">
+          <div
+            className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 flex flex-col gap-3 shrink-0"
+            style={{ height: profileSidebarHeight }}
+          >
             <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-zinc-800 border border-zinc-700">
               {me?.avatar_url ? (
                 <Image src={me.avatar_url} alt="Avatar" width={256} height={256} className="w-full h-full object-cover" />
