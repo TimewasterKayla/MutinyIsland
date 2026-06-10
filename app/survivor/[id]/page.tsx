@@ -288,9 +288,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [joinedAt, setJoinedAt] = useState<string | null>(null)
 
   const [voteHistory,   setVoteHistory]   = useState<VoteRecord[]>([])
-  // ── Placement map: user_id -> placement integer stored in lobby_players ──
   const [placementMap,  setPlacementMap]  = useState<Record<string, number>>({})
-  // Winner username for the clock panel
   const [winnerUsername, setWinnerUsername] = useState<string | null>(null)
 
   const [hasFilled, setHasFilled] = useState(false)
@@ -335,7 +333,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const finalists  = activePlayers
   const preMergeBootCount = MAX_PLAYERS - MERGE_AT
   const juryIds    = votedOffIds.filter((_, idx) => idx >= preMergeBootCount)
-  // Reunion chat is view-only once game is finished
   const canReunionChat = !isFinished && (juryIds.includes(_uid) || activePlayers.some(p => p.user_id === _uid))
 
   const todayResult = challengeResults.find(r => r.day === currentDay - 1) ?? null
@@ -421,7 +418,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     loadReunionMessages(lobbyId)
     loadPlacementMap(lobbyId)
 
-    // FIX 1: loadPlacementMap added to polling interval so it stays fresh
     const interval = setInterval(() => {
       loadPlayers(lobbyId)
       loadMessages(lobbyId)
@@ -464,7 +460,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (winner) setWinnerUsername(winner.username)
   }, [isFinished, lobby?.winner_id, players])
 
-  // ─── Auto scroll (lobby chat only) ──────────────────────────────────────
+  // ─── Auto scroll ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (lobbyChatRef.current) lobbyChatRef.current.scrollTop = 0
@@ -777,8 +773,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     setVoteHistory(history)
   }
 
-  // ─── Load placement map from lobby_players.placement ─────────────────────
-
   async function loadPlacementMap(id: string) {
     const { data, error } = await supabase
       .from('lobby_players')
@@ -850,7 +844,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     }
     if (!winner) return
 
-    // Write placements for finalists: winner = 1, runner-up = 2
     const runnerUp = activeIds.find(uid => uid !== winner) ?? null
     const placementWrites = [
       supabase.from('lobby_players').update({ placement: 1, in_game: false }).eq('lobby_id', id).eq('user_id', winner).select(),
@@ -993,7 +986,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       }
     }
 
-    // Write placement for newly eliminated player into lobby_players
     const justEliminated = newVotedOff[newVotedOff.length - 1]
     if (justEliminated && !(l.voted_off ?? []).includes(justEliminated)) {
       const eliminationIndex = newVotedOff.length - 1
@@ -1267,52 +1259,74 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           </div>
         </div>
 
-        {/* Profile card */}
-        <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 flex flex-col gap-3">
-          <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-zinc-800 border border-zinc-700">
-            {me?.avatar_url ? (
-              <Image src={me.avatar_url} alt="Avatar" width={256} height={256} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-4xl font-black text-zinc-600">
-                {me ? me.username.slice(0, 1).toUpperCase() : '?'}
+        {/* ── Profile card: spectator sees filler image, player sees their info ── */}
+        {!isPlayerInLobby ? (
+          <div
+            className="rounded-2xl overflow-hidden border border-zinc-800 flex items-center justify-center"
+            style={{
+              backgroundImage: "url('/castawayprofilefiller.jpg')",
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              minHeight: '12rem',
+            }}
+          >
+            <h2
+              className="text-2xl font-bold text-white text-center px-4"
+              style={{
+                fontFamily: "'Survivant', serif",
+                textShadow: '2px 2px 6px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.8)',
+              }}
+            >
+              Castaway Cove
+            </h2>
+          </div>
+        ) : (
+          <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 flex flex-col gap-3">
+            <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-zinc-800 border border-zinc-700">
+              {me?.avatar_url ? (
+                <Image src={me.avatar_url} alt="Avatar" width={256} height={256} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-4xl font-black text-zinc-600">
+                  {me ? me.username.slice(0, 1).toUpperCase() : '?'}
+                </div>
+              )}
+            </div>
+            <div className="mt-2 text-center">
+              <h1 className="text-xl font-bold text-white" style={{ fontFamily: "'Survivant', serif" }}>
+                {me ? me.username : <span className="text-zinc-600">Loading...</span>}
+              </h1>
+              {gameStarted && myTribe && (
+                <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{
+                  color: myTribe === TRIBE_1 ? '#f59e0b' : myTribe === TRIBE_2 ? '#60a5fa' : '#a78bfa'
+                }}>
+                  {tribeName(myTribe)} Tribe
+                </p>
+              )}
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+                <span className="text-zinc-400">Rank: </span>
+                <span className="font-semibold text-white">{rank || 'Peasant'}</span>
               </div>
-            )}
-          </div>
-          <div className="mt-2 text-center">
-  <h1 className="text-xl font-bold text-white" style={{ fontFamily: "'Survivant', serif" }}>
-  {me ? me.username : <span className="text-zinc-600">Loading...</span>}
-</h1>
-            {gameStarted && myTribe && (
-              <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{
-                color: myTribe === TRIBE_1 ? '#f59e0b' : myTribe === TRIBE_2 ? '#60a5fa' : '#a78bfa'
-              }}>
-                {tribeName(myTribe)} Tribe
-              </p>
-            )}
-          </div>
-          <div className="space-y-2 text-sm">
-            <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
-              <span className="text-zinc-400">Rank: </span>
-              <span className="font-semibold text-white">{rank || 'Peasant'}</span>
-            </div>
-            <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
-              <span className="text-zinc-400">Doubloons: </span>
-              <span className="font-semibold text-yellow-400">{coins ?? 0}</span>
-            </div>
-            <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
-              <span className="text-zinc-400">Crowns: </span>
-              <span className="font-semibold text-amber-300">{crowns ?? 0}</span>
-            </div>
-            <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
-              <span className="text-zinc-400">Date Joined: </span>
-              <span className="font-semibold text-white">
-                {joinedAt
-                  ? new Date(joinedAt).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
-                  : 'Unknown'}
-              </span>
+              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+                <span className="text-zinc-400">Doubloons: </span>
+                <span className="font-semibold text-yellow-400">{coins ?? 0}</span>
+              </div>
+              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+                <span className="text-zinc-400">Crowns: </span>
+                <span className="font-semibold text-amber-300">{crowns ?? 0}</span>
+              </div>
+              <div className="bg-zinc-800 rounded-xl px-3 py-2 border border-zinc-700">
+                <span className="text-zinc-400">Date Joined: </span>
+                <span className="font-semibold text-white">
+                  {joinedAt
+                    ? new Date(joinedAt).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
+                    : 'Unknown'}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Clock */}
         <div
@@ -1324,7 +1338,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               The game will start soon!
             </p>
           ) : isFinished ? (
-            // FIX 3: both sides get trophy, no crown, everything centered
             <div className="flex flex-col items-center justify-center gap-2 px-4 text-center w-full">
               <p className="text-xs font-bold uppercase tracking-widest text-amber-800 animate-pulse text-center w-full">
                 🏆 Game Over 🏆
@@ -1619,7 +1632,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
                     {/* Jury gallery */}
                     {juryIds.length > 0 && (() => {
-                      // Most recently eliminated = last in juryIds = top-left, so reverse
                       const juryWithPlacements = [...juryIds]
                         .reverse()
                         .map(uid => ({ uid, placement: getPlayerPlacement(uid) }))
@@ -1714,7 +1726,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                           </div>
                         </div>
 
-                        {/* FIX 4: always show input, disabled + placeholder change when finished */}
                         <div className="flex gap-2 mt-2 shrink-0">
                           <input
                             value={reunionText}
@@ -2128,7 +2139,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                           <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                             {player.username}
                           </p>
-                          {/* FIX 1 (summary badges): show badge if placement exists and either voted off or game finished */}
                           {(() => {
                             if (placement === null) return null
                             if (!isVotedOff && !isFinished) return null
