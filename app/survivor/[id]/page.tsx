@@ -924,43 +924,21 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     const prevDay = newDay - 1
     const existingResults: ChallengeResult[] = l.challenge_results ?? []
-    const alreadyHasResult = existingResults.some(r => r.day === prevDay)
-
     let newResults = existingResults
-    if (!alreadyHasResult && prevDay >= 1) {
-      const activeThenIds = Object.keys(l.tribe_assignments ?? {}).filter(uid => !(l.voted_off ?? []).includes(uid))
-      const isMergedThen = activeThenIds.length <= MERGE_AT
-
-      if (isMergedThen) {
-        const immunePlayer = activeThenIds[Math.floor(Math.random() * activeThenIds.length)]
-        newResults = [...existingResults, {
-          day: prevDay,
-          immunity_winner: immunePlayer,
-          reward_winner: immunePlayer,
-          individual_immunity: immunePlayer,
-        }]
-      } else {
-        const remaining = activeThenIds.map(uid => l.tribe_assignments[uid])
-        const uniqueTribes = [...new Set(remaining)] as ('malolo' | 'kaliki' | 'raro')[]
-        if (uniqueTribes.length >= 2) {
-          const immunityWinner = uniqueTribes[Math.floor(Math.random() * uniqueTribes.length)]
-          const rewardWinner   = uniqueTribes[Math.floor(Math.random() * uniqueTribes.length)]
-          newResults = [...existingResults, { day: prevDay, immunity_winner: immunityWinner, reward_winner: rewardWinner }]
-        }
-      }
-    }
 
     let newVotedOff: string[] = l.voted_off ?? []
     const { data: dayVotes } = await supabase
       .from('votes').select('*').eq('lobby_id', id).eq('day', prevDay)
 
-    const prevDayImmune = newResults.find(r => r.day === prevDay)?.individual_immunity ?? null
+    const voteChallengeDay = prevDay - 1
+    const voteChallengeResult = newResults.find(r => r.day === voteChallengeDay) ?? null
+    const prevDayImmune = voteChallengeResult?.individual_immunity ?? null
 
     if (prevDay >= 2) {
       const activeThenIds = Object.keys(l.tribe_assignments ?? {}).filter(uid => !(l.voted_off ?? []).includes(uid))
       const activeThenIdSet = new Set(activeThenIds)
       const isMergedThen = activeThenIds.length <= MERGE_AT
-      const immunityWinnerTribe = normalizeTribeKey(newResults.find(r => r.day === prevDay)?.immunity_winner)
+      const immunityWinnerTribe = normalizeTribeKey(voteChallengeResult?.immunity_winner)
       const getEligibleEliminationPool = () => {
         if (isMergedThen) {
           return activeThenIds.filter(uid => uid !== prevDayImmune)
@@ -1035,6 +1013,40 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (activeAfterElim.length <= MERGE_AT) {
       newAssignments = { ...newAssignments }
       activeAfterElim.forEach(uid => { newAssignments[uid] = TRIBE_RARO })
+    }
+
+    const alreadyHasResult = newResults.some(r => r.day === prevDay && !!r.immunity_winner)
+    if (!alreadyHasResult && prevDay >= 1) {
+      const existingResultForDay = newResults.find(r => r.day === prevDay)
+      const activeChallengeIds = Object.keys(newAssignments).filter(uid => !newVotedOff.includes(uid))
+      const isMergedChallenge = activeChallengeIds.length <= MERGE_AT
+
+      let generatedResult: ChallengeResult | null = null
+      if (isMergedChallenge) {
+        const immunePlayer = activeChallengeIds[Math.floor(Math.random() * activeChallengeIds.length)]
+        if (immunePlayer) {
+          generatedResult = {
+            day: prevDay,
+            immunity_winner: immunePlayer,
+            reward_winner: immunePlayer,
+            individual_immunity: immunePlayer,
+          }
+        }
+      } else {
+        const remaining = activeChallengeIds.map(uid => normalizeTribeKey(newAssignments[uid]))
+        const uniqueTribes = [...new Set(remaining.filter(Boolean))] as ('malolo' | 'kaliki' | 'raro')[]
+        if (uniqueTribes.length >= 2) {
+          const immunityWinner = uniqueTribes[Math.floor(Math.random() * uniqueTribes.length)]
+          const rewardWinner   = uniqueTribes[Math.floor(Math.random() * uniqueTribes.length)]
+          generatedResult = { day: prevDay, immunity_winner: immunityWinner, reward_winner: rewardWinner }
+        }
+      }
+
+      if (generatedResult) {
+        newResults = existingResultForDay
+          ? newResults.map(result => result.day === prevDay ? { ...generatedResult, voted_off: result.voted_off } : result)
+          : [...newResults, generatedResult]
+      }
     }
 
     const enterFinale = activeAfterElim.length <= 2
