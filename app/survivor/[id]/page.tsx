@@ -336,8 +336,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const canReunionChat = !isFinished && (juryIds.includes(_uid) || activePlayers.some(p => p.user_id === _uid))
 
   const todayResult = challengeResults.find(r => r.day === currentDay - 1) ?? null
-  const losingTribe = todayResult
-    ? (todayResult.immunity_winner === TRIBE_1 ? TRIBE_2 : TRIBE_1)
+  const immunityWinnerTribe = todayResult ? normalizeTribeKey(todayResult.immunity_winner) : ''
+  const losingTribe = immunityWinnerTribe === TRIBE_1 || immunityWinnerTribe === TRIBE_2
+    ? (immunityWinnerTribe === TRIBE_1 ? TRIBE_2 : TRIBE_1)
     : null
 
   const todayIndividualImmune = (isMerged && todayResult?.individual_immunity) ? todayResult.individual_immunity : null
@@ -350,7 +351,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (!gameStarted || currentDay < 2 || !iAmActive) return false
     if (isFinale || isFinished) return false
     if (isMerged) return true
-    return myTribe === losingTribe
+    return normalizeTribeKey(myTribe) === losingTribe
   })()
 
   const tabAccessible = (tab: Tab): boolean => {
@@ -383,21 +384,31 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const raroPlayers     = activePlayers.filter(p => tribeAssign[p.user_id] === TRIBE_RARO)
   const voteablePlayers = activePlayers.filter(p =>
     p.user_id !== _uid &&
-    tribeAssign[p.user_id] === myTribe &&
+    normalizeTribeKey(tribeAssign[p.user_id]) === normalizeTribeKey(myTribe) &&
     p.user_id !== todayIndividualImmune
   )
 
+  function normalizeTribeKey(key?: string | null): string {
+    const normalized = (key ?? '').toLowerCase().replace(/\s*tribe\s*$/i, '').trim()
+    if (normalized === TRIBE_1_NAME.toLowerCase()) return TRIBE_1
+    if (normalized === TRIBE_2_NAME.toLowerCase()) return TRIBE_2
+    if (normalized === TRIBE_RARO_NAME.toLowerCase()) return TRIBE_RARO
+    return normalized
+  }
+
   function tribeName(key: string): string {
-    if (key === TRIBE_1) return TRIBE_1_NAME
-    if (key === TRIBE_2) return TRIBE_2_NAME
-    if (key === TRIBE_RARO) return TRIBE_RARO_NAME
+    const tribeKey = normalizeTribeKey(key)
+    if (tribeKey === TRIBE_1) return TRIBE_1_NAME
+    if (tribeKey === TRIBE_2) return TRIBE_2_NAME
+    if (tribeKey === TRIBE_RARO) return TRIBE_RARO_NAME
     return key
   }
 
   function tribeColor(key: string): string {
-    if (key === TRIBE_1) return '#b45309'
-    if (key === TRIBE_2) return '#1d4ed8'
-    if (key === TRIBE_RARO) return '#7c3aed'
+    const tribeKey = normalizeTribeKey(key)
+    if (tribeKey === TRIBE_1) return '#b45309'
+    if (tribeKey === TRIBE_2) return '#1d4ed8'
+    if (tribeKey === TRIBE_RARO) return '#7c3aed'
     return '#3f3f46'
   }
 
@@ -954,12 +965,14 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           return activeThenIds.filter(uid => uid !== prevDayImmune)
         }
 
-        const immunityWinnerTribe = newResults.find(r => r.day === prevDay)?.immunity_winner
-        if (!immunityWinnerTribe) return activeThenIds
+        const immunityWinnerTribe = normalizeTribeKey(newResults.find(r => r.day === prevDay)?.immunity_winner)
+        if (!immunityWinnerTribe) return []
 
-        const activeTribes = [...new Set(activeThenIds.map(uid => l.tribe_assignments[uid]).filter(Boolean))]
+        const activeTribes = [...new Set(activeThenIds.map(uid => normalizeTribeKey(l.tribe_assignments[uid])).filter(Boolean))]
+        if (!activeTribes.includes(immunityWinnerTribe)) return []
+
         const losingTribes = activeTribes.filter(tribe => tribe !== immunityWinnerTribe)
-        return activeThenIds.filter(uid => losingTribes.includes(l.tribe_assignments[uid]))
+        return activeThenIds.filter(uid => losingTribes.includes(normalizeTribeKey(l.tribe_assignments[uid])))
       }
       const pickFallbackEliminated = () => {
         const pool = getEligibleEliminationPool()
