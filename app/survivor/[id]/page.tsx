@@ -394,6 +394,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     return key
   }
 
+  function tribeColor(key: string): string {
+    if (key === TRIBE_1) return '#b45309'
+    if (key === TRIBE_2) return '#1d4ed8'
+    if (key === TRIBE_RARO) return '#7c3aed'
+    return '#3f3f46'
+  }
+
   // ─── Keep refs in sync ───────────────────────────────────────────────────
 
   useEffect(() => { lobbyRef.current = lobby }, [lobby])
@@ -940,28 +947,32 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     if (prevDay >= 2) {
       const activeThenIds = Object.keys(l.tribe_assignments ?? {}).filter(uid => !(l.voted_off ?? []).includes(uid))
-      const pickFallbackEliminated = () => {
+      const getEligibleEliminationPool = () => {
         const isMergedThen = activeThenIds.length <= MERGE_AT
 
-        let pool: string[]
         if (isMergedThen) {
-          pool = activeThenIds.filter(uid => uid !== prevDayImmune)
-        } else {
-          const immunityWinnerTribe = newResults.find(r => r.day === prevDay)?.immunity_winner
-          const activeTribes = [...new Set(activeThenIds.map(uid => l.tribe_assignments[uid]).filter(Boolean))]
-          const losingTribes = activeTribes.filter(tribe => tribe !== immunityWinnerTribe)
-          pool = activeThenIds.filter(uid => losingTribes.includes(l.tribe_assignments[uid]))
+          return activeThenIds.filter(uid => uid !== prevDayImmune)
         }
 
+        const immunityWinnerTribe = newResults.find(r => r.day === prevDay)?.immunity_winner
+        if (!immunityWinnerTribe) return activeThenIds
+
+        const activeTribes = [...new Set(activeThenIds.map(uid => l.tribe_assignments[uid]).filter(Boolean))]
+        const losingTribes = activeTribes.filter(tribe => tribe !== immunityWinnerTribe)
+        return activeThenIds.filter(uid => losingTribes.includes(l.tribe_assignments[uid]))
+      }
+      const pickFallbackEliminated = () => {
+        const pool = getEligibleEliminationPool()
         return pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null
       }
+      const eligibleEliminationPool = getEligibleEliminationPool()
 
       let eliminated: string | null = null
       if (dayVotes && dayVotes.length > 0) {
         const counts: Record<string, number> = {}
         dayVotes.forEach((v: any) => {
           if (prevDayImmune && v.target_id === prevDayImmune) return
-          if (!activeThenIds.includes(v.target_id)) return
+          if (!eligibleEliminationPool.includes(v.target_id)) return
           counts[v.target_id] = (counts[v.target_id] || 0) + 1
         })
         if (Object.keys(counts).length > 0) {
@@ -2108,6 +2119,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       const isVotedOff = votedOffIds.includes(player.user_id)
                       const isWinner   = isFinished && player.user_id === lobby?.winner_id
                       const placement  = getPlayerPlacement(player.user_id)
+                      const playerTribe = tribeAssign[player.user_id]
 
                       const borderClass = isFinished && placement === 1
                         ? 'border-[#FFD700]'
@@ -2143,6 +2155,14 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                           <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                             {player.username}
                           </p>
+                          {isVotedOff && playerTribe && (
+                            <p
+                              className="text-[9px] font-black text-center leading-tight uppercase tracking-wide truncate w-full"
+                              style={{ color: tribeColor(playerTribe) }}
+                            >
+                              {tribeName(playerTribe)} Tribe
+                            </p>
+                          )}
                           {(() => {
                             if (placement === null) return null
                             if (!isVotedOff && !isFinished) return null
