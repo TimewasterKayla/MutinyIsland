@@ -41,7 +41,15 @@ type VoteRecord = {
   voted_off: string
   username: string
   vote_counts: Record<string, number>
+  tribe_key?: string
   rocks_drawn?: boolean
+  is_winner?: boolean
+}
+
+type VoteRow = {
+  voter_id: string
+  target_id: string
+  day: number
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -288,6 +296,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [joinedAt, setJoinedAt] = useState<string | null>(null)
 
   const [voteHistory,   setVoteHistory]   = useState<VoteRecord[]>([])
+  const [voteInfoRecord, setVoteInfoRecord] = useState<VoteRecord | null>(null)
   const [placementMap,  setPlacementMap]  = useState<Record<string, number>>({})
   const [winnerUsername, setWinnerUsername] = useState<string | null>(null)
 
@@ -410,6 +419,19 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     if (tribeKey === TRIBE_2) return '#1d4ed8'
     if (tribeKey === TRIBE_RARO) return '#7c3aed'
     return '#3f3f46'
+  }
+
+  function textGlow(color: string): string {
+    return `0 1px 2px rgba(0,0,0,0.95), 0 0 8px ${color}`
+  }
+
+  function sortedVoteEntries(record: VoteRecord): [string, number][] {
+    return Object.entries(record.vote_counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  }
+
+  function voteCountSummary(record: VoteRecord): string {
+    const counts = sortedVoteEntries(record).map(([, count]) => count)
+    return counts.length > 0 ? `Vote count of (${counts.join('-')})` : '0 votes cast'
   }
 
   // ─── Keep refs in sync ───────────────────────────────────────────────────
@@ -619,7 +641,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     if (!lobbyId || !gameStarted) return
     loadVoteHistory(lobbyId)
-  }, [lobbyId, gameStarted, votedOffIds.length])
+  }, [lobbyId, gameStarted, votedOffIds.length, isFinished, lobby?.winner_id])
 
   // ─── Load placement map from Supabase ─────────────────────────────────────
 
@@ -715,23 +737,23 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         .map(result => [result.voted_off as string, result.day])
     )
 
-    if (votedOffList.length === 0) { setVoteHistory([]); return }
-
     const { data: allVotes, error: votesError } = await supabase
       .from('votes')
       .select('voter_id, target_id, day')
       .eq('lobby_id', id)
-      .lt('day', 9999)
       .order('day', { ascending: true })
 
     if (votesError) console.error('VOTE HISTORY LOAD ERROR:', votesError)
 
-    const votes = allVotes ?? []
+    const votes = (allVotes ?? []) as VoteRow[]
+    const regularVotes = votes.filter(v => Number(v.day) < 9999)
+    const finaleVotes = votes.filter(v => Number(v.day) === 9999)
 
     const allUserIds = [...new Set([
       ...votedOffList,
-      ...votes.map((v: any) => v.voter_id),
-      ...votes.map((v: any) => v.target_id),
+      ...(l?.winner_id ? [l.winner_id] : []),
+      ...votes.map(v => v.voter_id),
+      ...votes.map(v => v.target_id),
     ])]
     const { data: profileData } = allUserIds.length > 0
       ? await supabase.from('profiles').select('id, username').in('id', allUserIds)
@@ -740,7 +762,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     const votesByDay: Record<number, Record<string, number>> = {}
     const voteDaysByTarget: Record<string, number[]> = {}
-    for (const v of votes as any[]) {
+    for (const v of regularVotes) {
       const voteDay = Number(v.day)
       if (!Number.isFinite(voteDay)) continue
       if (!votesByDay[voteDay]) votesByDay[voteDay] = {}
@@ -769,6 +791,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
           voted_off: eliminatedId,
           username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
           vote_counts: {},
+          tribe_key: normalizeTribeKey(l?.tribe_assignments?.[eliminatedId]),
           rocks_drawn: true,
         }
       }
@@ -784,9 +807,33 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         voted_off: eliminatedId,
         username: nameMap[eliminatedId] || eliminatedId.slice(0, 8),
         vote_counts,
+        tribe_key: normalizeTribeKey(l?.tribe_assignments?.[eliminatedId]),
         rocks_drawn: false,
       }
     })
+
+    if (l?.finished_at && l?.winner_id) {
+      const finaleCountsById: Record<string, number> = {}
+      finaleVotes.forEach(v => {
+        finaleCountsById[v.target_id] = (finaleCountsById[v.target_id] || 0) + 1
+      })
+
+      const winnerVoteCounts: Record<string, number> = {}
+      Object.entries(finaleCountsById).forEach(([targetId, count]) => {
+        const name = nameMap[targetId] || targetId.slice(0, 8)
+        winnerVoteCounts[name] = count
+      })
+
+      history.push({
+        day: Number(l.current_day ?? history.length + 1),
+        voted_off: l.winner_id,
+        username: nameMap[l.winner_id] || String(l.winner_id).slice(0, 8),
+        vote_counts: winnerVoteCounts,
+        tribe_key: normalizeTribeKey(l?.tribe_assignments?.[l.winner_id]) || TRIBE_RARO,
+        rocks_drawn: Object.values(winnerVoteCounts).reduce((sum, count) => sum + count, 0) === 0,
+        is_winner: true,
+      })
+    }
 
     setVoteHistory(history)
   }
@@ -2152,7 +2199,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                       const isVotedOff = votedOffIds.includes(player.user_id)
                       const isWinner   = isFinished && player.user_id === lobby?.winner_id
                       const placement  = getPlayerPlacement(player.user_id)
-                      const playerTribe = tribeAssign[player.user_id]
 
                       const borderClass = isFinished && placement === 1
                         ? 'border-[#FFD700]'
@@ -2188,14 +2234,6 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                           <p className="text-[11px] font-semibold text-center leading-tight text-zinc-800 truncate w-full">
                             {player.username}
                           </p>
-                          {isVotedOff && playerTribe && (
-                            <p
-                              className="text-[9px] font-black text-center leading-tight uppercase tracking-wide truncate w-full"
-                              style={{ color: tribeColor(playerTribe) }}
-                            >
-                              {tribeName(playerTribe)} Tribe
-                            </p>
-                          )}
                           {(() => {
                             if (placement === null) return null
                             if (!isVotedOff && !isFinished) return null
@@ -2238,23 +2276,52 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     <>
                       <h3 className="font-black uppercase tracking-widest text-sm mt-1">Tribal History</h3>
                       <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: '40vh' }}>
-                        {voteHistoryNewestFirst.map((record, i) => (
-                          <div key={`${record.day}-${i}`} className="rounded-xl p-3 border border-[#a07840] text-xs" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
-                            <p className="font-black uppercase tracking-wide text-sm mb-1">Day {record.day}</p>
-                            <p className="font-bold text-red-800 uppercase tracking-wide mb-1">{record.username}</p>
-                            {record.rocks_drawn ? (
-                              <p className="text-zinc-700 uppercase font-bold tracking-wide text-xs">
-                                0 votes were cast, thus... ROCKS WERE DRAWN
+                        {voteHistoryNewestFirst.map((record, i) => {
+                          const tribeKey = normalizeTribeKey(record.tribe_key)
+                          const tribeTextColor = tribeColor(tribeKey)
+                          const redTextColor = '#991b1b'
+                          const paleTextColor = '#fef3c7'
+                          return (
+                            <div
+                              key={`${record.day}-${i}`}
+                              className="rounded-xl p-3 border border-[#a07840] text-xs bg-cover bg-center overflow-hidden"
+                              style={{ backgroundImage: "linear-gradient(rgba(0,0,0,0.38), rgba(0,0,0,0.56)), url('/beachtorches.png')" }}
+                            >
+                              <p
+                                className="font-black uppercase tracking-wide text-sm mb-1 text-amber-100"
+                                style={{ textShadow: textGlow('#fef3c7') }}
+                              >
+                                Day {record.day}
                               </p>
-                            ) : (
-                              <div className="space-y-0.5">
-                                {Object.entries(record.vote_counts).map(([name, count]) => (
-                                  <p key={name} className="text-zinc-700 uppercase font-semibold tracking-wide">{name}: {count} VOTE{count !== 1 ? 'S' : ''}</p>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                              <p
+                                className="font-bold uppercase tracking-wide mb-1"
+                                style={{ color: redTextColor, fontFamily: "'Survivant', serif", textShadow: textGlow(redTextColor) }}
+                              >
+                                {record.username} {record.is_winner ? 'wins' : 'voted off'}
+                              </p>
+                              {tribeKey && (
+                                <p
+                                  className="font-black uppercase tracking-wide mb-1"
+                                  style={{ color: tribeTextColor, textShadow: textGlow(tribeTextColor) }}
+                                >
+                                  {tribeName(tribeKey)} Tribe
+                                </p>
+                              )}
+                              <p
+                                className="uppercase font-bold tracking-wide text-xs mb-2"
+                                style={{ color: paleTextColor, textShadow: textGlow(paleTextColor) }}
+                              >
+                                {voteCountSummary(record)}
+                              </p>
+                              <button
+                                onClick={() => setVoteInfoRecord(record)}
+                                className="bg-orange-500 hover:bg-orange-600 text-white text-[9px] font-black uppercase tracking-wide px-2 py-1 rounded shadow cursor-pointer"
+                              >
+                                Vote Info
+                              </button>
+                            </div>
+                          )
+                        })}
                       </div>
                     </>
                   )}
@@ -2266,6 +2333,39 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         </div>
       </div>
     </main>
+    {voteInfoRecord && (
+      <div className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center px-4">
+        <div className="w-full max-w-sm rounded-xl border border-[#a07840] p-4 text-zinc-900 shadow-2xl relative" style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN }}>
+          <button
+            onClick={() => setVoteInfoRecord(null)}
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-zinc-900 text-white text-xs font-black flex items-center justify-center hover:bg-zinc-800 cursor-pointer"
+            aria-label="Close vote info"
+          >
+            X
+          </button>
+          <h2 className="text-xl font-black uppercase tracking-widest pr-8 mb-1">
+            {voteInfoRecord.is_winner ? 'Jury Vote' : `Day ${voteInfoRecord.day}`}
+          </h2>
+          <p className="font-bold text-red-800 uppercase tracking-wide mb-3" style={{ fontFamily: "'Survivant', serif" }}>
+            {voteInfoRecord.username} {voteInfoRecord.is_winner ? 'wins' : 'voted off'}
+          </p>
+          {sortedVoteEntries(voteInfoRecord).length > 0 ? (
+            <div className="space-y-2">
+              {sortedVoteEntries(voteInfoRecord).map(([name, count]) => (
+                <div key={name} className="flex items-center justify-between rounded-lg bg-[#b8955a] border border-[#a07840] px-3 py-2">
+                  <span className="font-black uppercase tracking-wide text-sm">{name}</span>
+                  <span className="font-black text-sm">{count} vote{count !== 1 ? 's' : ''}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg bg-[#b8955a] border border-[#a07840] px-3 py-2 font-black uppercase tracking-wide text-sm">
+              0 votes cast
+            </p>
+          )}
+        </div>
+      </div>
+    )}
     {showTimerModal && !gameStarted && (
       <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4">
         <div className="w-full max-w-sm rounded-xl border border-[#a07840] p-5 text-zinc-900 shadow-2xl" style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN }}>
