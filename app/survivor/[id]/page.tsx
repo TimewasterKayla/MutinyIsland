@@ -958,14 +958,14 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
     if (prevDay >= 2) {
       const activeThenIds = Object.keys(l.tribe_assignments ?? {}).filter(uid => !(l.voted_off ?? []).includes(uid))
+      const activeThenIdSet = new Set(activeThenIds)
+      const isMergedThen = activeThenIds.length <= MERGE_AT
+      const immunityWinnerTribe = normalizeTribeKey(newResults.find(r => r.day === prevDay)?.immunity_winner)
       const getEligibleEliminationPool = () => {
-        const isMergedThen = activeThenIds.length <= MERGE_AT
-
         if (isMergedThen) {
           return activeThenIds.filter(uid => uid !== prevDayImmune)
         }
 
-        const immunityWinnerTribe = normalizeTribeKey(newResults.find(r => r.day === prevDay)?.immunity_winner)
         if (!immunityWinnerTribe) return []
 
         const activeTribes = [...new Set(activeThenIds.map(uid => normalizeTribeKey(l.tribe_assignments[uid])).filter(Boolean))]
@@ -978,14 +978,22 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         const pool = getEligibleEliminationPool()
         return pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null
       }
-      const eligibleEliminationPool = getEligibleEliminationPool()
 
       let eliminated: string | null = null
       if (dayVotes && dayVotes.length > 0) {
         const counts: Record<string, number> = {}
         dayVotes.forEach((v: any) => {
           if (prevDayImmune && v.target_id === prevDayImmune) return
-          if (!eligibleEliminationPool.includes(v.target_id)) return
+          if (!activeThenIdSet.has(v.target_id)) return
+          if (!activeThenIdSet.has(v.voter_id)) return
+
+          if (!isMergedThen) {
+            const voterTribe = normalizeTribeKey(l.tribe_assignments[v.voter_id])
+            const targetTribe = normalizeTribeKey(l.tribe_assignments[v.target_id])
+            if (!voterTribe || voterTribe !== targetTribe) return
+            if (immunityWinnerTribe && targetTribe === immunityWinnerTribe) return
+          }
+
           counts[v.target_id] = (counts[v.target_id] || 0) + 1
         })
         if (Object.keys(counts).length > 0) {
