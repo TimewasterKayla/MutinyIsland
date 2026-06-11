@@ -568,16 +568,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       const id = l.id
       if (!id) return
 
-      if (l.is_finale) {
-        advancingRef.current = true
-        resolveFinale(id, true).finally(() => {
-          setTimeout(() => { advancingRef.current = false }, 10000)
-        })
-        return
-      }
-
       advancingRef.current = true
-      advanceDay(id).finally(() => {
+      supabase.functions.invoke('advance-games', { body: { lobbyId: id } }).then(({ error }) => {
+        if (error) console.error('[advance-games] function failed:', error)
+        loadLobby(id)
+        loadPlayers(id)
+        loadPlacementMap(id)
+      }).finally(() => {
         setTimeout(() => { advancingRef.current = false }, 10000)
       })
     }, 1000)
@@ -2298,7 +2295,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                               </p>
                               <p
                                 className="font-bold uppercase tracking-wide leading-tight mb-1"
-                                style={{ color: redTextColor, fontFamily: "'Survivant', serif", textShadow: textGlow(redTextColor) }}
+                                style={{ color: redTextColor, fontFamily: "'Survivant', serif", textShadow: textGlow('#ffffff') }}
                               >
                                 {record.username} {record.is_winner ? 'wins' : 'voted off'}
                               </p>
