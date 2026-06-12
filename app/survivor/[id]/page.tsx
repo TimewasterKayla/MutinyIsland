@@ -2126,7 +2126,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 >
                   {tikiCourtTribeKey && (
                     <h2
-                      className="absolute top-5 left-0 right-0 text-center text-3xl font-black uppercase tracking-widest z-10"
+                      className="absolute top-9 left-0 right-0 text-center text-4xl font-black uppercase tracking-widest z-10"
                       style={{
                         color: tribeColor(tikiCourtTribeKey),
                         fontFamily: "'Survivant', serif",
@@ -2137,16 +2137,27 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     </h2>
                   )}
 
-                  <div
-                    className="absolute left-5 right-5 bottom-16 grid gap-x-3 gap-y-4 items-end justify-items-center"
-                    style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(tikiCourtPlayers.length, 1), 5)}, minmax(0, 1fr))` }}
-                  >
-                    {tikiCourtPlayers.map(player => (
-                      <div key={player.user_id} className="relative flex flex-col items-center w-full max-w-[6.75rem]">
+                  {(() => {
+                    const backRowCount = tikiCourtPlayers.length <= 5
+                      ? tikiCourtPlayers.length
+                      : Math.min(5, Math.ceil(tikiCourtPlayers.length / 2))
+                    const backRow = tikiCourtPlayers.slice(0, backRowCount)
+                    const frontRow = tikiCourtPlayers.slice(backRowCount)
+                    const renderTikiSeat = (player: Player, row: 'back' | 'front') => (
+                      <div
+                        key={player.user_id}
+                        className={`relative flex flex-col items-center w-full ${row === 'back' ? 'max-w-[5.75rem]' : 'max-w-[6.45rem]'}`}
+                      >
+                        <p
+                          className="mb-1 max-w-full rounded-sm border border-[#8b6840] bg-[#5a3418]/85 px-2 py-0.5 text-center text-[10px] font-black text-white truncate shadow"
+                          style={{ textShadow: '0 1px 2px rgba(0,0,0,1), 0 0 7px rgba(0,0,0,0.95)' }}
+                        >
+                          {player.username}
+                        </p>
                         <div
                           onClick={() => router.push(`/profile/${player.username}`)}
-                          className="relative z-10 w-[72%] aspect-[3/4] rounded-md overflow-hidden border-2 border-amber-100 shadow-lg cursor-pointer bg-zinc-800"
-                          style={{ marginBottom: '-0.65rem' }}
+                          className="relative z-10 w-[70%] aspect-[3/4] rounded-md overflow-hidden border-2 border-amber-100 shadow-lg cursor-pointer bg-zinc-800"
+                          style={{ marginBottom: '-0.7rem' }}
                         >
                           {player.avatar_url ? (
                             <img src={player.avatar_url} alt={player.username} className="w-full h-full object-cover" />
@@ -2157,15 +2168,22 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                           )}
                         </div>
                         <img src="/woodencrate.png" alt="" className="w-full aspect-[1.35/1] object-contain drop-shadow-xl" />
-                        <p
-                          className="mt-0.5 max-w-full truncate text-center text-[11px] font-black text-white"
-                          style={{ textShadow: '0 1px 2px rgba(0,0,0,1), 0 0 7px rgba(0,0,0,0.95)' }}
-                        >
-                          {player.username}
-                        </p>
                       </div>
-                    ))}
-                  </div>
+                    )
+
+                    return (
+                      <>
+                        <div className="absolute left-[14%] right-[14%] bottom-[27%] flex items-end justify-center gap-5 z-10">
+                          {backRow.map(player => renderTikiSeat(player, 'back'))}
+                        </div>
+                        {frontRow.length > 0 && (
+                          <div className="absolute left-[18%] right-[18%] bottom-[13%] flex items-end justify-center gap-6 z-20">
+                            {frontRow.map(player => renderTikiSeat(player, 'front'))}
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
 
                   <button className="absolute bottom-4 right-4 bg-orange-500 hover:bg-orange-600 text-white text-xs font-black uppercase tracking-wide px-4 py-2 rounded-lg shadow-lg cursor-pointer">
                     Advantage Menu
