@@ -121,7 +121,8 @@ function shuffleArray<T>(arr: T[]): T[] {
 function pickTribeBranding(keys: string[], existingNames: string[] = []): { names: Record<string, string>, colors: Record<string, string> } {
   const availableNames = shuffleArray(TRIBE_NAME_OPTIONS.filter(name => !existingNames.includes(name)))
   const fallbackNames = shuffleArray(TRIBE_NAME_OPTIONS)
-  const availableColors = shuffleArray(TRIBE_COLOR_OPTIONS)
+  const existingColors = existingNames.filter(name => name.startsWith('#'))
+  const availableColors = shuffleArray(TRIBE_COLOR_OPTIONS.filter(color => !existingColors.includes(color)))
   const fallbackColors = shuffleArray(TRIBE_COLOR_OPTIONS)
   const names: Record<string, string> = {}
   const colors: Record<string, string> = {}
@@ -1122,7 +1123,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       newAssignments = { ...newAssignments }
       activeAfterElim.forEach(uid => { newAssignments[uid] = TRIBE_RARO })
       if (!newTribeNames[TRIBE_RARO] || !newTribeColors[TRIBE_RARO]) {
-        const mergeBranding = pickTribeBranding([TRIBE_RARO], Object.values(newTribeNames))
+        const mergeBranding = pickTribeBranding([TRIBE_RARO], [
+          ...Object.values(newTribeNames),
+          ...Object.values(newTribeColors),
+        ])
         newTribeNames = { ...newTribeNames, ...mergeBranding.names }
         newTribeColors = { ...newTribeColors, ...mergeBranding.colors }
       }
@@ -2219,7 +2223,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     const renderTikiSeat = (player: Player, row: 'back' | 'front') => (
                       <div
                         key={player.user_id}
-                        className="relative flex flex-col items-center w-[6.45rem] shrink-0"
+                        className="relative flex flex-col items-center w-[6.15rem] shrink-0"
                       >
                         <p
                           className="mb-1 max-w-full rounded-sm border border-[#8b6840] bg-[#5a3418]/85 px-2 py-0.5 text-center text-[10px] font-black text-white truncate shadow"
@@ -2229,7 +2233,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         </p>
                         <div
                           onClick={() => router.push(`/profile/${player.username}`)}
-                          className="relative z-10 w-[4.5rem] aspect-[3/4] rounded-md overflow-hidden border-2 border-amber-100 shadow-lg cursor-pointer bg-zinc-800"
+                          className="relative z-10 w-[4.3rem] aspect-[3/4] rounded-md overflow-hidden border-2 border-amber-100 shadow-lg cursor-pointer bg-zinc-800"
                           style={{ marginBottom: '-0.7rem' }}
                         >
                           {player.avatar_url ? (
@@ -2246,13 +2250,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
                     return (
                       <>
-                        <div className="absolute left-[12%] right-[12%] bottom-[34%] flex items-end justify-center gap-4 z-10">
+                        <div className="absolute left-[6%] right-[6%] bottom-[35%] flex items-end justify-center gap-3 z-10">
                           {backRow.map(player => renderTikiSeat(player, 'back'))}
                         </div>
                         {frontRow.length > 0 && (
                           <div
-                            className="absolute left-[14%] right-[14%] bottom-[20%] flex items-end justify-center gap-4 z-20"
-                            style={{ transform: 'translateX(2.25rem)' }}
+                            className="absolute left-[8%] right-[8%] bottom-[24%] flex items-end justify-center gap-3 z-20"
+                            style={{ transform: 'translateX(1.9rem)' }}
                           >
                             {frontRow.map(player => renderTikiSeat(player, 'front'))}
                           </div>

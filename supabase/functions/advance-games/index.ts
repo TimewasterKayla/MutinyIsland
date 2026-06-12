@@ -118,7 +118,8 @@ function shuffleArray<T>(items: T[]): T[] {
 function pickTribeBranding(keys: string[], existingNames: string[] = []) {
   const availableNames = shuffleArray(TRIBE_NAME_OPTIONS.filter(name => !existingNames.includes(name)));
   const fallbackNames = shuffleArray(TRIBE_NAME_OPTIONS);
-  const availableColors = shuffleArray(TRIBE_COLOR_OPTIONS);
+  const existingColors = existingNames.filter(name => name.startsWith("#"));
+  const availableColors = shuffleArray(TRIBE_COLOR_OPTIONS.filter(color => !existingColors.includes(color)));
   const fallbackColors = shuffleArray(TRIBE_COLOR_OPTIONS);
   const names: Record<string, string> = {};
   const colors: Record<string, string> = {};
@@ -294,7 +295,10 @@ async function advanceDay(supabase: DbClient, lobby: Lobby) {
       newAssignments[uid] = TRIBE_RARO;
     });
     if (!newTribeNames[TRIBE_RARO] || !newTribeColors[TRIBE_RARO]) {
-      const mergeBranding = pickTribeBranding([TRIBE_RARO], Object.values(newTribeNames));
+      const mergeBranding = pickTribeBranding([TRIBE_RARO], [
+        ...Object.values(newTribeNames),
+        ...Object.values(newTribeColors),
+      ]);
       newTribeNames = { ...newTribeNames, ...mergeBranding.names };
       newTribeColors = { ...newTribeColors, ...mergeBranding.colors };
     }
