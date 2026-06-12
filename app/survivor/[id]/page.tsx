@@ -1971,7 +1971,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               ) : isMerged ? (
                 <div>
                   <p className="text-center font-black uppercase tracking-widest text-lg mb-3" style={{ color: tribeColor(TRIBE_RARO) }}>
-                    ⚔ {tribeName(TRIBE_RARO)} Tribe
+                    {tribeName(TRIBE_RARO)} Tribe
                   </p>
                   {raroPlayers.length === 0 ? (
                     <p className="text-center italic text-zinc-600 text-sm">Loading players...</p>
@@ -2001,7 +2001,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 <div className="flex flex-col gap-6">
                   <div>
                     <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: tribeColor(TRIBE_1) }}>
-                      🔥 {tribeName(TRIBE_1)} Tribe
+                      {tribeName(TRIBE_1)} Tribe
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
                       {tribe1Players.map(p => (
@@ -2013,7 +2013,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   </div>
                   <div>
                     <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: tribeColor(TRIBE_2) }}>
-                      🌊 {tribeName(TRIBE_2)} Tribe
+                      {tribeName(TRIBE_2)} Tribe
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
                       {tribe2Players.map(p => (
@@ -2215,11 +2215,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   )}
 
                   {(() => {
+                    const useFireRow = tikiCourtPlayers.length >= 9
                     const backRowCount = tikiCourtPlayers.length <= 4
                       ? tikiCourtPlayers.length
-                      : Math.min(5, Math.ceil(tikiCourtPlayers.length / 2))
+                      : useFireRow
+                        ? 4
+                        : Math.min(5, Math.ceil(tikiCourtPlayers.length / 2))
+                    const middleRowCount = useFireRow ? 4 : tikiCourtPlayers.length - backRowCount
                     const backRow = tikiCourtPlayers.slice(0, backRowCount)
-                    const frontRow = tikiCourtPlayers.slice(backRowCount)
+                    const middleRow = tikiCourtPlayers.slice(backRowCount, backRowCount + middleRowCount)
+                    const fireRow = tikiCourtPlayers.slice(backRowCount + middleRowCount)
                     const renderTikiSeat = (player: Player, row: 'back' | 'front') => (
                       <div
                         key={player.user_id}
@@ -2253,19 +2258,24 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         <div className="absolute left-[6%] right-[6%] bottom-[35%] flex items-end justify-center gap-3 z-10">
                           {backRow.map(player => renderTikiSeat(player, 'back'))}
                         </div>
-                        {frontRow.length > 0 && (
+                        {middleRow.length > 0 && (
                           <div
                             className="absolute left-[8%] right-[8%] bottom-[24%] flex items-end justify-center gap-3 z-20"
                             style={{ transform: 'translateX(1.9rem)' }}
                           >
-                            {frontRow.map(player => renderTikiSeat(player, 'front'))}
+                            {middleRow.map(player => renderTikiSeat(player, 'front'))}
+                          </div>
+                        )}
+                        {fireRow.length > 0 && (
+                          <div className="absolute right-[11%] bottom-[9%] flex items-end justify-end gap-3 z-30">
+                            {fireRow.map(player => renderTikiSeat(player, 'front'))}
                           </div>
                         )}
                       </>
                     )
                   })()}
 
-                  <button className="absolute bottom-4 right-4 bg-orange-500 hover:bg-orange-600 text-white text-xs font-black uppercase tracking-wide px-4 py-2 rounded-lg shadow-lg cursor-pointer">
+                  <button className="absolute bottom-4 right-4 z-40 bg-orange-500 hover:bg-orange-600 text-white text-xs font-black uppercase tracking-wide px-4 py-2 rounded-lg shadow-lg cursor-pointer">
                     Advantage Menu
                   </button>
                 </div>
