@@ -66,6 +66,38 @@ const TRIBE_1_NAME    = 'Malolo'
 const TRIBE_2_NAME    = 'Kaliki'
 const TRIBE_RARO_NAME = 'Raro'
 
+const TRIBE_NAME_OPTIONS = [
+  'Makoa',
+  'Mana',
+  'Kai',
+  'Tapu',
+  'Ariki',
+  'Taonga',
+  'Rangi',
+  'Vakuna',
+  'Motu',
+  'Malolo',
+  'Raro',
+  'Aurora',
+]
+
+const TRIBE_COLOR_OPTIONS = [
+  '#dc2626',
+  '#ea580c',
+  '#d97706',
+  '#ca8a04',
+  '#65a30d',
+  '#16a34a',
+  '#059669',
+  '#0891b2',
+  '#2563eb',
+  '#4f46e5',
+  '#7c3aed',
+  '#c026d3',
+  '#db2777',
+  '#e11d48',
+]
+
 const WOOD_GRAIN = `
   repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(0,0,0,0.025) 3px, rgba(0,0,0,0.025) 4px),
   repeating-linear-gradient(0deg, transparent, transparent 5px, rgba(0,0,0,0.015) 5px, rgba(0,0,0,0.015) 6px)
@@ -84,6 +116,22 @@ function shuffleArray<T>(arr: T[]): T[] {
     [a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+function pickTribeBranding(keys: string[], existingNames: string[] = []): { names: Record<string, string>, colors: Record<string, string> } {
+  const availableNames = shuffleArray(TRIBE_NAME_OPTIONS.filter(name => !existingNames.includes(name)))
+  const fallbackNames = shuffleArray(TRIBE_NAME_OPTIONS)
+  const availableColors = shuffleArray(TRIBE_COLOR_OPTIONS)
+  const fallbackColors = shuffleArray(TRIBE_COLOR_OPTIONS)
+  const names: Record<string, string> = {}
+  const colors: Record<string, string> = {}
+
+  keys.forEach((key, index) => {
+    names[key] = availableNames[index] ?? fallbackNames[index % fallbackNames.length]
+    colors[key] = availableColors[index] ?? fallbackColors[index % fallbackColors.length]
+  })
+
+  return { names, colors }
 }
 
 function formatCountdown(ms: number): string {
@@ -324,6 +372,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const gameStarted      = !!lobby?.started_at
   const currentDay       = lobby?.current_day ?? 0
   const tribeAssign      = (lobby?.tribe_assignments ?? {}) as Record<string, string>
+  const tribeNames       = (lobby?.tribe_names ?? {}) as Record<string, string>
+  const tribeColors      = (lobby?.tribe_colors ?? {}) as Record<string, string>
   const votedOffIds      = (lobby?.voted_off ?? []) as string[]
   const challengeResults = (lobby?.challenge_results ?? []) as ChallengeResult[]
   const activePlayers    = players.filter(p => !votedOffIds.includes(p.user_id))
@@ -403,6 +453,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   function normalizeTribeKey(key?: string | null): string {
     const normalized = (key ?? '').toLowerCase().replace(/\s*tribe\s*$/i, '').trim()
+    const brandedEntry = Object.entries(tribeNames)
+      .find(([, name]) => name.toLowerCase() === normalized)
+    if (brandedEntry) return brandedEntry[0]
     if (normalized === TRIBE_1_NAME.toLowerCase()) return TRIBE_1
     if (normalized === TRIBE_2_NAME.toLowerCase()) return TRIBE_2
     if (normalized === TRIBE_RARO_NAME.toLowerCase()) return TRIBE_RARO
@@ -411,6 +464,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   function tribeName(key: string): string {
     const tribeKey = normalizeTribeKey(key)
+    if (tribeNames[tribeKey]) return tribeNames[tribeKey]
     if (tribeKey === TRIBE_1) return TRIBE_1_NAME
     if (tribeKey === TRIBE_2) return TRIBE_2_NAME
     if (tribeKey === TRIBE_RARO) return TRIBE_RARO_NAME
@@ -419,6 +473,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   function tribeColor(key: string): string {
     const tribeKey = normalizeTribeKey(key)
+    if (tribeColors[tribeKey]) return tribeColors[tribeKey]
     if (tribeKey === TRIBE_1) return '#b45309'
     if (tribeKey === TRIBE_2) return '#1d4ed8'
     if (tribeKey === TRIBE_RARO) return '#7c3aed'
@@ -942,6 +997,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     shuffled.forEach((uid, i) => {
       tribeAssignments[uid] = i < MAX_PLAYERS / 2 ? TRIBE_1 : TRIBE_2
     })
+    const initialBranding = pickTribeBranding([TRIBE_1, TRIBE_2])
 
     const now = new Date()
     const dayDurationMs = getDayDurationMs(lobbyData)
@@ -952,6 +1008,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       current_day: 1,
       day_ends_at: dayEndsAt.toISOString(),
       tribe_assignments: tribeAssignments,
+      tribe_names: initialBranding.names,
+      tribe_colors: initialBranding.colors,
       challenge_results: [],
       voted_off: [],
       status: 'active',
@@ -1058,9 +1116,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       .filter(uid => !newVotedOff.includes(uid))
 
     let newAssignments = l.tribe_assignments ?? {}
+    let newTribeNames = (l.tribe_names ?? {}) as Record<string, string>
+    let newTribeColors = (l.tribe_colors ?? {}) as Record<string, string>
     if (activeAfterElim.length <= MERGE_AT) {
       newAssignments = { ...newAssignments }
       activeAfterElim.forEach(uid => { newAssignments[uid] = TRIBE_RARO })
+      if (!newTribeNames[TRIBE_RARO] || !newTribeColors[TRIBE_RARO]) {
+        const mergeBranding = pickTribeBranding([TRIBE_RARO], Object.values(newTribeNames))
+        newTribeNames = { ...newTribeNames, ...mergeBranding.names }
+        newTribeColors = { ...newTribeColors, ...mergeBranding.colors }
+      }
     }
 
     const alreadyHasResult = newResults.some(r => r.day === prevDay && !!r.immunity_winner)
@@ -1105,6 +1170,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       challenge_results: newResults,
       voted_off: newVotedOff,
       tribe_assignments: newAssignments,
+      tribe_names: newTribeNames,
+      tribe_colors: newTribeColors,
       ...(enterFinale ? { is_finale: true } : {}),
     }).eq('id', id)
 
@@ -1899,8 +1966,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 </div>
               ) : isMerged ? (
                 <div>
-                  <p className="text-center font-black uppercase tracking-widest text-lg mb-3" style={{ color: '#7c3aed' }}>
-                    ⚔ {TRIBE_RARO_NAME} Tribe
+                  <p className="text-center font-black uppercase tracking-widest text-lg mb-3" style={{ color: tribeColor(TRIBE_RARO) }}>
+                    ⚔ {tribeName(TRIBE_RARO)} Tribe
                   </p>
                   {raroPlayers.length === 0 ? (
                     <p className="text-center italic text-zinc-600 text-sm">Loading players...</p>
@@ -1929,8 +1996,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               ) : (
                 <div className="flex flex-col gap-6">
                   <div>
-                    <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: '#b45309' }}>
-                      🔥 {TRIBE_1_NAME} Tribe
+                    <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: tribeColor(TRIBE_1) }}>
+                      🔥 {tribeName(TRIBE_1)} Tribe
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
                       {tribe1Players.map(p => (
@@ -1941,8 +2008,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     </div>
                   </div>
                   <div>
-                    <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: '#1d4ed8' }}>
-                      🌊 {TRIBE_2_NAME} Tribe
+                    <p className="font-black uppercase tracking-widest text-base mb-3 text-center" style={{ color: tribeColor(TRIBE_2) }}>
+                      🌊 {tribeName(TRIBE_2)} Tribe
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
                       {tribe2Players.map(p => (
@@ -1967,7 +2034,13 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     onClick={() => setCampPage(page)}
                     className={`px-4 py-2 rounded-lg font-bold text-sm transition border cursor-pointer uppercase tracking-widest ${campPage === page ? 'bg-amber-900 text-[#f0ddb0] border-amber-950' : 'bg-[#b8955a] text-zinc-800 border-[#a07840] hover:bg-[#a07840]'}`}
                   >
-                    {isMerged && page === 'Malolo Tribe' ? 'Raro Camp' : page}
+                    {isMerged && page === 'Malolo Tribe'
+                      ? `${tribeName(TRIBE_RARO)} Camp`
+                      : page === 'Malolo Tribe'
+                        ? `${tribeName(TRIBE_1)} Camp`
+                        : page === 'Kaliki Tribe'
+                          ? `${tribeName(TRIBE_2)} Camp`
+                          : page}
                   </button>
                 ))}
               </div>
@@ -1975,8 +2048,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               {campPage === 'Malolo Tribe' && (
                 <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
                   <div className="w-1/2 flex flex-col min-h-0">
-                    <h2 className="text-base font-black uppercase tracking-widest mb-3 shrink-0" style={{ color: isMerged ? '#7c3aed' : '#b45309' }}>
-                      {isMerged ? TRIBE_RARO_NAME : TRIBE_1_NAME} Tribe
+                    <h2 className="text-base font-black uppercase tracking-widest mb-3 shrink-0" style={{ color: isMerged ? tribeColor(TRIBE_RARO) : tribeColor(TRIBE_1) }}>
+                      {isMerged ? tribeName(TRIBE_RARO) : tribeName(TRIBE_1)} Tribe
                     </h2>
                     <div className="overflow-y-auto flex-1">
                       <div className="grid grid-cols-4 gap-2">
@@ -1988,7 +2061,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   </div>
                   <div className="w-1/2 flex flex-col min-h-0 h-full">
                     <h2 className="text-xl font-bold mb-3 shrink-0 uppercase tracking-widest">
-                      {isMerged ? `${TRIBE_RARO_NAME} Camp Chat` : `${TRIBE_1_NAME} Camp Chat`}
+                      {isMerged ? `${tribeName(TRIBE_RARO)} Camp Chat` : `${tribeName(TRIBE_1)} Camp Chat`}
                     </h2>
                     <ChatPanel
                       tribeKey={isMerged ? TRIBE_RARO : TRIBE_1}
@@ -2011,8 +2084,8 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               {campPage === 'Kaliki Tribe' && !isMerged && (
                 <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
                   <div className="w-1/2 flex flex-col min-h-0">
-                    <h2 className="text-base font-black uppercase tracking-widest mb-3 shrink-0" style={{ color: '#1d4ed8' }}>
-                      {TRIBE_2_NAME} Tribe
+                    <h2 className="text-base font-black uppercase tracking-widest mb-3 shrink-0" style={{ color: tribeColor(TRIBE_2) }}>
+                      {tribeName(TRIBE_2)} Tribe
                     </h2>
                     <div className="overflow-y-auto flex-1">
                       <div className="grid grid-cols-4 gap-2">
@@ -2023,7 +2096,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     </div>
                   </div>
                   <div className="w-1/2 flex flex-col min-h-0 h-full">
-                    <h2 className="text-xl font-bold mb-3 shrink-0 uppercase tracking-widest">{TRIBE_2_NAME} Camp Chat</h2>
+                    <h2 className="text-xl font-bold mb-3 shrink-0 uppercase tracking-widest">{tribeName(TRIBE_2)} Camp Chat</h2>
                     <ChatPanel
                       tribeKey={TRIBE_2}
                       canChat={iAmActive && myTribe === TRIBE_2}

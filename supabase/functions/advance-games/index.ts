@@ -15,6 +15,8 @@ type Lobby = {
   current_day: number | null;
   day_ends_at: string | null;
   tribe_assignments: Record<string, string> | null;
+  tribe_names: Record<string, string> | null;
+  tribe_colors: Record<string, string> | null;
   challenge_results: ChallengeResult[] | null;
   voted_off: string[] | null;
   is_finale: boolean | null;
@@ -45,6 +47,36 @@ const TRIBE_1 = "malolo";
 const TRIBE_2 = "kaliki";
 const TRIBE_RARO = "raro";
 const MAX_ADVANCES_PER_RUN = 200;
+const TRIBE_NAME_OPTIONS = [
+  "Makoa",
+  "Mana",
+  "Kai",
+  "Tapu",
+  "Ariki",
+  "Taonga",
+  "Rangi",
+  "Vakuna",
+  "Motu",
+  "Malolo",
+  "Raro",
+  "Aurora",
+];
+const TRIBE_COLOR_OPTIONS = [
+  "#dc2626",
+  "#ea580c",
+  "#d97706",
+  "#ca8a04",
+  "#65a30d",
+  "#16a34a",
+  "#059669",
+  "#0891b2",
+  "#2563eb",
+  "#4f46e5",
+  "#7c3aed",
+  "#c026d3",
+  "#db2777",
+  "#e11d48",
+];
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -72,6 +104,31 @@ function addMs(dateIso: string, ms: number): string {
 
 function randomItem<T>(items: T[]): T | null {
   return items.length > 0 ? items[Math.floor(Math.random() * items.length)] : null;
+}
+
+function shuffleArray<T>(items: T[]): T[] {
+  const shuffled = [...items];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function pickTribeBranding(keys: string[], existingNames: string[] = []) {
+  const availableNames = shuffleArray(TRIBE_NAME_OPTIONS.filter(name => !existingNames.includes(name)));
+  const fallbackNames = shuffleArray(TRIBE_NAME_OPTIONS);
+  const availableColors = shuffleArray(TRIBE_COLOR_OPTIONS);
+  const fallbackColors = shuffleArray(TRIBE_COLOR_OPTIONS);
+  const names: Record<string, string> = {};
+  const colors: Record<string, string> = {};
+
+  keys.forEach((key, index) => {
+    names[key] = availableNames[index] ?? fallbackNames[index % fallbackNames.length];
+    colors[key] = availableColors[index] ?? fallbackColors[index % fallbackColors.length];
+  });
+
+  return { names, colors };
 }
 
 async function resolveFinale(supabase: DbClient, lobby: Lobby, now: Date) {
@@ -229,11 +286,18 @@ async function advanceDay(supabase: DbClient, lobby: Lobby) {
 
   const activeAfterElim = Object.keys(assignments).filter(uid => !newVotedOff.includes(uid));
   let newAssignments = assignments;
+  let newTribeNames = lobby.tribe_names ?? {};
+  let newTribeColors = lobby.tribe_colors ?? {};
   if (activeAfterElim.length <= MERGE_AT) {
     newAssignments = { ...newAssignments };
     activeAfterElim.forEach(uid => {
       newAssignments[uid] = TRIBE_RARO;
     });
+    if (!newTribeNames[TRIBE_RARO] || !newTribeColors[TRIBE_RARO]) {
+      const mergeBranding = pickTribeBranding([TRIBE_RARO], Object.values(newTribeNames));
+      newTribeNames = { ...newTribeNames, ...mergeBranding.names };
+      newTribeColors = { ...newTribeColors, ...mergeBranding.colors };
+    }
   }
 
   const alreadyHasResult = newResults.some(r => r.day === prevDay && !!r.immunity_winner);
@@ -284,6 +348,8 @@ async function advanceDay(supabase: DbClient, lobby: Lobby) {
       voted_off: newVotedOff,
       voted_off_days: newVotedOffDays,
       tribe_assignments: newAssignments,
+      tribe_names: newTribeNames,
+      tribe_colors: newTribeColors,
       ...(enterFinale ? { is_finale: true } : {}),
     })
     .eq("id", lobby.id)
