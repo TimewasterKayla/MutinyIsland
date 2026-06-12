@@ -1470,7 +1470,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               </h1>
               {gameStarted && myTribe && (
                 <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{
-                  color: myTribe === TRIBE_1 ? '#f59e0b' : myTribe === TRIBE_2 ? '#60a5fa' : '#a78bfa'
+                  color: tribeColor(myTribe)
                 }}>
                   {tribeName(myTribe)} Tribe
                 </p>
@@ -2211,7 +2211,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   )}
 
                   {(() => {
-                    const backRowCount = tikiCourtPlayers.length <= 5
+                    const backRowCount = tikiCourtPlayers.length <= 4
                       ? tikiCourtPlayers.length
                       : Math.min(5, Math.ceil(tikiCourtPlayers.length / 2))
                     const backRow = tikiCourtPlayers.slice(0, backRowCount)
@@ -2219,7 +2219,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     const renderTikiSeat = (player: Player, row: 'back' | 'front') => (
                       <div
                         key={player.user_id}
-                        className="relative flex flex-col items-center w-full max-w-[6.45rem]"
+                        className="relative flex flex-col items-center w-[6.45rem] shrink-0"
                       >
                         <p
                           className="mb-1 max-w-full rounded-sm border border-[#8b6840] bg-[#5a3418]/85 px-2 py-0.5 text-center text-[10px] font-black text-white truncate shadow"
@@ -2229,7 +2229,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         </p>
                         <div
                           onClick={() => router.push(`/profile/${player.username}`)}
-                          className="relative z-10 w-[70%] aspect-[3/4] rounded-md overflow-hidden border-2 border-amber-100 shadow-lg cursor-pointer bg-zinc-800"
+                          className="relative z-10 w-[4.5rem] aspect-[3/4] rounded-md overflow-hidden border-2 border-amber-100 shadow-lg cursor-pointer bg-zinc-800"
                           style={{ marginBottom: '-0.7rem' }}
                         >
                           {player.avatar_url ? (
