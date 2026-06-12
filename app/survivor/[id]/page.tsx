@@ -2146,7 +2146,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                     const renderTikiSeat = (player: Player, row: 'back' | 'front') => (
                       <div
                         key={player.user_id}
-                        className={`relative flex flex-col items-center w-full ${row === 'back' ? 'max-w-[5.75rem]' : 'max-w-[6.45rem]'}`}
+                        className="relative flex flex-col items-center w-full max-w-[6.45rem]"
                       >
                         <p
                           className="mb-1 max-w-full rounded-sm border border-[#8b6840] bg-[#5a3418]/85 px-2 py-0.5 text-center text-[10px] font-black text-white truncate shadow"
@@ -2173,11 +2173,14 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
                     return (
                       <>
-                        <div className="absolute left-[14%] right-[14%] bottom-[27%] flex items-end justify-center gap-5 z-10">
+                        <div className="absolute left-[12%] right-[12%] bottom-[34%] flex items-end justify-center gap-4 z-10">
                           {backRow.map(player => renderTikiSeat(player, 'back'))}
                         </div>
                         {frontRow.length > 0 && (
-                          <div className="absolute left-[18%] right-[18%] bottom-[13%] flex items-end justify-center gap-6 z-20">
+                          <div
+                            className="absolute left-[14%] right-[14%] bottom-[20%] flex items-end justify-center gap-4 z-20"
+                            style={{ transform: 'translateX(2.25rem)' }}
+                          >
                             {frontRow.map(player => renderTikiSeat(player, 'front'))}
                           </div>
                         )}
