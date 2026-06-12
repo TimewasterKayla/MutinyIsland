@@ -396,6 +396,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
     normalizeTribeKey(tribeAssign[p.user_id]) === normalizeTribeKey(myTribe) &&
     p.user_id !== todayIndividualImmune
   )
+  const tikiCourtTribeKey = isMerged ? TRIBE_RARO : losingTribe
+  const tikiCourtPlayers = tikiCourtTribeKey
+    ? activePlayers.filter(p => isMerged || normalizeTribeKey(tribeAssign[p.user_id]) === tikiCourtTribeKey)
+    : []
 
   function normalizeTribeKey(key?: string | null): string {
     const normalized = (key ?? '').toLowerCase().replace(/\s*tribe\s*$/i, '').trim()
@@ -1330,6 +1334,16 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
   return (
     <>
+    <style>{`
+      @keyframes tribalWinnerGoldPulse {
+        0%, 100% {
+          text-shadow: 0 1px 2px rgba(0,0,0,0.95), 0 0 8px rgba(250,204,21,0.85);
+        }
+        50% {
+          text-shadow: 0 1px 2px rgba(0,0,0,0.95), 0 0 18px rgba(250,204,21,1), 0 0 28px rgba(245,158,11,0.8);
+        }
+      }
+    `}</style>
     <main
       className="min-h-screen text-white flex gap-5 px-5 pb-5 pt-8 justify-center"
       style={{ backgroundImage: `url(${activeTab === 'Tiki Court' ? '/tikicourt.jpg' : '/castawaywallpaper.jpg'})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}
@@ -2104,8 +2118,60 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
 
           {/* ── TIKI COURT TAB ── */}
           {activeTab === 'Tiki Court' && (
-            <div className="p-5 h-full text-zinc-900 flex">
-              <div className="flex-1" />
+            <div className="p-5 h-full text-zinc-900 flex gap-5">
+              <div className="flex-1 min-w-0">
+                <div
+                  className="relative w-full h-full min-h-[32rem] rounded-xl overflow-hidden border border-[#a07840] bg-cover bg-center"
+                  style={{ backgroundImage: "linear-gradient(rgba(0,0,0,0.16), rgba(0,0,0,0.28)), url('/tribalcouncil.png')" }}
+                >
+                  {tikiCourtTribeKey && (
+                    <h2
+                      className="absolute top-5 left-0 right-0 text-center text-3xl font-black uppercase tracking-widest z-10"
+                      style={{
+                        color: tribeColor(tikiCourtTribeKey),
+                        fontFamily: "'Survivant', serif",
+                        textShadow: `0 2px 3px rgba(0,0,0,0.95), 0 0 12px ${tribeColor(tikiCourtTribeKey)}`,
+                      }}
+                    >
+                      {tribeName(tikiCourtTribeKey)} Tribe
+                    </h2>
+                  )}
+
+                  <div
+                    className="absolute left-5 right-5 bottom-16 grid gap-x-3 gap-y-4 items-end justify-items-center"
+                    style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(tikiCourtPlayers.length, 1), 5)}, minmax(0, 1fr))` }}
+                  >
+                    {tikiCourtPlayers.map(player => (
+                      <div key={player.user_id} className="relative flex flex-col items-center w-full max-w-[6.75rem]">
+                        <div
+                          onClick={() => router.push(`/profile/${player.username}`)}
+                          className="relative z-10 w-[72%] aspect-[3/4] rounded-md overflow-hidden border-2 border-amber-100 shadow-lg cursor-pointer bg-zinc-800"
+                          style={{ marginBottom: '-0.65rem' }}
+                        >
+                          {player.avatar_url ? (
+                            <img src={player.avatar_url} alt={player.username} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-[#b8955a] flex items-center justify-center">
+                              <span className="text-lg font-black text-amber-900">{player.username.slice(0, 1).toUpperCase()}</span>
+                            </div>
+                          )}
+                        </div>
+                        <img src="/woodencrate.png" alt="" className="w-full aspect-[1.35/1] object-contain drop-shadow-xl" />
+                        <p
+                          className="mt-0.5 max-w-full truncate text-center text-[11px] font-black text-white"
+                          style={{ textShadow: '0 1px 2px rgba(0,0,0,1), 0 0 7px rgba(0,0,0,0.95)' }}
+                        >
+                          {player.username}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button className="absolute bottom-4 right-4 bg-orange-500 hover:bg-orange-600 text-white text-xs font-black uppercase tracking-wide px-4 py-2 rounded-lg shadow-lg cursor-pointer">
+                    Advantage Menu
+                  </button>
+                </div>
+              </div>
               <div className="w-1/2 rounded-xl p-5 border border-[#a07840] flex flex-col gap-4" style={{ background: '#b8955a', backgroundImage: WOOD_GRAIN_DARK }}>
                 <h2 className="text-2xl font-bold">Voting Booth</h2>
 
@@ -2276,14 +2342,17 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                         {voteHistoryNewestFirst.map((record, i) => {
                           const tribeKey = normalizeTribeKey(record.tribe_key)
                           const tribeTextColor = tribeColor(tribeKey)
-                          const redTextColor = '#991b1b'
+                          const votedOutTextColor = '#ef4444'
+                          const winnerTextColor = '#facc15'
                           const paleTextColor = '#fef3c7'
                           return (
                             <div
                               key={`${record.day}-${i}`}
                               className="shrink-0 rounded-xl p-3 border border-[#a07840] text-xs bg-cover bg-center overflow-hidden"
                               style={{
-                                backgroundImage: "linear-gradient(rgba(0,0,0,0.38), rgba(0,0,0,0.56)), url('/beachtorches.png')",
+                                backgroundImage: record.is_winner
+                                  ? "linear-gradient(rgba(0,0,0,0.28), rgba(0,0,0,0.5)), url('/beachfireworks.jpg')"
+                                  : "linear-gradient(rgba(0,0,0,0.38), rgba(0,0,0,0.56)), url('/beachtorches.png')",
                                 minHeight: '8.75rem',
                               }}
                             >
@@ -2295,7 +2364,12 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                               </p>
                               <p
                                 className="font-bold uppercase tracking-wide leading-tight mb-1"
-                                style={{ color: redTextColor, fontFamily: "'Survivant', serif", textShadow: textGlow('#ffffff') }}
+                                style={{
+                                  color: record.is_winner ? winnerTextColor : votedOutTextColor,
+                                  fontFamily: "'Survivant', serif",
+                                  textShadow: record.is_winner ? textGlow(winnerTextColor) : textGlow('#000000'),
+                                  animation: record.is_winner ? 'tribalWinnerGoldPulse 1.8s ease-in-out infinite' : undefined,
+                                }}
                               >
                                 {record.username} {record.is_winner ? 'wins' : 'voted off'}
                               </p>
