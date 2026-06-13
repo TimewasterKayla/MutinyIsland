@@ -115,18 +115,26 @@ function shuffleArray<T>(items: T[]): T[] {
   return shuffled;
 }
 
-function pickTribeBranding(keys: string[], existingNames: string[] = []) {
-  const availableNames = shuffleArray(TRIBE_NAME_OPTIONS.filter(name => !existingNames.includes(name)));
-  const fallbackNames = shuffleArray(TRIBE_NAME_OPTIONS);
-  const existingColors = existingNames.filter(name => name.startsWith("#"));
-  const availableColors = shuffleArray(TRIBE_COLOR_OPTIONS.filter(color => !existingColors.includes(color)));
-  const fallbackColors = shuffleArray(TRIBE_COLOR_OPTIONS);
+function pickTribeBranding(keys: string[], existingValues: string[] = []) {
+  const selectedNames = new Set(existingValues.filter(value => !value.startsWith("#")));
+  const selectedColors = new Set(existingValues.filter(value => value.startsWith("#")));
+  const namePool = shuffleArray(TRIBE_NAME_OPTIONS.filter(name => !selectedNames.has(name)));
+  const colorPool = shuffleArray(TRIBE_COLOR_OPTIONS.filter(color => !selectedColors.has(color)));
   const names: Record<string, string> = {};
   const colors: Record<string, string> = {};
 
-  keys.forEach((key, index) => {
-    names[key] = availableNames[index] ?? fallbackNames[index % fallbackNames.length];
-    colors[key] = availableColors[index] ?? fallbackColors[index % fallbackColors.length];
+  keys.forEach(key => {
+    const name = namePool.find(option => !selectedNames.has(option))
+      ?? TRIBE_NAME_OPTIONS.find(option => !selectedNames.has(option))
+      ?? TRIBE_NAME_OPTIONS[0];
+    const color = colorPool.find(option => !selectedColors.has(option))
+      ?? TRIBE_COLOR_OPTIONS.find(option => !selectedColors.has(option))
+      ?? TRIBE_COLOR_OPTIONS[0];
+
+    names[key] = name;
+    colors[key] = color;
+    selectedNames.add(name);
+    selectedColors.add(color);
   });
 
   return { names, colors };

@@ -27,6 +27,7 @@ type Message = {
 
 type Tab = 'Players' | 'Camp' | 'Challenge Beach' | 'Tiki Court' | 'Summary'
 type CampSubPage = 'Malolo Tribe' | 'Kaliki Tribe' | 'Jungle' | 'Water Well'
+type CampLocationKey = 'shelter' | 'beach' | 'jungle' | 'river' | 'mountain' | 'cave' | 'waterwell'
 
 type ChallengeResult = {
   day: number
@@ -107,6 +108,58 @@ const WOOD_GRAIN_DARK = `
   repeating-linear-gradient(0deg, transparent, transparent 5px, rgba(0,0,0,0.04) 5px, rgba(0,0,0,0.04) 6px)
 `
 
+const CAMP_LOCATIONS: Record<CampLocationKey, {
+  label: string
+  background?: string
+  actions: string[]
+  left?: CampLocationKey
+  right?: CampLocationKey
+}> = {
+  shelter: {
+    label: 'Shelter',
+    actions: ['Tribe Flag', 'Bulletin Board', 'Search Bag', 'Search for Idol'],
+    right: 'beach',
+  },
+  beach: {
+    label: 'Beach',
+    background: '/locationbeach.jpg',
+    actions: ['Message in a Bottle', 'Gather Coconuts', 'Collect Seashells'],
+    left: 'shelter',
+    right: 'jungle',
+  },
+  jungle: {
+    label: 'Jungle',
+    background: '/locationjungle2.jpg',
+    actions: ['Build a Spyshack', 'Search for Idol', 'Set Trap'],
+    left: 'beach',
+    right: 'river',
+  },
+  river: {
+    label: 'River',
+    background: '/locationriver.jpg',
+    actions: ['Catch Fish', 'Search for Idol'],
+    left: 'jungle',
+    right: 'mountain',
+  },
+  mountain: {
+    label: 'Mountain',
+    background: '/locationmountain.jpg',
+    actions: ['Predict Weather', 'Light Signal Fire', 'Search for Idol'],
+    left: 'river',
+    right: 'cave',
+  },
+  cave: {
+    label: 'Cave',
+    background: '/locationcave.jpg',
+    actions: ['Cave Paintings', 'Search for Idol', 'Offering to Ancient Deities'],
+    left: 'mountain',
+  },
+  waterwell: {
+    label: 'Water Well',
+    actions: ['Gather Water', 'Spread Rumors', 'Search for Idol'],
+  },
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function shuffleArray<T>(arr: T[]): T[] {
@@ -118,18 +171,26 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a
 }
 
-function pickTribeBranding(keys: string[], existingNames: string[] = []): { names: Record<string, string>, colors: Record<string, string> } {
-  const availableNames = shuffleArray(TRIBE_NAME_OPTIONS.filter(name => !existingNames.includes(name)))
-  const fallbackNames = shuffleArray(TRIBE_NAME_OPTIONS)
-  const existingColors = existingNames.filter(name => name.startsWith('#'))
-  const availableColors = shuffleArray(TRIBE_COLOR_OPTIONS.filter(color => !existingColors.includes(color)))
-  const fallbackColors = shuffleArray(TRIBE_COLOR_OPTIONS)
+function pickTribeBranding(keys: string[], existingValues: string[] = []): { names: Record<string, string>, colors: Record<string, string> } {
+  const selectedNames = new Set(existingValues.filter(value => !value.startsWith('#')))
+  const selectedColors = new Set(existingValues.filter(value => value.startsWith('#')))
+  const namePool = shuffleArray(TRIBE_NAME_OPTIONS.filter(name => !selectedNames.has(name)))
+  const colorPool = shuffleArray(TRIBE_COLOR_OPTIONS.filter(color => !selectedColors.has(color)))
   const names: Record<string, string> = {}
   const colors: Record<string, string> = {}
 
-  keys.forEach((key, index) => {
-    names[key] = availableNames[index] ?? fallbackNames[index % fallbackNames.length]
-    colors[key] = availableColors[index] ?? fallbackColors[index % fallbackColors.length]
+  keys.forEach(key => {
+    const name = namePool.find(option => !selectedNames.has(option))
+      ?? TRIBE_NAME_OPTIONS.find(option => !selectedNames.has(option))
+      ?? TRIBE_NAME_OPTIONS[0]
+    const color = colorPool.find(option => !selectedColors.has(option))
+      ?? TRIBE_COLOR_OPTIONS.find(option => !selectedColors.has(option))
+      ?? TRIBE_COLOR_OPTIONS[0]
+
+    names[key] = name
+    colors[key] = color
+    selectedNames.add(name)
+    selectedColors.add(color)
   })
 
   return { names, colors }
@@ -330,6 +391,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [isPlayerInLobby, setIsPlayerInLobby] = useState(false)
   const [activeTab,       setActiveTab]       = useState<Tab>('Players')
   const [campPage,        setCampPage]        = useState<CampSubPage>('Malolo Tribe')
+  const [campLocation,    setCampLocation]    = useState<CampLocationKey>('jungle')
 
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set())
   const [dotCount,      setDotCount]      = useState(1)
@@ -427,6 +489,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const campPages: CampSubPage[] = isMerged
     ? ['Malolo Tribe', 'Jungle', 'Water Well']
     : ['Malolo Tribe', 'Kaliki Tribe', 'Jungle', 'Water Well']
+  const visibleCampLocation = campPage === 'Water Well' ? CAMP_LOCATIONS.waterwell : CAMP_LOCATIONS[campLocation]
 
   useEffect(() => {
     if (campPageSetRef.current) return
@@ -2035,7 +2098,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                 {campPages.map(page => (
                   <button
                     key={page}
-                    onClick={() => setCampPage(page)}
+                    onClick={() => {
+                      setCampPage(page)
+                      if (page === 'Jungle') setCampLocation('jungle')
+                    }}
                     className={`px-4 py-2 rounded-lg font-bold text-sm transition border cursor-pointer uppercase tracking-widest ${campPage === page ? 'bg-amber-900 text-[#f0ddb0] border-amber-950' : 'bg-[#b8955a] text-zinc-800 border-[#a07840] hover:bg-[#a07840]'}`}
                   >
                     {isMerged && page === 'Malolo Tribe'
@@ -2120,8 +2186,72 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
               )}
 
               {(campPage === 'Jungle' || campPage === 'Water Well') && (
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-xl italic text-zinc-600">{campPage} — coming soon</p>
+                <div
+                  className="relative flex-1 min-h-0 overflow-hidden rounded-xl border-4 border-[#5b351b] shadow-[inset_0_0_30px_rgba(0,0,0,0.45)] bg-[#b8955a]"
+                  style={{
+                    backgroundImage: visibleCampLocation.background
+                      ? `linear-gradient(180deg, rgba(20,12,4,0.12), rgba(20,12,4,0.44)), url('${visibleCampLocation.background}')`
+                      : WOOD_GRAIN_DARK,
+                    backgroundSize: visibleCampLocation.background ? 'cover' : 'auto',
+                    backgroundPosition: 'center',
+                  }}
+                >
+                  <div className="absolute inset-x-0 top-5 flex justify-center pointer-events-none">
+                    <div className="px-5 py-2 rounded-lg border-2 border-[#5b351b] bg-[#2f1a0d]/80 shadow-lg">
+                      <h2 className="font-survivant text-3xl text-[#f7d28a] drop-shadow-[0_2px_2px_rgba(0,0,0,0.9)]">
+                        {visibleCampLocation.label}
+                      </h2>
+                    </div>
+                  </div>
+
+                  {campPage === 'Jungle' && visibleCampLocation.left && (
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCampLocation(visibleCampLocation.left!)}
+                        className="h-14 w-14 rounded-full bg-orange-600 text-white border-2 border-orange-900 shadow-lg text-3xl font-black hover:bg-orange-500 active:scale-95 transition"
+                        aria-label={`Go to ${CAMP_LOCATIONS[visibleCampLocation.left].label}`}
+                      >
+                        &lt;
+                      </button>
+                      <span className="px-3 py-1 rounded-md bg-[#2f1a0d]/85 text-[#f7d28a] text-xs font-black uppercase tracking-widest border border-[#5b351b] shadow">
+                        {CAMP_LOCATIONS[visibleCampLocation.left].label}
+                      </span>
+                    </div>
+                  )}
+
+                  {campPage === 'Jungle' && visibleCampLocation.right && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCampLocation(visibleCampLocation.right!)}
+                        className="h-14 w-14 rounded-full bg-orange-600 text-white border-2 border-orange-900 shadow-lg text-3xl font-black hover:bg-orange-500 active:scale-95 transition"
+                        aria-label={`Go to ${CAMP_LOCATIONS[visibleCampLocation.right].label}`}
+                      >
+                        &gt;
+                      </button>
+                      <span className="px-3 py-1 rounded-md bg-[#2f1a0d]/85 text-[#f7d28a] text-xs font-black uppercase tracking-widest border border-[#5b351b] shadow">
+                        {CAMP_LOCATIONS[visibleCampLocation.right].label}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="absolute inset-x-6 bottom-5 flex flex-wrap justify-center gap-3">
+                    <div className="basis-full flex justify-center mb-1">
+                      <span className="px-3 py-1 rounded-full bg-[#2f1a0d]/85 text-[#f7d28a] border border-[#5b351b] text-xs font-black uppercase tracking-widest shadow">
+                        Actions 3/3
+                      </span>
+                    </div>
+                    {visibleCampLocation.actions.map(action => (
+                      <button
+                        key={action}
+                        type="button"
+                        className="px-4 py-2 rounded-lg bg-orange-600 text-white border-2 border-orange-900 shadow-lg text-sm font-black uppercase tracking-widest hover:bg-orange-500 active:scale-95 transition"
+                      >
+                        {action}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
