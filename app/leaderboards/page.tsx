@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -26,7 +27,7 @@ type PlayerSection =
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const RANK_LIST = ["Peasant"] // extend as you add more ranks
+const RANK_LIST = ["Peasant"]
 
 const MEDAL: Record<number, string> = { 0: "🥇", 1: "🥈", 2: "🥉" }
 
@@ -82,6 +83,8 @@ function LeaderboardTable({
   loading,
   formatValue,
 }: LeaderboardTableProps) {
+  const router = useRouter()
+
   return (
     <div className="rounded-xl border border-white/8 overflow-hidden bg-zinc-900/60">
       {/* Header */}
@@ -109,7 +112,10 @@ function LeaderboardTable({
                 {MEDAL[i] ?? i + 1}
               </span>
               <Avatar src={p.avatar} username={p.username} />
-              <span className="flex-1 text-sm text-white font-medium truncate">
+              <span
+                className="flex-1 text-sm text-white font-medium truncate hover:underline cursor-pointer"
+                onClick={() => router.push(`/profile/${p.username}`)}
+              >
                 {p.username}
               </span>
               <span
@@ -191,7 +197,7 @@ function SectionBtn({
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
         active
           ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40"
           : "bg-zinc-800/70 text-zinc-400 hover:text-white hover:bg-zinc-700/70"
@@ -224,7 +230,6 @@ function PlayersTab() {
     fetchAll()
   }, [])
 
-  // Sort by the relevant column
   const sorted = (key: keyof Profile) =>
     [...players].sort((a, b) => (b[key] as number) - (a[key] as number)).slice(0, 20)
 
@@ -238,8 +243,8 @@ function PlayersTab() {
 
   return (
     <div className="space-y-6">
-      {/* Section nav */}
-      <div className="flex flex-wrap gap-2">
+      {/* Section nav — centered */}
+      <div className="flex flex-wrap justify-center gap-2">
         {sections.map((s) => (
           <SectionBtn key={s.key} active={section === s.key} onClick={() => setSection(s.key)}>
             {s.label}
@@ -249,8 +254,8 @@ function PlayersTab() {
 
       {/* Content */}
       {section === "crowns" && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-white">👑 Crowns Leaderboard</h2>
+        <div className="space-y-3 text-center">
+          <h2 className="text-lg font-semibold text-white">👑 Crowns Leaderboard 👑</h2>
           <p className="text-sm text-zinc-500">Players ranked by total crowns earned.</p>
           <LeaderboardTable
             players={sorted("crowns")}
@@ -262,8 +267,8 @@ function PlayersTab() {
       )}
 
       {section === "wins" && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-white">🏆 Overall Wins Leaderboard</h2>
+        <div className="space-y-3 text-center">
+          <h2 className="text-lg font-semibold text-white">🏆 Overall Wins Leaderboard 🏆</h2>
           <p className="text-sm text-zinc-500">Total game wins across all titles.</p>
           <LeaderboardTable
             players={sorted("cc_seasons_won")}
@@ -275,16 +280,16 @@ function PlayersTab() {
       )}
 
       {section === "ranks" && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-white">🎖️ Rank Distribution</h2>
+        <div className="space-y-3 text-center">
+          <h2 className="text-lg font-semibold text-white">🎖️ Rank Distribution 🎖️</h2>
           <p className="text-sm text-zinc-500">How many players are in each rank tier.</p>
           <RankDistribution players={players} loading={loading} />
         </div>
       )}
 
       {section === "streak" && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-white">🔥 Login Streak Leaderboard</h2>
+        <div className="space-y-3 text-center">
+          <h2 className="text-lg font-semibold text-white">🔥 Login Streak Leaderboard 🔥</h2>
           <p className="text-sm text-zinc-500">Players with the longest active daily login streaks.</p>
           <LeaderboardTable
             players={sorted("login_streak")}
@@ -323,62 +328,66 @@ function CastawayCoveSection({
     { key: "challenges", label: "Challenges Won" },
   ]
 
-  const config: Record<CCSub, { valueKey: keyof Profile; valueLabel: string; desc: string }> = {
+  const config: Record<CCSub, { valueKey: keyof Profile; valueLabel: string; desc: string; title: string }> = {
     seasons: {
       valueKey: "cc_seasons_won",
       valueLabel: "Seasons",
       desc: "Players who have survived to win the most Castaway Cove seasons.",
+      title: "🏝️ Seasons Won 🏝️",
     },
     votes: {
       valueKey: "cc_votes_received",
       valueLabel: "Votes",
       desc: "Players who have received the most votes across all Castaway Cove games.",
+      title: "🏝️ Votes Received 🏝️",
     },
     challenges: {
       valueKey: "cc_challenges_won",
       valueLabel: "Challenges",
       desc: "Players who have won the most individual challenges in Castaway Cove.",
+      title: "🏝️ Challenges Won 🏝️",
     },
   }
 
-  const { valueKey, valueLabel, desc } = config[sub]
+  const { valueKey, valueLabel, desc, title } = config[sub]
 
   return (
     <div className="space-y-4">
-      {/* Game header */}
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">🏝️</span>
-        <div>
-          <h2 className="text-lg font-semibold text-white">Castaway Cove Leaderboards</h2>
-          <p className="text-sm text-zinc-500">Stats from all Castaway Cove seasons.</p>
+      {/* Game header — centered */}
+      <div className="flex flex-col items-center gap-1 text-center">
+        <h2 className="text-lg font-semibold text-white">🏝️ Castaway Cove Leaderboards 🏝️</h2>
+        <p className="text-sm text-zinc-500">Stats from all Castaway Cove seasons.</p>
+      </div>
+
+      {/* Sub-nav — centered */}
+      <div className="flex justify-center">
+        <div className="flex gap-2 p-1 bg-zinc-800/50 rounded-xl w-fit">
+          {subs.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setSub(s.key)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                sub === s.key
+                  ? "bg-zinc-600 text-white"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Sub-nav */}
-      <div className="flex gap-2 p-1 bg-zinc-800/50 rounded-xl w-fit">
-        {subs.map((s) => (
-          <button
-            key={s.key}
-            onClick={() => setSub(s.key)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              sub === s.key
-                ? "bg-zinc-600 text-white"
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
+      <div className="space-y-3 text-center">
+        <h3 className="text-base font-semibold text-white">{title}</h3>
+        <p className="text-sm text-zinc-500">{desc}</p>
+        <LeaderboardTable
+          players={sorted(valueKey)}
+          valueKey={valueKey}
+          valueLabel={valueLabel}
+          loading={loading}
+        />
       </div>
-
-      <p className="text-sm text-zinc-500">{desc}</p>
-
-      <LeaderboardTable
-        players={sorted(valueKey)}
-        valueKey={valueKey}
-        valueLabel={valueLabel}
-        loading={loading}
-      />
     </div>
   )
 }
@@ -414,23 +423,33 @@ export default function LeaderboardsPage() {
         backgroundAttachment: "fixed",
       }}
     >
-      {/* Dark overlay container */}
+      {/* Dark overlay */}
       <div className="min-h-screen bg-black/50">
         <div className="max-w-3xl mx-auto px-6 md:px-10 py-10">
-          {/* Page header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold tracking-tight">Leaderboards</h1>
+
+          {/* Page header — centered, Survivant font, larger, drop shadow */}
+          <div className="mb-8 text-center">
+            <h1
+              className="text-5xl font-bold tracking-tight"
+              style={{
+                fontFamily: "Survivant, serif",
+                textShadow: "0 2px 8px rgba(0,0,0,1), 0 1px 2px rgba(0,0,0,1)",
+              }}
+            >
+              Leaderboards
+            </h1>
           </div>
 
           {/* Dark grey content container */}
           <div className="bg-zinc-900/90 rounded-2xl p-6 md:p-8 shadow-2xl">
+
             {/* Top-level tabs — centered */}
             <div className="flex justify-center gap-2 mb-8">
               {(["players", "guilds"] as Tab[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
-                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold capitalize transition-all ${
+                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold capitalize transition-all cursor-pointer ${
                     tab === t
                       ? "bg-white text-black shadow"
                       : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
