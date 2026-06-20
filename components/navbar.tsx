@@ -94,6 +94,19 @@ export default function Navbar() {
     router.push('/')
   }
 
+  function handleLeaderboardClick() {
+    // Start music on user interaction so browser allows autoplay
+    const existing = (window as any).__leaderboardAudio
+    if (!existing || existing.paused) {
+      const audio = new Audio('/throneroom.mp3')
+      audio.loop = true
+      audio.volume = 0.4
+      audio.play().catch(() => {})
+      ;(window as any).__leaderboardAudio = audio
+    }
+    router.push('/leaderboards')
+  }
+
   const btnStyle =
     'px-3 py-2 rounded-lg bg-black/40 border border-yellow-700 hover:bg-yellow-700/40 active:scale-95 transition cursor-pointer text-white shadow-md backdrop-blur-sm text-sm whitespace-nowrap'
 
@@ -125,7 +138,7 @@ export default function Navbar() {
         <button onClick={() => router.push('/games')} className={btnStyle}>Games</button>
         <button onClick={() => router.push('/shop')} className={btnStyle}>Shop</button>
         <button onClick={() => router.push('/map')} className={btnStyle}>Map</button>
-        <button onClick={() => router.push('/leaderboards')} className={btnStyle}>Leaderboards</button>
+        <button onClick={handleLeaderboardClick} className={btnStyle}>Leaderboards</button>
         {username && (
           <button onClick={() => router.push(`/profile/${username}`)} className={btnStyle}>
             {username}'s Profile

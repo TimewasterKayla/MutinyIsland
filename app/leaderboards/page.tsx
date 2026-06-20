@@ -254,9 +254,9 @@ function PlayersTab() {
 
       {/* Content */}
       {section === "crowns" && (
-        <div className="space-y-3 text-center">
-          <h2 className="text-lg font-semibold text-white">👑 Crowns Leaderboard 👑</h2>
-          <p className="text-sm text-zinc-500">Players ranked by total crowns earned.</p>
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-white text-center">👑 Crowns Leaderboard 👑</h2>
+          <p className="text-sm text-zinc-500 text-center">Players ranked by total crowns earned.</p>
           <LeaderboardTable
             players={sorted("crowns")}
             valueKey="crowns"
@@ -267,9 +267,9 @@ function PlayersTab() {
       )}
 
       {section === "wins" && (
-        <div className="space-y-3 text-center">
-          <h2 className="text-lg font-semibold text-white">🏆 Overall Wins Leaderboard 🏆</h2>
-          <p className="text-sm text-zinc-500">Total game wins across all titles.</p>
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-white text-center">🏆 Overall Wins Leaderboard 🏆</h2>
+          <p className="text-sm text-zinc-500 text-center">Total game wins across all titles.</p>
           <LeaderboardTable
             players={sorted("cc_seasons_won")}
             valueKey="cc_seasons_won"
@@ -280,17 +280,17 @@ function PlayersTab() {
       )}
 
       {section === "ranks" && (
-        <div className="space-y-3 text-center">
-          <h2 className="text-lg font-semibold text-white">🎖️ Rank Distribution 🎖️</h2>
-          <p className="text-sm text-zinc-500">How many players are in each rank tier.</p>
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-white text-center">🎖️ Rank Distribution 🎖️</h2>
+          <p className="text-sm text-zinc-500 text-center">How many players are in each rank tier.</p>
           <RankDistribution players={players} loading={loading} />
         </div>
       )}
 
       {section === "streak" && (
-        <div className="space-y-3 text-center">
-          <h2 className="text-lg font-semibold text-white">🔥 Login Streak Leaderboard 🔥</h2>
-          <p className="text-sm text-zinc-500">Players with the longest active daily login streaks.</p>
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-white text-center">🔥 Login Streak Leaderboard 🔥</h2>
+          <p className="text-sm text-zinc-500 text-center">Players with the longest active daily login streaks.</p>
           <LeaderboardTable
             players={sorted("login_streak")}
             valueKey="login_streak"
@@ -354,7 +354,7 @@ function CastawayCoveSection({
   return (
     <div className="space-y-4">
       {/* Game header — centered */}
-      <div className="flex flex-col items-center gap-1 text-center">
+      <div className="text-center">
         <h2 className="text-lg font-semibold text-white">🏝️ Castaway Cove Leaderboards 🏝️</h2>
         <p className="text-sm text-zinc-500">Stats from all Castaway Cove seasons.</p>
       </div>
@@ -378,9 +378,9 @@ function CastawayCoveSection({
         </div>
       </div>
 
-      <div className="space-y-3 text-center">
-        <h3 className="text-base font-semibold text-white">{title}</h3>
-        <p className="text-sm text-zinc-500">{desc}</p>
+      <div className="space-y-3">
+        <h3 className="text-base font-semibold text-white text-center">{title}</h3>
+        <p className="text-sm text-zinc-500 text-center">{desc}</p>
         <LeaderboardTable
           players={sorted(valueKey)}
           valueKey={valueKey}
@@ -413,6 +413,18 @@ type Tab = "players" | "guilds"
 export default function LeaderboardsPage() {
   const [tab, setTab] = useState<Tab>("players")
 
+  // Stop music when navigating away
+  useEffect(() => {
+    return () => {
+      const audio = (window as any).__leaderboardAudio
+      if (audio) {
+        audio.pause()
+        audio.src = ""
+        delete (window as any).__leaderboardAudio
+      }
+    }
+  }, [])
+
   return (
     <main
       className="min-h-screen text-white"
@@ -427,7 +439,7 @@ export default function LeaderboardsPage() {
       <div className="min-h-screen bg-black/50">
         <div className="max-w-3xl mx-auto px-6 md:px-10 py-10">
 
-          {/* Page header — centered, Survivant font, larger, drop shadow */}
+          {/* Page header */}
           <div className="mb-8 text-center">
             <h1
               className="text-5xl font-bold tracking-tight"
@@ -460,7 +472,6 @@ export default function LeaderboardsPage() {
               ))}
             </div>
 
-            {/* Tab content */}
             {tab === "players" ? <PlayersTab /> : <GuildsTab />}
           </div>
         </div>
