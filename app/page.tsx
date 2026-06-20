@@ -48,6 +48,24 @@ export default function HomePage() {
   }
 
   // -----------------------------
+  // USERNAME VALIDATION
+  // -----------------------------
+  function validateUsername(name: string): string | null {
+    if (name.includes(' ')) return 'Username cannot contain a space'
+    if (name.length < 2) return 'Username contains too few characters'
+    if (name.length > 16) return 'Username contains too many characters'
+    if (!/^[a-zA-Z0-9]+$/.test(name)) return 'Username contains invalid special characters'
+
+    const banned = ['bitch', 'fuck', 'nigga', 'nigger', 'cunt', 'pussy', 'cock']
+    const lower = name.toLowerCase()
+    for (const word of banned) {
+      if (lower.includes(word)) return 'Username contains explicit language'
+    }
+
+    return null
+  }
+
+  // -----------------------------
   // SIGN UP → show "check your email"
   // -----------------------------
   async function signUp() {
@@ -56,6 +74,13 @@ export default function HomePage() {
 
     if (!email || !password || !username) {
       setErrorMessage('Please fill in all fields')
+      setLoading(false)
+      return
+    }
+
+    const usernameError = validateUsername(username)
+    if (usernameError) {
+      setErrorMessage(usernameError)
       setLoading(false)
       return
     }
