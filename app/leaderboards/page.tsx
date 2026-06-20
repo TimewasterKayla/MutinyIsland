@@ -86,9 +86,9 @@ function LeaderboardTable({
     <div className="rounded-xl border border-white/8 overflow-hidden bg-zinc-900/60">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-white/8 bg-white/3">
-        <span className="w-6 text-xs text-zinc-500 font-mono">#</span>
-        <span className="flex-1 text-xs text-zinc-500 uppercase tracking-widest">Player</span>
-        <span className="text-xs text-zinc-500 uppercase tracking-widest">{valueLabel}</span>
+        <span className="w-6 text-xs font-mono text-white font-semibold" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>#</span>
+        <span className="flex-1 text-xs uppercase tracking-widest text-white font-semibold" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>Player</span>
+        <span className="text-xs uppercase tracking-widest text-white font-semibold" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>{valueLabel}</span>
       </div>
 
       {loading ? (
@@ -140,8 +140,8 @@ function RankDistribution({ players, loading }: { players: Profile[]; loading: b
   return (
     <div className="rounded-xl border border-white/8 overflow-hidden bg-zinc-900/60">
       <div className="flex items-center gap-3 px-4 py-2 border-b border-white/8 bg-white/3">
-        <span className="flex-1 text-xs text-zinc-500 uppercase tracking-widest">Rank</span>
-        <span className="text-xs text-zinc-500 uppercase tracking-widest">Players</span>
+        <span className="flex-1 text-xs uppercase tracking-widest text-white font-semibold" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>Rank</span>
+        <span className="text-xs uppercase tracking-widest text-white font-semibold" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>Players</span>
       </div>
 
       {loading ? (
@@ -405,34 +405,47 @@ export default function LeaderboardsPage() {
   const [tab, setTab] = useState<Tab>("players")
 
   return (
-    <main className="min-h-screen p-6 md:p-10 text-white max-w-3xl mx-auto">
-      {/* Page header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Leaderboards</h1>
-        <p className="text-zinc-400 mt-1 text-sm">
-          The best players and guilds, ranked.
-        </p>
-      </div>
+    <main
+      className="min-h-screen text-white"
+      style={{
+        backgroundImage: "url('/throneroom.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+      }}
+    >
+      {/* Dark overlay container */}
+      <div className="min-h-screen bg-black/50">
+        <div className="max-w-3xl mx-auto px-6 md:px-10 py-10">
+          {/* Page header */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold tracking-tight">Leaderboards</h1>
+          </div>
 
-      {/* Top-level tabs */}
-      <div className="flex gap-2 mb-8">
-        {(["players", "guilds"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-6 py-2.5 rounded-xl text-sm font-semibold capitalize transition-all ${
-              tab === t
-                ? "bg-white text-black shadow"
-                : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
-            }`}
-          >
-            {t === "players" ? "👤 Players" : "⚔️ Guilds"}
-          </button>
-        ))}
-      </div>
+          {/* Dark grey content container */}
+          <div className="bg-zinc-900/90 rounded-2xl p-6 md:p-8 shadow-2xl">
+            {/* Top-level tabs — centered */}
+            <div className="flex justify-center gap-2 mb-8">
+              {(["players", "guilds"] as Tab[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold capitalize transition-all ${
+                    tab === t
+                      ? "bg-white text-black shadow"
+                      : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
+                  }`}
+                >
+                  {t === "players" ? "👤 Players" : "⚔️ Guilds"}
+                </button>
+              ))}
+            </div>
 
-      {/* Tab content */}
-      {tab === "players" ? <PlayersTab /> : <GuildsTab />}
+            {/* Tab content */}
+            {tab === "players" ? <PlayersTab /> : <GuildsTab />}
+          </div>
+        </div>
+      </div>
     </main>
   )
 }
