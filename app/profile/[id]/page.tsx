@@ -1522,13 +1522,11 @@ export default function ProfilePage({
             {/* ======================== POSTS TAB ======================== */}
             {activeTab === 'posts' && (
               <div className="flex gap-3">
-                {/* Post list — narrowed so it doesn't overlap the buttons */}
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-3xl font-bold">Posts</h2>
+                  <h2 className="text-3xl font-bold mb-2">Posts</h2>
 
-                  {/* PAGINATION — shown above the list */}
                   {visibleUserPosts.length > PROFILE_POSTS_PER_PAGE && (
-                    <div className="flex items-center justify-end gap-1.5 mb-1">
+                    <div className="flex items-center justify-end gap-1.5 mb-2">
                       {hasPrevUserPosts && (
                         <button
                           onClick={() => setPostsPage((p) => p - 1)}
@@ -1595,7 +1593,14 @@ export default function ProfilePage({
                 </div>
 
                 {/* View toggle buttons — stacked vertically on the far right */}
-                <div className="flex flex-col gap-2 flex-shrink-0">
+                <div
+                  className="flex flex-col gap-2 flex-shrink-0"
+                  style={{
+                    marginTop: visibleUserPosts.length > PROFILE_POSTS_PER_PAGE
+                      ? 'calc(2rem + 1.75rem + 0.5rem)'
+                      : '2rem',
+                  }}
+                >
                   <button
                     onClick={() => switchPostsView('all')}
                     className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
