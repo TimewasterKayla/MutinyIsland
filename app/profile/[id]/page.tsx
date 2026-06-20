@@ -1598,7 +1598,7 @@ export default function ProfilePage({
                   style={{
                     marginTop: visibleUserPosts.length > PROFILE_POSTS_PER_PAGE
                       ? 'calc(2rem + 1.75rem + 0.5rem)'
-                      : '2rem',
+                      : '3.5rem',
                   }}
                 >
                   <button
