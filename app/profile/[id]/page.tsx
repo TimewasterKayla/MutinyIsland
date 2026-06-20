@@ -1521,106 +1521,102 @@ export default function ProfilePage({
 
             {/* ======================== POSTS TAB ======================== */}
             {activeTab === 'posts' && (
-              <div className="flex gap-3">
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-3xl font-bold mb-2">Posts</h2>
+              <div>
+                <h2 className="text-3xl font-bold mb-2">Posts</h2>
 
-                  {visibleUserPosts.length > PROFILE_POSTS_PER_PAGE && (
-                    <div className="flex items-center justify-end gap-1.5 mb-2">
-                      {hasPrevUserPosts && (
-                        <button
-                          onClick={() => setPostsPage((p) => p - 1)}
-                          className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
-                        >
-                          ‹
-                        </button>
-                      )}
-                      <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-600 text-white select-none">
-                        {postsPage}
-                      </div>
-                      {hasNextUserPosts ? (
-                        <button
-                          onClick={() => setPostsPage((p) => p + 1)}
-                          className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
-                        >
-                          ›
-                        </button>
-                      ) : (
-                        <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-zinc-700 text-zinc-500 select-none cursor-not-allowed">
-                          ›
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {pageUserPosts.length === 0 ? (
-                    <div className="text-zinc-400 italic">No posts yet.</div>
-                  ) : (
-                    <ul className="flex flex-col">
-                      {pageUserPosts.map((post, index) => (
-                        <li key={post.id} className="w-full">
-                          <div
-                            className={`w-full bg-zinc-800 border-x border-zinc-700 px-4 py-2.5 flex items-center justify-between gap-3
-                              ${index === 0 ? 'border-t' : ''}
-                              ${index === pageUserPosts.length - 1 ? 'border-b' : 'border-b border-zinc-700'}
-                            `}
+                <div className="flex gap-3 items-start">
+                  {/* Post list */}
+                  <div className="flex-1 min-w-0">
+                    {visibleUserPosts.length > PROFILE_POSTS_PER_PAGE && (
+                      <div className="flex items-center justify-end gap-1.5 mb-2">
+                        {hasPrevUserPosts && (
+                          <button
+                            onClick={() => setPostsPage((p) => p - 1)}
+                            className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
                           >
-                            <button
-                              onClick={() => router.push(`/posts/${post.id}`)}
-                              className="text-white underline underline-offset-2 decoration-zinc-500 hover:text-green-400 transition cursor-pointer text-left text-sm font-semibold truncate"
-                            >
-                              {post.title || 'Untitled'}
-                            </button>
-
-                            <div className="flex items-center gap-3 flex-shrink-0 text-xs text-zinc-400">
-                              <span className="flex items-center gap-1">
-                                <span>❤️</span>
-                                <span>{post.likes || 0}</span>
-                              </span>
-                              <span>
-                                {new Date(post.created_at).toLocaleDateString('en-US', {
-                                  month: '2-digit',
-                                  day: '2-digit',
-                                  year: '2-digit',
-                                })}
-                              </span>
-                            </div>
+                            ‹
+                          </button>
+                        )}
+                        <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-600 text-white select-none">
+                          {postsPage}
+                        </div>
+                        {hasNextUserPosts ? (
+                          <button
+                            onClick={() => setPostsPage((p) => p + 1)}
+                            className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
+                          >
+                            ›
+                          </button>
+                        ) : (
+                          <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-zinc-700 text-zinc-500 select-none cursor-not-allowed">
+                            ›
                           </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                        )}
+                      </div>
+                    )}
 
-                {/* View toggle buttons — stacked vertically on the far right */}
-                <div
-                  className="flex flex-col gap-2 flex-shrink-0"
-                  style={{
-                    marginTop: visibleUserPosts.length > PROFILE_POSTS_PER_PAGE
-                      ? 'calc(2rem + 1.75rem + 0.5rem)'
-                      : '3.5rem',
-                  }}
-                >
-                  <button
-                    onClick={() => switchPostsView('all')}
-                    className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
-                      postsView === 'all'
-                        ? 'bg-teal-500 text-white shadow-md'
-                        : 'bg-zinc-800 hover:bg-zinc-700 text-teal-300 border border-teal-600/50'
-                    }`}
-                  >
-                    All Posts
-                  </button>
-                  <button
-                    onClick={() => switchPostsView('top')}
-                    className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
-                      postsView === 'top'
-                        ? 'bg-teal-500 text-white shadow-md'
-                        : 'bg-zinc-800 hover:bg-zinc-700 text-teal-300 border border-teal-600/50'
-                    }`}
-                  >
-                    Top Posts
-                  </button>
+                    {pageUserPosts.length === 0 ? (
+                      <div className="text-zinc-400 italic">No posts yet.</div>
+                    ) : (
+                      <ul className="flex flex-col">
+                        {pageUserPosts.map((post, index) => (
+                          <li key={post.id} className="w-full">
+                            <div
+                              className={`w-full bg-zinc-800 border-x border-zinc-700 px-4 py-2.5 flex items-center justify-between gap-3
+                                ${index === 0 ? 'border-t' : ''}
+                                ${index === pageUserPosts.length - 1 ? 'border-b' : 'border-b border-zinc-700'}
+                              `}
+                            >
+                              <button
+                                onClick={() => router.push(`/posts/${post.id}`)}
+                                className="text-white underline underline-offset-2 decoration-zinc-500 hover:text-green-400 transition cursor-pointer text-left text-sm font-semibold truncate"
+                              >
+                                {post.title || 'Untitled'}
+                              </button>
+
+                              <div className="flex items-center gap-3 flex-shrink-0 text-xs text-zinc-400">
+                                <span className="flex items-center gap-1">
+                                  <span>❤️</span>
+                                  <span>{post.likes || 0}</span>
+                                </span>
+                                <span>
+                                  {new Date(post.created_at).toLocaleDateString('en-US', {
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    year: '2-digit',
+                                  })}
+                                </span>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* View toggle buttons */}
+                  <div className="flex flex-col gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => switchPostsView('all')}
+                      className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
+                        postsView === 'all'
+                          ? 'bg-teal-500 text-white shadow-md'
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-teal-300 border border-teal-600/50'
+                      }`}
+                    >
+                      All Posts
+                    </button>
+                    <button
+                      onClick={() => switchPostsView('top')}
+                      className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
+                        postsView === 'top'
+                          ? 'bg-teal-500 text-white shadow-md'
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-teal-300 border border-teal-600/50'
+                      }`}
+                    >
+                      Top Posts
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
