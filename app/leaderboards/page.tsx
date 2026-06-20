@@ -1,10 +1,438 @@
-export default function LeaderboardsPage() {
+"use client"
+
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Profile {
+  id: string
+  username: string
+  avatar: string | null
+  rank: string | null
+  crowns: number
+  login_streak: number
+  cc_seasons_won: number
+  cc_votes_received: number
+  cc_challenges_won: number
+}
+
+type PlayerSection =
+  | "crowns"
+  | "wins"
+  | "ranks"
+  | "streak"
+  | "castaway_cove"
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const RANK_LIST = ["Peasant"] // extend as you add more ranks
+
+const MEDAL: Record<number, string> = { 0: "🥇", 1: "🥈", 2: "🥉" }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function Avatar({ src, username }: { src: string | null; username: string }) {
+  return src ? (
+    <img
+      src={src}
+      alt={username}
+      className="w-8 h-8 rounded-full object-cover border border-white/10"
+    />
+  ) : (
+    <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-300 border border-white/10">
+      {username?.[0]?.toUpperCase() ?? "?"}
+    </div>
+  )
+}
+
+function RowSkeleton() {
   return (
-    <main className="p-10 text-white">
-      <h1 className="text-3xl font-bold">Leaderboards</h1>
-      <p className="text-zinc-400 mt-2">
-        Top Survivor players will appear here.
+    <div className="flex items-center gap-3 px-4 py-3 animate-pulse">
+      <div className="w-6 h-4 rounded bg-zinc-700" />
+      <div className="w-8 h-8 rounded-full bg-zinc-700" />
+      <div className="flex-1 h-4 rounded bg-zinc-700" />
+      <div className="w-12 h-4 rounded bg-zinc-700" />
+    </div>
+  )
+}
+
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="px-4 py-10 text-center text-zinc-500 text-sm">
+      No {label} data yet. Be the first on the board!
+    </div>
+  )
+}
+
+// ─── Leaderboard Table ────────────────────────────────────────────────────────
+
+interface LeaderboardTableProps {
+  players: Profile[]
+  valueKey: keyof Profile
+  valueLabel: string
+  loading: boolean
+  formatValue?: (v: number) => string
+}
+
+function LeaderboardTable({
+  players,
+  valueKey,
+  valueLabel,
+  loading,
+  formatValue,
+}: LeaderboardTableProps) {
+  return (
+    <div className="rounded-xl border border-white/8 overflow-hidden bg-zinc-900/60">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-white/8 bg-white/3">
+        <span className="w-6 text-xs text-zinc-500 font-mono">#</span>
+        <span className="flex-1 text-xs text-zinc-500 uppercase tracking-widest">Player</span>
+        <span className="text-xs text-zinc-500 uppercase tracking-widest">{valueLabel}</span>
+      </div>
+
+      {loading ? (
+        Array.from({ length: 5 }).map((_, i) => <RowSkeleton key={i} />)
+      ) : players.length === 0 ? (
+        <EmptyState label={valueLabel.toLowerCase()} />
+      ) : (
+        players.map((p, i) => {
+          const val = p[valueKey] as number
+          return (
+            <div
+              key={p.id}
+              className={`flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 transition-colors hover:bg-white/3 ${
+                i === 0 ? "bg-yellow-500/5" : ""
+              }`}
+            >
+              <span className="w-6 text-sm font-mono text-zinc-400">
+                {MEDAL[i] ?? i + 1}
+              </span>
+              <Avatar src={p.avatar} username={p.username} />
+              <span className="flex-1 text-sm text-white font-medium truncate">
+                {p.username}
+              </span>
+              <span
+                className={`text-sm font-semibold tabular-nums ${
+                  i === 0 ? "text-yellow-400" : "text-zinc-300"
+                }`}
+              >
+                {formatValue ? formatValue(val) : val.toLocaleString()}
+              </span>
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
+// ─── Rank Distribution ────────────────────────────────────────────────────────
+
+function RankDistribution({ players, loading }: { players: Profile[]; loading: boolean }) {
+  const counts: Record<string, number> = {}
+  for (const p of players) {
+    const r = p.rank ?? "Peasant"
+    counts[r] = (counts[r] ?? 0) + 1
+  }
+  const total = players.length || 1
+
+  return (
+    <div className="rounded-xl border border-white/8 overflow-hidden bg-zinc-900/60">
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-white/8 bg-white/3">
+        <span className="flex-1 text-xs text-zinc-500 uppercase tracking-widest">Rank</span>
+        <span className="text-xs text-zinc-500 uppercase tracking-widest">Players</span>
+      </div>
+
+      {loading ? (
+        Array.from({ length: 3 }).map((_, i) => <RowSkeleton key={i} />)
+      ) : RANK_LIST.length === 0 ? (
+        <EmptyState label="ranks" />
+      ) : (
+        RANK_LIST.map((rank) => {
+          const count = counts[rank] ?? 0
+          const pct = Math.round((count / total) * 100)
+          return (
+            <div
+              key={rank}
+              className="flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/3 transition-colors"
+            >
+              <span className="flex-1 text-sm text-white font-medium">{rank}</span>
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-indigo-500"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className="text-sm text-zinc-300 tabular-nums w-8 text-right">
+                  {count}
+                </span>
+              </div>
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
+// ─── Section Button ───────────────────────────────────────────────────────────
+
+function SectionBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+        active
+          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40"
+          : "bg-zinc-800/70 text-zinc-400 hover:text-white hover:bg-zinc-700/70"
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ─── Players Tab ──────────────────────────────────────────────────────────────
+
+function PlayersTab() {
+  const [players, setPlayers] = useState<Profile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [section, setSection] = useState<PlayerSection>("crowns")
+
+  useEffect(() => {
+    async function fetchAll() {
+      setLoading(true)
+      const { data } = await supabase
+        .from("profiles")
+        .select(
+          "id, username, avatar, rank, crowns, login_streak, cc_seasons_won, cc_votes_received, cc_challenges_won"
+        )
+        .limit(100)
+      setPlayers((data as Profile[]) ?? [])
+      setLoading(false)
+    }
+    fetchAll()
+  }, [])
+
+  // Sort by the relevant column
+  const sorted = (key: keyof Profile) =>
+    [...players].sort((a, b) => (b[key] as number) - (a[key] as number)).slice(0, 20)
+
+  const sections: { key: PlayerSection; label: string }[] = [
+    { key: "crowns", label: "👑 Crowns" },
+    { key: "wins", label: "🏆 Overall Wins" },
+    { key: "ranks", label: "🎖️ Ranks" },
+    { key: "streak", label: "🔥 Login Streak" },
+    { key: "castaway_cove", label: "🏝️ Castaway Cove" },
+  ]
+
+  return (
+    <div className="space-y-6">
+      {/* Section nav */}
+      <div className="flex flex-wrap gap-2">
+        {sections.map((s) => (
+          <SectionBtn key={s.key} active={section === s.key} onClick={() => setSection(s.key)}>
+            {s.label}
+          </SectionBtn>
+        ))}
+      </div>
+
+      {/* Content */}
+      {section === "crowns" && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-white">👑 Crowns Leaderboard</h2>
+          <p className="text-sm text-zinc-500">Players ranked by total crowns earned.</p>
+          <LeaderboardTable
+            players={sorted("crowns")}
+            valueKey="crowns"
+            valueLabel="Crowns"
+            loading={loading}
+          />
+        </div>
+      )}
+
+      {section === "wins" && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-white">🏆 Overall Wins Leaderboard</h2>
+          <p className="text-sm text-zinc-500">Total game wins across all titles.</p>
+          <LeaderboardTable
+            players={sorted("cc_seasons_won")}
+            valueKey="cc_seasons_won"
+            valueLabel="Wins"
+            loading={loading}
+          />
+        </div>
+      )}
+
+      {section === "ranks" && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-white">🎖️ Rank Distribution</h2>
+          <p className="text-sm text-zinc-500">How many players are in each rank tier.</p>
+          <RankDistribution players={players} loading={loading} />
+        </div>
+      )}
+
+      {section === "streak" && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-white">🔥 Login Streak Leaderboard</h2>
+          <p className="text-sm text-zinc-500">Players with the longest active daily login streaks.</p>
+          <LeaderboardTable
+            players={sorted("login_streak")}
+            valueKey="login_streak"
+            valueLabel="Days"
+            loading={loading}
+          />
+        </div>
+      )}
+
+      {section === "castaway_cove" && (
+        <CastawayCoveSection players={players} loading={loading} sorted={sorted} />
+      )}
+    </div>
+  )
+}
+
+// ─── Castaway Cove Section ────────────────────────────────────────────────────
+
+type CCSub = "seasons" | "votes" | "challenges"
+
+function CastawayCoveSection({
+  players,
+  loading,
+  sorted,
+}: {
+  players: Profile[]
+  loading: boolean
+  sorted: (key: keyof Profile) => Profile[]
+}) {
+  const [sub, setSub] = useState<CCSub>("seasons")
+
+  const subs: { key: CCSub; label: string }[] = [
+    { key: "seasons", label: "Seasons Won" },
+    { key: "votes", label: "Votes Received" },
+    { key: "challenges", label: "Challenges Won" },
+  ]
+
+  const config: Record<CCSub, { valueKey: keyof Profile; valueLabel: string; desc: string }> = {
+    seasons: {
+      valueKey: "cc_seasons_won",
+      valueLabel: "Seasons",
+      desc: "Players who have survived to win the most Castaway Cove seasons.",
+    },
+    votes: {
+      valueKey: "cc_votes_received",
+      valueLabel: "Votes",
+      desc: "Players who have received the most votes across all Castaway Cove games.",
+    },
+    challenges: {
+      valueKey: "cc_challenges_won",
+      valueLabel: "Challenges",
+      desc: "Players who have won the most individual challenges in Castaway Cove.",
+    },
+  }
+
+  const { valueKey, valueLabel, desc } = config[sub]
+
+  return (
+    <div className="space-y-4">
+      {/* Game header */}
+      <div className="flex items-center gap-3">
+        <span className="text-2xl">🏝️</span>
+        <div>
+          <h2 className="text-lg font-semibold text-white">Castaway Cove Leaderboards</h2>
+          <p className="text-sm text-zinc-500">Stats from all Castaway Cove seasons.</p>
+        </div>
+      </div>
+
+      {/* Sub-nav */}
+      <div className="flex gap-2 p-1 bg-zinc-800/50 rounded-xl w-fit">
+        {subs.map((s) => (
+          <button
+            key={s.key}
+            onClick={() => setSub(s.key)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              sub === s.key
+                ? "bg-zinc-600 text-white"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-sm text-zinc-500">{desc}</p>
+
+      <LeaderboardTable
+        players={sorted(valueKey)}
+        valueKey={valueKey}
+        valueLabel={valueLabel}
+        loading={loading}
+      />
+    </div>
+  )
+}
+
+// ─── Guilds Tab ───────────────────────────────────────────────────────────────
+
+function GuildsTab() {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+      <span className="text-5xl">⚔️</span>
+      <h2 className="text-xl font-semibold text-white">Guild Leaderboards Coming Soon</h2>
+      <p className="text-sm text-zinc-500 max-w-sm">
+        Guild rankings, wars, and stats are on the way. Form your crew and get ready.
       </p>
+    </div>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+type Tab = "players" | "guilds"
+
+export default function LeaderboardsPage() {
+  const [tab, setTab] = useState<Tab>("players")
+
+  return (
+    <main className="min-h-screen p-6 md:p-10 text-white max-w-3xl mx-auto">
+      {/* Page header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tight">Leaderboards</h1>
+        <p className="text-zinc-400 mt-1 text-sm">
+          The best players and guilds, ranked.
+        </p>
+      </div>
+
+      {/* Top-level tabs */}
+      <div className="flex gap-2 mb-8">
+        {(["players", "guilds"] as Tab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-6 py-2.5 rounded-xl text-sm font-semibold capitalize transition-all ${
+              tab === t
+                ? "bg-white text-black shadow"
+                : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
+            }`}
+          >
+            {t === "players" ? "👤 Players" : "⚔️ Guilds"}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {tab === "players" ? <PlayersTab /> : <GuildsTab />}
     </main>
   )
 }
