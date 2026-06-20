@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
@@ -53,6 +53,12 @@ function buildYouTubeHTML(
   ></iframe></div></div>`
 }
 
+// -----------------------------
+// CONSTANTS
+// -----------------------------
+const POSTS_PER_PAGE = 15
+const MAX_PAGES = 10
+
 export default function HomePage() {
   const router = useRouter()
 
@@ -64,6 +70,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [myProfile, setMyProfile] = useState<any>(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   // Image modal
   const [showImageModal, setShowImageModal] = useState(false)
@@ -86,10 +93,28 @@ export default function HomePage() {
 
   const [selectedImg, setSelectedImg] = useState<HTMLImageElement | null>(null)
 
-  const editorRef = useRef<HTMLDivElement | null>(null)
-  const savedRangeRef = useRef<Range | null>(null)
+  const editorRef = { current: null as HTMLDivElement | null }
+  const savedRangeRef = { current: null as Range | null }
 
   const MAX_CHARS = 1000
+
+  // -----------------------------
+  // PAGINATION
+  // -----------------------------
+  // Only show posts that fall within our max window (first MAX_PAGES * POSTS_PER_PAGE)
+  const maxPosts = MAX_PAGES * POSTS_PER_PAGE
+  const visiblePosts = posts.slice(0, maxPosts)
+  const totalPages = Math.min(Math.ceil(visiblePosts.length / POSTS_PER_PAGE), MAX_PAGES)
+  const pageStart = (currentPage - 1) * POSTS_PER_PAGE
+  const pagePosts = visiblePosts.slice(pageStart, pageStart + POSTS_PER_PAGE)
+  const hasNext = currentPage < totalPages
+  const hasPrev = currentPage > 1
+
+  function goToPage(page: number) {
+    setCurrentPage(page)
+    // Scroll the feed back to top smoothly without affecting sidebar
+    document.getElementById('feed-top')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   // -----------------------------
   // USER + PROFILE
@@ -101,12 +126,11 @@ export default function HomePage() {
       setCurrentUserId(user?.id || null)
       if (user) {
         fetchLikedPosts(user.id)
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile } = await supabase
           .from('profiles')
           .select('username, avatar, rank, coins, crowns, joined_at')
           .eq('id', user.id)
           .single()
-        console.log('profile:', profile, 'error:', profileError)
         setMyProfile(profile)
       }
     }
@@ -125,6 +149,7 @@ export default function HomePage() {
       .from('posts')
       .select('*')
       .order('created_at', { ascending: false })
+      .limit(maxPosts)
     if (!error && data) setPosts(data)
   }
 
@@ -450,6 +475,7 @@ export default function HomePage() {
     editor.innerHTML = ''
     setCharCount(0)
     setShowModal(false)
+    setCurrentPage(1)
     fetchPosts()
     setLoading(false)
   }
@@ -493,12 +519,10 @@ export default function HomePage() {
       <div className="w-full min-h-screen" style={{ background: 'rgba(0,0,0,0.55)' }}>
         <div className="w-full max-w-6xl mx-auto px-4 py-8 flex gap-6 items-start">
 
-          {/* LEFT: PROFILE SIDEBAR (logged in only) */}
+          {/* LEFT: PROFILE SIDEBAR */}
           {currentUserId && myProfile && (
             <div className="w-72 flex-shrink-0 sticky top-8 self-start">
               <div className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800 flex flex-col gap-3 w-full">
-
-                {/* Avatar */}
                 <div
                   className="relative w-full aspect-square rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700 cursor-pointer"
                   onClick={() => router.push(`/profile/${myProfile.username}`)}
@@ -512,8 +536,6 @@ export default function HomePage() {
                     unoptimized
                   />
                 </div>
-
-                {/* Username */}
                 <div className="text-center">
                   <h2
                     className="text-lg font-bold cursor-pointer hover:text-zinc-300 transition"
@@ -523,8 +545,6 @@ export default function HomePage() {
                     {myProfile.username}
                   </h2>
                 </div>
-
-                {/* Stats */}
                 <div className="space-y-2 text-xs">
                   <div className="bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700">
                     <span className="text-zinc-400">Rank: </span>
@@ -539,21 +559,21 @@ export default function HomePage() {
                     <span className="font-semibold text-amber-300">{myProfile.crowns || 0}</span>
                   </div>
                 </div>
-
-                {/* View Profile button */}
                 <button
                   onClick={() => router.push(`/profile/${myProfile.username}`)}
                   className="w-full text-xs bg-zinc-700 hover:bg-zinc-600 text-white font-semibold py-2 rounded-lg transition cursor-pointer"
                 >
                   View Profile
                 </button>
-
               </div>
             </div>
           )}
 
           {/* MIDDLE: MAIN FEED */}
           <div className="flex-1 min-w-0">
+
+            {/* Anchor for scroll-to-top on page change */}
+            <div id="feed-top" />
 
             <div className="flex justify-between items-center mb-6">
               <h1
@@ -572,18 +592,17 @@ export default function HomePage() {
               )}
             </div>
 
+            {/* POSTS */}
             <div className="space-y-3">
-              {posts.map((post) => (
+              {pagePosts.map((post) => (
                 <div
                   key={post.id}
                   className="bg-zinc-900/80 backdrop-blur-sm rounded-xl border border-zinc-800 p-4"
                 >
                   <div className="flex gap-3">
-
                     <div
                       className="flex-shrink-0 self-start cursor-pointer"
                       onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.username}`) }}
-                      title={`View ${post.username}'s profile`}
                     >
                       <div className="w-14 h-20 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 hover:border-zinc-400 transition-colors">
                         {post.avatar ? (
@@ -602,7 +621,6 @@ export default function HomePage() {
                     </div>
 
                     <div className="flex-1 min-w-0" style={{ maxHeight: '80px', overflow: 'hidden' }}>
-
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-xs text-zinc-400 leading-tight truncate">
                           <span
@@ -655,16 +673,49 @@ export default function HomePage() {
                         {getPreviewText(post.content)}
                       </p>
                     </div>
-
                   </div>
                 </div>
               ))}
             </div>
+
+            {/* PAGINATION */}
+            {visiblePosts.length > POSTS_PER_PAGE && (
+              <div className="flex items-center gap-1.5 mt-4">
+                {/* Back button */}
+                {hasPrev && (
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
+                  >
+                    ‹
+                  </button>
+                )}
+
+                {/* Current page indicator */}
+                <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-600 text-white select-none">
+                  {currentPage}
+                </div>
+
+                {/* Forward button */}
+                {hasNext ? (
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
+                  >
+                    ›
+                  </button>
+                ) : (
+                  <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-zinc-700 text-zinc-500 select-none cursor-not-allowed">
+                    ›
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
 
           {/* RIGHT SIDEBAR */}
           <div className="w-64 flex-shrink-0 space-y-4 sticky top-8 self-start">
-
             <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl p-4">
               <h2 className="text-base font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
                 <span className="text-yellow-400">📢</span> Announcements
@@ -682,9 +733,7 @@ export default function HomePage() {
                 <div className="space-y-2">
                   {topPosts.map((post, i) => (
                     <div key={post.id} className="flex items-start gap-2">
-                      <span className="text-sm font-bold text-zinc-500 w-4 flex-shrink-0 mt-0.5">
-                        {i + 1}.
-                      </span>
+                      <span className="text-sm font-bold text-zinc-500 w-4 flex-shrink-0 mt-0.5">{i + 1}.</span>
                       <div className="flex-1 min-w-0">
                         <button
                           onClick={() => router.push(`/posts/${post.id}`)}
@@ -710,8 +759,8 @@ export default function HomePage() {
                 </div>
               )}
             </div>
-
           </div>
+
         </div>
       </div>
 
@@ -719,14 +768,12 @@ export default function HomePage() {
       {showModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl flex flex-col" style={{ maxHeight: '90vh' }}>
-
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-zinc-800 flex-shrink-0">
               <h2 className="text-2xl font-bold">New Post</h2>
               <button onClick={closeModal} className="text-zinc-400 hover:text-white text-2xl leading-none cursor-pointer">×</button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-
               <div>
                 <input
                   className="w-full p-3 bg-zinc-800 rounded-xl border border-zinc-700 text-white placeholder-zinc-500 text-lg font-semibold"
@@ -739,69 +786,31 @@ export default function HomePage() {
 
               {/* TOOLBAR */}
               <div className="flex gap-2 items-center flex-wrap">
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); exec('bold') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold text-white cursor-pointer"
-                  title="Bold"
-                >B</button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); exec('italic') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic text-white cursor-pointer"
-                  title="Italic"
-                >I</button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditImageEl(null); setImageUrl(''); setImageSize('medium'); setShowImageModal(true) }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Insert image"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); exec('bold') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold text-white cursor-pointer" title="Bold">B</button>
+                <button onMouseDown={(e) => { e.preventDefault(); exec('italic') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic text-white cursor-pointer" title="Italic">I</button>
+                <button onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditImageEl(null); setImageUrl(''); setImageSize('medium'); setShowImageModal(true) }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Insert image">
                   <Image src="/picture.png" alt="img" width={14} height={14} />
                 </button>
-                <button
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    saveCursor()
-                    setEditLinkEl(null)
-                    setLinkUrl('')
-                    setShowLinkModal(true)
-                  }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Insert link"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditLinkEl(null); setLinkUrl(''); setShowLinkModal(true) }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Insert link">
                   <Image src="/link.png" alt="Link" width={14} height={14} />
                 </button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Align left"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Align left">
                   <Image src="/left.png" alt="left" width={14} height={14} />
                 </button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Align center"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Align center">
                   <Image src="/center.png" alt="center" width={14} height={14} />
                 </button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Align right"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Align right">
                   <Image src="/right.png" alt="right" width={14} height={14} />
                 </button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditYouTubeWrapper(null); setYoutubeUrl(''); setYoutubeSize('medium'); setYoutubeAlignment('center'); setYoutubeAutoplay(false); setShowYouTubeModal(true) }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Insert YouTube video"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditYouTubeWrapper(null); setYoutubeUrl(''); setYoutubeSize('medium'); setYoutubeAlignment('center'); setYoutubeAutoplay(false); setShowYouTubeModal(true) }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Insert YouTube video">
                   <Image src="/youtube.png" alt="YouTube" width={14} height={14} />
                 </button>
               </div>
 
               {/* EDITOR */}
               <div
-                ref={editorRef}
+                ref={(el) => { editorRef.current = el }}
                 contentEditable
                 suppressContentEditableWarning
                 onKeyUp={() => {
@@ -886,41 +895,15 @@ export default function HomePage() {
               <Image src="/link.png" alt="Link" width={20} height={20} />
               {editLinkEl ? 'Edit Link' : 'Insert Link'}
             </h2>
-            {!editLinkEl && (
-              <p className="text-xs text-zinc-400 mb-4">
-                Highlight text in the editor before clicking this button to turn it into a link.
-              </p>
-            )}
-            {editLinkEl && (
-              <p className="text-xs text-zinc-400 mb-4">
-                Update the URL below, or clear it to remove the link.
-              </p>
-            )}
-            <input
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') insertLink() }}
-              placeholder="https://example.com"
-              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
-              autoFocus
-            />
+            {!editLinkEl && <p className="text-xs text-zinc-400 mb-4">Highlight text in the editor before clicking this button to turn it into a link.</p>}
+            {editLinkEl && <p className="text-xs text-zinc-400 mb-4">Update the URL below, or clear it to remove the link.</p>}
+            <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') insertLink() }} placeholder="https://example.com" className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4" autoFocus />
             <div className="flex justify-end gap-2">
               <button onClick={closeLinkModal} className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition">Cancel</button>
               {editLinkEl && (
-                <button
-                  onClick={() => {
-                    const text = document.createTextNode(editLinkEl.innerText)
-                    editLinkEl.replaceWith(text)
-                    closeLinkModal()
-                  }}
-                  className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition"
-                >
-                  Remove
-                </button>
+                <button onClick={() => { const text = document.createTextNode(editLinkEl.innerText); editLinkEl.replaceWith(text); closeLinkModal() }} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition">Remove</button>
               )}
-              <button onClick={insertLink} className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition">
-                {editLinkEl ? 'Update' : 'Insert'}
-              </button>
+              <button onClick={insertLink} className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition">{editLinkEl ? 'Update' : 'Insert'}</button>
             </div>
           </div>
         </div>
