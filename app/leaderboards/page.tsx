@@ -31,6 +31,18 @@ const RANK_LIST = ["Peasant"]
 
 const MEDAL: Record<number, string> = { 0: "🥇", 1: "🥈", 2: "🥉" }
 
+const ROW_BG: Record<number, string> = {
+  0: "bg-yellow-500/10",
+  1: "bg-zinc-400/10",
+  2: "bg-amber-700/10",
+}
+
+const VALUE_COLOR: Record<number, string> = {
+  0: "text-yellow-400",
+  1: "text-zinc-300",
+  2: "text-amber-600",
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function Avatar({ src, username }: { src: string | null; username: string }) {
@@ -101,14 +113,15 @@ function LeaderboardTable({
       ) : (
         players.map((p, i) => {
           const val = p[valueKey] as number
+          const podium = i <= 2
           return (
             <div
               key={p.id}
-              className={`flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 transition-colors hover:bg-white/3 ${
-                i === 0 ? "bg-yellow-500/5" : ""
+              className={`flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 transition-colors hover:bg-white/5 ${
+                podium ? ROW_BG[i] : ""
               }`}
             >
-              <span className="w-6 text-sm font-mono text-zinc-400">
+              <span className={`w-6 text-sm font-mono font-bold ${podium ? VALUE_COLOR[i] : "text-zinc-400"}`}>
                 {MEDAL[i] ?? i + 1}
               </span>
               <Avatar src={p.avatar} username={p.username} />
@@ -118,11 +131,7 @@ function LeaderboardTable({
               >
                 {p.username}
               </span>
-              <span
-                className={`text-sm font-semibold tabular-nums ${
-                  i === 0 ? "text-yellow-400" : "text-zinc-300"
-                }`}
-              >
+              <span className={`text-sm font-semibold tabular-nums ${podium ? VALUE_COLOR[i] : "text-zinc-300"}`}>
                 {formatValue ? formatValue(val) : val.toLocaleString()}
               </span>
             </div>
@@ -231,7 +240,7 @@ function PlayersTab() {
   }, [])
 
   const sorted = (key: keyof Profile) =>
-    [...players].sort((a, b) => (b[key] as number) - (a[key] as number)).slice(0, 20)
+    [...players].sort((a, b) => (b[key] as number) - (a[key] as number)).slice(0, 50)
 
   const sections: { key: PlayerSection; label: string }[] = [
     { key: "crowns", label: "👑 Crowns" },
@@ -252,17 +261,11 @@ function PlayersTab() {
         ))}
       </div>
 
-      {/* Content */}
       {section === "crowns" && (
         <div className="space-y-3">
           <h2 className="text-lg font-semibold text-white text-center">👑 Crowns Leaderboard 👑</h2>
           <p className="text-sm text-zinc-500 text-center">Players ranked by total crowns earned.</p>
-          <LeaderboardTable
-            players={sorted("crowns")}
-            valueKey="crowns"
-            valueLabel="Crowns"
-            loading={loading}
-          />
+          <LeaderboardTable players={sorted("crowns")} valueKey="crowns" valueLabel="Crowns" loading={loading} />
         </div>
       )}
 
@@ -270,12 +273,7 @@ function PlayersTab() {
         <div className="space-y-3">
           <h2 className="text-lg font-semibold text-white text-center">🏆 Overall Wins Leaderboard 🏆</h2>
           <p className="text-sm text-zinc-500 text-center">Total game wins across all titles.</p>
-          <LeaderboardTable
-            players={sorted("cc_seasons_won")}
-            valueKey="cc_seasons_won"
-            valueLabel="Wins"
-            loading={loading}
-          />
+          <LeaderboardTable players={sorted("cc_seasons_won")} valueKey="cc_seasons_won" valueLabel="Wins" loading={loading} />
         </div>
       )}
 
@@ -291,12 +289,7 @@ function PlayersTab() {
         <div className="space-y-3">
           <h2 className="text-lg font-semibold text-white text-center">🔥 Login Streak Leaderboard 🔥</h2>
           <p className="text-sm text-zinc-500 text-center">Players with the longest active daily login streaks.</p>
-          <LeaderboardTable
-            players={sorted("login_streak")}
-            valueKey="login_streak"
-            valueLabel="Days"
-            loading={loading}
-          />
+          <LeaderboardTable players={sorted("login_streak")} valueKey="login_streak" valueLabel="Days" loading={loading} />
         </div>
       )}
 
@@ -353,13 +346,11 @@ function CastawayCoveSection({
 
   return (
     <div className="space-y-4">
-      {/* Game header — centered */}
       <div className="text-center">
         <h2 className="text-lg font-semibold text-white">🏝️ Castaway Cove Leaderboards 🏝️</h2>
         <p className="text-sm text-zinc-500">Stats from all Castaway Cove seasons.</p>
       </div>
 
-      {/* Sub-nav — centered */}
       <div className="flex justify-center">
         <div className="flex gap-2 p-1 bg-zinc-800/50 rounded-xl w-fit">
           {subs.map((s) => (
@@ -367,9 +358,7 @@ function CastawayCoveSection({
               key={s.key}
               onClick={() => setSub(s.key)}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                sub === s.key
-                  ? "bg-zinc-600 text-white"
-                  : "text-zinc-400 hover:text-white"
+                sub === s.key ? "bg-zinc-600 text-white" : "text-zinc-400 hover:text-white"
               }`}
             >
               {s.label}
@@ -381,12 +370,7 @@ function CastawayCoveSection({
       <div className="space-y-3">
         <h3 className="text-base font-semibold text-white text-center">{title}</h3>
         <p className="text-sm text-zinc-500 text-center">{desc}</p>
-        <LeaderboardTable
-          players={sorted(valueKey)}
-          valueKey={valueKey}
-          valueLabel={valueLabel}
-          loading={loading}
-        />
+        <LeaderboardTable players={sorted(valueKey)} valueKey={valueKey} valueLabel={valueLabel} loading={loading} />
       </div>
     </div>
   )
@@ -413,7 +397,6 @@ type Tab = "players" | "guilds"
 export default function LeaderboardsPage() {
   const [tab, setTab] = useState<Tab>("players")
 
-  // Stop music when navigating away
   useEffect(() => {
     return () => {
       const audio = (window as any).__leaderboardAudio
@@ -435,11 +418,8 @@ export default function LeaderboardsPage() {
         backgroundAttachment: "fixed",
       }}
     >
-      {/* Dark overlay */}
       <div className="min-h-screen bg-black/50">
         <div className="max-w-3xl mx-auto px-6 md:px-10 py-10">
-
-          {/* Page header */}
           <div className="mb-8 text-center">
             <h1
               className="text-5xl font-bold tracking-tight"
@@ -452,10 +432,7 @@ export default function LeaderboardsPage() {
             </h1>
           </div>
 
-          {/* Dark grey content container */}
           <div className="bg-zinc-900/90 rounded-2xl p-6 md:p-8 shadow-2xl">
-
-            {/* Top-level tabs — centered */}
             <div className="flex justify-center gap-2 mb-8">
               {(["players", "guilds"] as Tab[]).map((t) => (
                 <button
