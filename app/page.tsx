@@ -85,6 +85,24 @@ export default function HomePage() {
       return
     }
 
+    // Case-insensitive duplicate username check
+    const { data: existingUsers, error: lookupError } = await supabase
+      .from('profiles')
+      .select('username')
+      .ilike('username', username)
+
+    if (lookupError) {
+      setErrorMessage('Something went wrong checking username availability')
+      setLoading(false)
+      return
+    }
+
+    if (existingUsers && existingUsers.length > 0) {
+      setErrorMessage('Username is already taken')
+      setLoading(false)
+      return
+    }
+
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/signup`,

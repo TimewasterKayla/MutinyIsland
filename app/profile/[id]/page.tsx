@@ -1524,7 +1524,7 @@ export default function ProfilePage({
               <div className="flex gap-3">
                 {/* Post list — narrowed so it doesn't overlap the buttons */}
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-3xl font-bold mb-1">Posts</h2>
+                  <h2 className="text-3xl font-bold">Posts</h2>
 
                   {/* PAGINATION — shown above the list */}
                   {visibleUserPosts.length > PROFILE_POSTS_PER_PAGE && (
@@ -1595,7 +1595,7 @@ export default function ProfilePage({
                 </div>
 
                 {/* View toggle buttons — stacked vertically on the far right */}
-                <div className="flex flex-col gap-2 pt-7 flex-shrink-0">
+                <div className="flex flex-col gap-2 flex-shrink-0">
                   <button
                     onClick={() => switchPostsView('all')}
                     className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
