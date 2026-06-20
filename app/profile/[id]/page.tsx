@@ -1528,7 +1528,7 @@ export default function ProfilePage({
                   {/* Post list */}
                   <div className="flex-1 min-w-0">
                     {visibleUserPosts.length > PROFILE_POSTS_PER_PAGE && (
-                      <div className="flex items-center gap-1.5 mb-2">
+                      <div className="flex items-center justify-end gap-1.5 mb-2">
                         {hasPrevUserPosts ? (
                           <button
                             onClick={() => setPostsPage((p) => p - 1)}
@@ -1596,8 +1596,13 @@ export default function ProfilePage({
                     )}
                   </div>
 
-                  {/* Toggle buttons on the right */}
-                  <div className="flex flex-col gap-2 flex-shrink-0">
+                  {/* Toggle buttons — align to top of list naturally via items-start */}
+                  <div
+                    className="flex flex-col gap-2 flex-shrink-0"
+                    style={{
+                      marginTop: visibleUserPosts.length > PROFILE_POSTS_PER_PAGE ? 'calc(1.5rem + 8px)' : '0',
+                    }}
+                  >
                     <button
                       onClick={() => switchPostsView('all')}
                       className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
