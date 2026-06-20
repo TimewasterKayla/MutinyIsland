@@ -31,6 +31,12 @@ type Message = {
   recipient_username?: string
 }
 
+type ProfilePostSummary = {
+  id: string
+  title: string | null
+  created_at: string
+}
+
 type TabType = 'about' | 'inbox' | 'posts' | 'friends' | 'wins' | 'inventory'
 
 const avatars = [
@@ -40,6 +46,12 @@ const avatars = [
   '/avatars/morgan.png',
   '/avatars/read.png',
 ]
+
+// -----------------------------
+// PROFILE POSTS PAGINATION
+// -----------------------------
+const PROFILE_POSTS_PER_PAGE = 15
+const PROFILE_POSTS_MAX_PAGES = 10
 
 // -----------------------------
 // YOUTUBE HELPERS
@@ -173,6 +185,10 @@ export default function ProfilePage({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUsername, setCurrentUsername] = useState<string>('')
 
+  // Posts tab state
+  const [userPosts, setUserPosts] = useState<ProfilePostSummary[]>([])
+  const [postsPage, setPostsPage] = useState<number>(1)
+
   const editorRef = useRef<HTMLDivElement | null>(null)
   const composeEditorRef = useRef<HTMLDivElement | null>(null)
   const replyEditorRef = useRef<HTMLDivElement | null>(null)
@@ -234,6 +250,27 @@ export default function ProfilePage({
     })
 
     setLoading(false)
+  }
+
+  // -----------------------------
+  // LOAD USER POSTS (any profile, own or not)
+  // -----------------------------
+  useEffect(() => {
+    if (!profile) return
+    setPostsPage(1)
+    loadUserPosts(profile.id)
+  }, [profile?.id])
+
+  async function loadUserPosts(profileId: string) {
+    const maxPosts = PROFILE_POSTS_MAX_PAGES * PROFILE_POSTS_PER_PAGE
+    const { data, error } = await supabase
+      .from('posts')
+      .select('id, title, created_at')
+      .eq('user_id', profileId)
+      .order('created_at', { ascending: false })
+      .limit(maxPosts)
+
+    if (!error && data) setUserPosts(data)
   }
 
   // -----------------------------
@@ -924,6 +961,17 @@ export default function ProfilePage({
       })
     : null
 
+  // Posts tab pagination (computed each render)
+  const visibleUserPosts = userPosts.slice(0, PROFILE_POSTS_MAX_PAGES * PROFILE_POSTS_PER_PAGE)
+  const totalUserPostsPages = Math.min(
+    Math.ceil(visibleUserPosts.length / PROFILE_POSTS_PER_PAGE),
+    PROFILE_POSTS_MAX_PAGES
+  )
+  const userPostsPageStart = (postsPage - 1) * PROFILE_POSTS_PER_PAGE
+  const pageUserPosts = visibleUserPosts.slice(userPostsPageStart, userPostsPageStart + PROFILE_POSTS_PER_PAGE)
+  const hasNextUserPosts = postsPage < totalUserPostsPages
+  const hasPrevUserPosts = postsPage > 1
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-6 pt-16">
 
@@ -1453,10 +1501,58 @@ export default function ProfilePage({
               </div>
             )}
 
+            {/* ======================== POSTS TAB ======================== */}
             {activeTab === 'posts' && (
               <div>
                 <h2 className="text-3xl font-bold mb-4">Posts</h2>
-                <div className="text-zinc-400">Posts coming soon...</div>
+
+                {/* PAGINATION — shown above the list */}
+                {visibleUserPosts.length > PROFILE_POSTS_PER_PAGE && (
+                  <div className="flex items-center justify-end gap-1.5 mb-4">
+                    {hasPrevUserPosts && (
+                      <button
+                        onClick={() => setPostsPage((p) => p - 1)}
+                        className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
+                      >
+                        ‹
+                      </button>
+                    )}
+
+                    <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-600 text-white select-none">
+                      {postsPage}
+                    </div>
+
+                    {hasNextUserPosts ? (
+                      <button
+                        onClick={() => setPostsPage((p) => p + 1)}
+                        className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
+                      >
+                        ›
+                      </button>
+                    ) : (
+                      <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-zinc-700 text-zinc-500 select-none cursor-not-allowed">
+                        ›
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {pageUserPosts.length === 0 ? (
+                  <div className="text-zinc-400 italic">No posts yet.</div>
+                ) : (
+                  <ul className="space-y-2">
+                    {pageUserPosts.map((post) => (
+                      <li key={post.id}>
+                        <button
+                          onClick={() => router.push(`/posts/${post.id}`)}
+                          className="text-white underline underline-offset-2 decoration-zinc-500 hover:text-green-400 transition cursor-pointer text-left text-sm font-medium"
+                        >
+                          {post.title || 'Untitled'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
