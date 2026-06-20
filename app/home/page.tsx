@@ -680,7 +680,7 @@ export default function HomePage() {
 
             {/* PAGINATION */}
             {visiblePosts.length > POSTS_PER_PAGE && (
-              <div className="flex items-center gap-1.5 mt-4">
+              <div className="flex items-center justify-end gap-1.5 mt-4">
                 {/* Back button */}
                 {hasPrev && (
                   <button
