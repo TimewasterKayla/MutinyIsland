@@ -1527,34 +1527,6 @@ export default function ProfilePage({
                 <div className="flex gap-3 items-start">
                   {/* Post list */}
                   <div className="flex-1 min-w-0">
-                    {visibleUserPosts.length > PROFILE_POSTS_PER_PAGE && (
-                      <div className="flex items-center justify-end gap-1.5 mb-2">
-                        {hasPrevUserPosts && (
-                          <button
-                            onClick={() => setPostsPage((p) => p - 1)}
-                            className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
-                          >
-                            ‹
-                          </button>
-                        )}
-                        <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-600 text-white select-none">
-                          {postsPage}
-                        </div>
-                        {hasNextUserPosts ? (
-                          <button
-                            onClick={() => setPostsPage((p) => p + 1)}
-                            className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
-                          >
-                            ›
-                          </button>
-                        ) : (
-                          <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-zinc-700 text-zinc-500 select-none cursor-not-allowed">
-                            ›
-                          </div>
-                        )}
-                      </div>
-                    )}
-
                     {pageUserPosts.length === 0 ? (
                       <div className="text-zinc-400 italic">No posts yet.</div>
                     ) : (
@@ -1594,7 +1566,7 @@ export default function ProfilePage({
                     )}
                   </div>
 
-                  {/* View toggle buttons */}
+                  {/* Toggle buttons + pagination stacked on the right */}
                   <div className="flex flex-col gap-2 flex-shrink-0">
                     <button
                       onClick={() => switchPostsView('all')}
@@ -1616,6 +1588,36 @@ export default function ProfilePage({
                     >
                       Top Posts
                     </button>
+
+                    {visibleUserPosts.length > PROFILE_POSTS_PER_PAGE && (
+                      <div className="flex items-center justify-end gap-1.5 mt-1">
+                        {hasPrevUserPosts ? (
+                          <button
+                            onClick={() => setPostsPage((p) => p - 1)}
+                            className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
+                          >
+                            ‹
+                          </button>
+                        ) : (
+                          <div className="w-6 h-6" />
+                        )}
+                        <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-600 text-white select-none">
+                          {postsPage}
+                        </div>
+                        {hasNextUserPosts ? (
+                          <button
+                            onClick={() => setPostsPage((p) => p + 1)}
+                            className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-700 hover:bg-green-600 text-white cursor-pointer transition"
+                          >
+                            ›
+                          </button>
+                        ) : (
+                          <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-zinc-700 text-zinc-500 select-none cursor-not-allowed">
+                            ›
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
