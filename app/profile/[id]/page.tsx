@@ -35,9 +35,11 @@ type ProfilePostSummary = {
   id: string
   title: string | null
   created_at: string
+  likes: number | null
 }
 
 type TabType = 'about' | 'inbox' | 'posts' | 'friends' | 'wins' | 'inventory'
+type PostsViewType = 'all' | 'top'
 
 const avatars = [
   '/avatars/jess.png',
@@ -188,6 +190,7 @@ export default function ProfilePage({
   // Posts tab state
   const [userPosts, setUserPosts] = useState<ProfilePostSummary[]>([])
   const [postsPage, setPostsPage] = useState<number>(1)
+  const [postsView, setPostsView] = useState<PostsViewType>('all')
 
   const editorRef = useRef<HTMLDivElement | null>(null)
   const composeEditorRef = useRef<HTMLDivElement | null>(null)
@@ -258,6 +261,7 @@ export default function ProfilePage({
   useEffect(() => {
     if (!profile) return
     setPostsPage(1)
+    setPostsView('all')
     loadUserPosts(profile.id)
   }, [profile?.id])
 
@@ -265,7 +269,7 @@ export default function ProfilePage({
     const maxPosts = PROFILE_POSTS_MAX_PAGES * PROFILE_POSTS_PER_PAGE
     const { data, error } = await supabase
       .from('posts')
-      .select('id, title, created_at')
+      .select('id, title, created_at, likes')
       .eq('user_id', profileId)
       .order('created_at', { ascending: false })
       .limit(maxPosts)
@@ -961,8 +965,17 @@ export default function ProfilePage({
       })
     : null
 
+  // Posts tab: sort according to the active view
+  const sortedUserPosts = postsView === 'top'
+    ? [...userPosts].sort((a, b) => {
+        const likesDiff = (b.likes || 0) - (a.likes || 0)
+        if (likesDiff !== 0) return likesDiff
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
+    : userPosts // already ordered by created_at desc from the query
+
   // Posts tab pagination (computed each render)
-  const visibleUserPosts = userPosts.slice(0, PROFILE_POSTS_MAX_PAGES * PROFILE_POSTS_PER_PAGE)
+  const visibleUserPosts = sortedUserPosts.slice(0, PROFILE_POSTS_MAX_PAGES * PROFILE_POSTS_PER_PAGE)
   const totalUserPostsPages = Math.min(
     Math.ceil(visibleUserPosts.length / PROFILE_POSTS_PER_PAGE),
     PROFILE_POSTS_MAX_PAGES
@@ -971,6 +984,11 @@ export default function ProfilePage({
   const pageUserPosts = visibleUserPosts.slice(userPostsPageStart, userPostsPageStart + PROFILE_POSTS_PER_PAGE)
   const hasNextUserPosts = postsPage < totalUserPostsPages
   const hasPrevUserPosts = postsPage > 1
+
+  function switchPostsView(view: PostsViewType) {
+    setPostsView(view)
+    setPostsPage(1)
+  }
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-6 pt-16">
@@ -1504,7 +1522,33 @@ export default function ProfilePage({
             {/* ======================== POSTS TAB ======================== */}
             {activeTab === 'posts' && (
               <div>
-                <h2 className="text-3xl font-bold mb-4">Posts</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-3xl font-bold">Posts</h2>
+
+                  {/* All Posts / Top Posts toggle — gold buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => switchPostsView('all')}
+                      className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
+                        postsView === 'all'
+                          ? 'bg-amber-400 hover:bg-amber-300 text-black shadow-md'
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-amber-600/50'
+                      }`}
+                    >
+                      All Posts
+                    </button>
+                    <button
+                      onClick={() => switchPostsView('top')}
+                      className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
+                        postsView === 'top'
+                          ? 'bg-amber-400 hover:bg-amber-300 text-black shadow-md'
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-amber-600/50'
+                      }`}
+                    >
+                      Top Posts
+                    </button>
+                  </div>
+                </div>
 
                 {/* PAGINATION — shown above the list */}
                 {visibleUserPosts.length > PROFILE_POSTS_PER_PAGE && (
@@ -1540,15 +1584,33 @@ export default function ProfilePage({
                 {pageUserPosts.length === 0 ? (
                   <div className="text-zinc-400 italic">No posts yet.</div>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="space-y-3">
                     {pageUserPosts.map((post) => (
-                      <li key={post.id}>
-                        <button
-                          onClick={() => router.push(`/posts/${post.id}`)}
-                          className="text-white underline underline-offset-2 decoration-zinc-500 hover:text-green-400 transition cursor-pointer text-left text-sm font-medium"
-                        >
-                          {post.title || 'Untitled'}
-                        </button>
+                      <li key={post.id} className="w-full">
+                        <div className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+                          <button
+                            onClick={() => router.push(`/posts/${post.id}`)}
+                            className="text-white underline underline-offset-2 decoration-zinc-500 hover:text-green-400 transition cursor-pointer text-left text-base font-semibold truncate"
+                          >
+                            {post.title || 'Untitled'}
+                          </button>
+
+                          <div className="flex items-center gap-3 flex-shrink-0 text-xs text-zinc-400">
+                            {postsView === 'top' && (
+                              <span className="flex items-center gap-1">
+                                <span className="text-red-500">❤️</span>
+                                <span>{post.likes || 0}</span>
+                              </span>
+                            )}
+                            <span>
+                              {new Date(post.created_at).toLocaleDateString('en-US', {
+                                month: '2-digit',
+                                day: '2-digit',
+                                year: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                        </div>
                       </li>
                     ))}
                   </ul>
