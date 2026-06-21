@@ -63,6 +63,7 @@ export default function HomePage() {
   const router = useRouter()
 
   const [posts, setPosts] = useState<any[]>([])
+  const [pinnedPosts, setPinnedPosts] = useState<any[]>([])
   const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({})
   const [showModal, setShowModal] = useState(false)
   const [postTitle, setPostTitle] = useState('')
@@ -140,6 +141,7 @@ export default function HomePage() {
   // -----------------------------
   useEffect(() => {
     fetchPosts()
+    fetchPinnedPosts()
   }, [])
 
   async function fetchPosts() {
@@ -149,6 +151,19 @@ export default function HomePage() {
       .order('created_at', { ascending: false })
       .limit(maxPosts)
     if (!error && data) setPosts(data)
+  }
+
+  // -----------------------------
+  // FETCH PINNED POSTS (Announcements)
+  // -----------------------------
+  async function fetchPinnedPosts() {
+    const { data, error } = await supabase
+      .from('posts')
+      .select('*')
+      .eq('is_pinned', true)
+      .order('pinned_at', { ascending: false })
+      .limit(5)
+    if (!error && data) setPinnedPosts(data)
   }
 
   const topPosts = [...posts].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 10)
@@ -716,7 +731,47 @@ export default function HomePage() {
               <h2 className="text-base font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
                 <span className="text-yellow-400">📢</span> Announcements
               </h2>
-              <p className="text-zinc-400 text-sm italic">No announcements yet.</p>
+              {pinnedPosts.length === 0 ? (
+                <p className="text-zinc-400 text-sm italic">No announcements yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {pinnedPosts.map((post) => (
+                    <div key={post.id} className="flex items-start gap-2">
+                      <span className="text-yellow-400 flex-shrink-0 mt-0.5">📌</span>
+                      <div className="flex-1 min-w-0">
+                        <button
+                          onClick={() => router.push(`/posts/${post.id}`)}
+                          className="text-left w-full group cursor-pointer"
+                        >
+                          <p
+                            className="text-sm font-semibold text-zinc-200 group-hover:text-white leading-snug underline underline-offset-2 decoration-zinc-600"
+                            style={{
+                              display: '-webkit-box',
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              overflowWrap: 'break-word',
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {post.title || 'Untitled'}
+                          </p>
+                        </button>
+                        <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-1">
+                          <span>❤️ {post.likes || 0}</span>
+                          <span className="text-zinc-700">·</span>
+                          <button
+                            onClick={() => router.push(`/profile/${post.username}`)}
+                            className="truncate hover:text-zinc-300 cursor-pointer transition-colors"
+                          >
+                            {post.username}
+                          </button>
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl p-4">

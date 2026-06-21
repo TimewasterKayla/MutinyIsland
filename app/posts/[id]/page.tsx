@@ -64,10 +64,12 @@ export default function PostPage({
   const [post, setPost] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [isLiked, setIsLiked] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [saving, setSaving] = useState(false)
+  const [pinning, setPinning] = useState(false)
 
   // Image modal
   const [showImageModal, setShowImageModal] = useState(false)
@@ -103,12 +105,21 @@ export default function PostPage({
   }, [params])
 
   // -----------------------------
-  // USER
+  // USER + ADMIN CHECK
   // -----------------------------
   useEffect(() => {
     const getUser = async () => {
       const { data } = await supabase.auth.getUser()
-      setCurrentUserId(data.user?.id || null)
+      const user = data.user
+      setCurrentUserId(user?.id || null)
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', user.id)
+          .maybeSingle()
+        setIsAdmin(!!profile?.is_admin)
+      }
     }
     getUser()
   }, [])
@@ -173,6 +184,51 @@ export default function PostPage({
       setPost({ ...post, likes: (post.likes || 0) + 1 })
       setIsLiked(true)
     }
+  }
+
+  // -----------------------------
+  // TOGGLE PIN (admin only — verified server-side in the edge function)
+  // -----------------------------
+  async function togglePin() {
+    if (!post || pinning) return
+    setPinning(true)
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+
+    if (!accessToken) {
+      setPinning(false)
+      return
+    }
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/toggle-pin`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ postId: post.id, pin: !post.is_pinned }),
+        }
+      )
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || 'Failed to update pin status')
+        setPinning(false)
+        return
+      }
+
+      setPost({ ...post, is_pinned: !post.is_pinned })
+    } catch (err) {
+      console.error(err)
+      alert('Something went wrong')
+    }
+
+    setPinning(false)
   }
 
   // -----------------------------
@@ -504,6 +560,7 @@ export default function PostPage({
   }
 
   const isOwner = currentUserId === post.user_id
+  const canEdit = isOwner || isAdmin
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
@@ -544,14 +601,24 @@ export default function PostPage({
               </div>
             </div>
 
-            {/* LIKE + OWNER BUTTONS */}
+            {/* LIKE + PIN + OWNER/ADMIN BUTTONS */}
             <div className="flex items-center gap-3">
               <button onClick={toggleLike} className="flex items-center gap-1 cursor-pointer">
                 <span className="text-xl">{isLiked ? '❤️' : '🤍'}</span>
                 <span className="text-sm text-zinc-300">{post.likes || 0}</span>
               </button>
 
-              {isOwner && !editing && (
+              {isAdmin && !editing && (
+                <button
+                  onClick={togglePin}
+                  disabled={pinning}
+                  className="bg-yellow-500 hover:bg-yellow-400 text-white px-3 py-1.5 rounded text-sm font-semibold cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  {pinning ? '...' : post.is_pinned ? 'Unpin' : 'Pin'}
+                </button>
+              )}
+
+              {canEdit && !editing && (
                 <>
                   <button
                     onClick={() => {
@@ -571,7 +638,7 @@ export default function PostPage({
                 </>
               )}
 
-              {isOwner && editing && (
+              {canEdit && editing && (
                 <>
                   <button
                     onClick={() => setEditing(false)}
