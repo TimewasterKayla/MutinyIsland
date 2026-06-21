@@ -236,6 +236,7 @@ export default function ProfilePage({
   // Edit mode for unfriending from own friends grid
   const [friendsEditMode, setFriendsEditMode] = useState<boolean>(false)
   const [unfriendLoadingId, setUnfriendLoadingId] = useState<string | null>(null)
+  const [hoveredFriendId, setHoveredFriendId] = useState<string | null>(null)
 
   const requestsDropdownRef = useRef<HTMLDivElement | null>(null)
 
@@ -2000,43 +2001,55 @@ export default function ProfilePage({
                 {friendsList.length === 0 ? (
                   <div className="text-zinc-400 italic">No friends yet.</div>
                 ) : (
-                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-4">
-                    {friendsList.map((friend) => (
-                      <div key={friend.friendshipId} className="flex flex-col items-center">
-                        <div className="relative w-full aspect-square">
+                  <div className="grid grid-cols-6 sm:grid-cols-7 gap-3">
+                    {friendsList.map((friend) => {
+                      const isHovered = hoveredFriendId === friend.friendshipId
+                      return (
+                        <div
+                          key={friend.friendshipId}
+                          className="flex flex-col items-center"
+                          onMouseEnter={() => setHoveredFriendId(friend.friendshipId)}
+                          onMouseLeave={() => setHoveredFriendId(null)}
+                        >
+                          <div className="relative w-full aspect-square" style={{ maxWidth: '64px' }}>
+                            <button
+                              onClick={() => router.push(`/profile/${friend.username}`)}
+                              className={`w-full h-full rounded-xl overflow-hidden bg-white/5 border cursor-pointer transition ${
+                                isHovered ? 'border-green-500' : 'border-white/10'
+                              }`}
+                            >
+                              <Image
+                                src={friend.avatar || '/avatars/jess.png'}
+                                alt={friend.username}
+                                width={64}
+                                height={64}
+                                className="w-full h-full object-cover opacity-80"
+                              />
+                            </button>
+
+                            {friendsEditMode && (
+                              <button
+                                onClick={() => unfriend(friend)}
+                                disabled={unfriendLoadingId === friend.friendshipId}
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 hover:bg-red-400 disabled:opacity-50 flex items-center justify-center cursor-pointer shadow-lg z-10 transition"
+                                title="Remove friend"
+                              >
+                                <Image src="/friendremove.png" alt="Remove" width={10} height={10} />
+                              </button>
+                            )}
+                          </div>
                           <button
                             onClick={() => router.push(`/profile/${friend.username}`)}
-                            className="w-full h-full rounded-xl overflow-hidden bg-white/5 border border-white/10 cursor-pointer hover:border-green-500 transition"
+                            className={`mt-1 text-[11px] transition cursor-pointer truncate w-full text-center ${
+                              isHovered ? 'text-green-400' : 'text-zinc-300'
+                            }`}
+                            title={friend.username}
                           >
-                            <Image
-                              src={friend.avatar || '/avatars/jess.png'}
-                              alt={friend.username}
-                              width={100}
-                              height={100}
-                              className="w-full h-full object-cover opacity-80"
-                            />
+                            {friend.username}
                           </button>
-
-                          {friendsEditMode && (
-                            <button
-                              onClick={() => unfriend(friend)}
-                              disabled={unfriendLoadingId === friend.friendshipId}
-                              className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 hover:bg-red-400 disabled:opacity-50 flex items-center justify-center cursor-pointer shadow-lg z-10 transition"
-                              title="Remove friend"
-                            >
-                              <Image src="/friendremove.png" alt="Remove" width={12} height={12} />
-                            </button>
-                          )}
                         </div>
-                        <button
-                          onClick={() => router.push(`/profile/${friend.username}`)}
-                          className="mt-1.5 text-xs text-zinc-300 hover:text-green-400 transition cursor-pointer truncate w-full text-center"
-                          title={friend.username}
-                        >
-                          {friend.username}
-                        </button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
