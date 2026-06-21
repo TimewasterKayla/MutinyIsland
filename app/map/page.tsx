@@ -1,6 +1,30 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+
 export default function MapPage() {
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    async function checkAdmin() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!error && data?.is_admin) {
+        setIsAdmin(true);
+      }
+    }
+
+    checkAdmin();
+  }, []);
+
   const locations = [
     {
       label: "Pet House",
@@ -32,6 +56,16 @@ export default function MapPage() {
       left: "35%",
       rotate: "1deg",
     },
+    ...(isAdmin
+      ? [
+          {
+            label: "Admin Cave",
+            top: "80%",
+            left: "30%",
+            rotate: "-2deg",
+          },
+        ]
+      : []),
   ];
 
   return (
