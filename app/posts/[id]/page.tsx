@@ -203,7 +203,7 @@ export default function PostPage({
 
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/toggle-pin`,
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/pin-post`,
         {
           method: 'POST',
           headers: {
