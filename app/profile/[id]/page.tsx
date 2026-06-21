@@ -2019,7 +2019,7 @@ export default function ProfilePage({
                           <div className="relative w-full" style={{ aspectRatio: '3 / 4' }}>
                             <button
                               onClick={() => router.push(`/profile/${friend.username}`)}
-                              className={`w-full h-full overflow-hidden bg-white/5 border cursor-pointer transition ${
+                              className={`w-full h-full rounded-xl overflow-hidden bg-white/5 border cursor-pointer transition ${
                                 isHovered ? 'border-green-500' : 'border-white/10'
                               }`}
                             >
