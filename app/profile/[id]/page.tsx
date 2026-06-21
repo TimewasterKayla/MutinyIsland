@@ -2001,17 +2001,18 @@ export default function ProfilePage({
                 {friendsList.length === 0 ? (
                   <div className="text-zinc-400 italic">No friends yet.</div>
                 ) : (
-                  <div className="grid grid-cols-6 sm:grid-cols-7 gap-3">
+                  <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, 64px)' }}>
                     {friendsList.map((friend) => {
                       const isHovered = hoveredFriendId === friend.friendshipId
                       return (
                         <div
                           key={friend.friendshipId}
-                          className="flex flex-col items-center"
+                          className="flex flex-col items-stretch"
+                          style={{ width: '64px' }}
                           onMouseEnter={() => setHoveredFriendId(friend.friendshipId)}
                           onMouseLeave={() => setHoveredFriendId(null)}
                         >
-                          <div className="relative w-full aspect-square" style={{ maxWidth: '64px' }}>
+                          <div className="relative w-full" style={{ aspectRatio: '3 / 4' }}>
                             <button
                               onClick={() => router.push(`/profile/${friend.username}`)}
                               className={`w-full h-full rounded-xl overflow-hidden bg-white/5 border cursor-pointer transition ${
@@ -2022,7 +2023,7 @@ export default function ProfilePage({
                                 src={friend.avatar || '/avatars/jess.png'}
                                 alt={friend.username}
                                 width={64}
-                                height={64}
+                                height={85}
                                 className="w-full h-full object-cover opacity-80"
                               />
                             </button>
