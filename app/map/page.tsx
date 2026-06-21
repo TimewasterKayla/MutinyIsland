@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export default function MapPage() {
+  const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function MapPage() {
       ? [
           {
             label: "Admin Cave",
-            top: "80%",
+            top: "68%",
             left: "30%",
             rotate: "-2deg",
           },
@@ -132,6 +134,11 @@ export default function MapPage() {
                 display: "block",
                 width: "120px",
                 margin: "0 auto",
+                // Negative margin pulls the banner up over the bottom of
+                // the cave image; cave sits behind via zIndex below.
+                marginBottom: "-30px",
+                position: "relative",
+                zIndex: 1,
                 filter: "drop-shadow(0 5px 10px rgba(0,0,0,0.7))",
                 transition: "filter 0.18s ease",
                 pointerEvents: "none",
@@ -139,7 +146,10 @@ export default function MapPage() {
             />
             <button
               data-banner
+              onClick={() => router.push("/admin-cave")}
               style={{
+                position: "relative",
+                zIndex: 2,
                 width: "260px",
                 height: "110px",
                 backgroundImage: "url('/banner.png')",
