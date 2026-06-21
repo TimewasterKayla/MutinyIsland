@@ -5,6 +5,15 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 
+const booterStyle = `
+  @font-face {
+    font-family: 'Booter';
+    src: url('/fonts/Booter.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+  }
+`
+
 // -----------------------------
 // YOUTUBE HELPERS
 // -----------------------------
@@ -603,6 +612,8 @@ export default function HomePage() {
   }
 
   return (
+    <>
+      <style>{booterStyle}</style>
     <main
       className="min-h-screen flex justify-center text-white"
       style={{
@@ -643,15 +654,15 @@ export default function HomePage() {
                 </div>
                 <div className="space-y-2 text-xs">
                   <div className="bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700">
-                    <span className="text-zinc-400">Rank: </span>
+                    <span className="text-zinc-400" style={{ fontFamily: "'Booter', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rank: </span>
                     <span className="font-semibold text-white">{myProfile.rank || 'Peasant'}</span>
                   </div>
                   <div className="bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700">
-                    <span className="text-zinc-400">Doubloons: </span>
+                    <span className="text-zinc-400" style={{ fontFamily: "'Booter', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em' }}>Doubloons: </span>
                     <span className="font-semibold text-yellow-400">{myProfile.coins || 0}</span>
                   </div>
                   <div className="bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700">
-                    <span className="text-zinc-400">Crowns: </span>
+                    <span className="text-zinc-400" style={{ fontFamily: "'Booter', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em' }}>Crowns: </span>
                     <span className="font-semibold text-amber-300">{myProfile.crowns || 0}</span>
                   </div>
                 </div>
@@ -814,7 +825,7 @@ export default function HomePage() {
                                 style={{
                                   background: index % 2 === 0
                                     ? 'transparent'
-                                    : 'rgba(255,255,255,0.06)',
+                                    : 'rgba(120, 60, 10, 0.55)',
                                 }}
                               >
                                 <button
@@ -1154,5 +1165,6 @@ export default function HomePage() {
       )}
 
     </main>
+    </>
   )
 }
