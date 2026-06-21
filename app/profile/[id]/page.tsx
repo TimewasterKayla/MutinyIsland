@@ -1596,7 +1596,7 @@ export default function ProfilePage({
                     )}
                   </div>
 
-                  {/* Toggle buttons — align to top of list naturally via items-start */}
+                  {/* Toggle buttons — align to top of list naturally via items-start yay */}
                   {userPosts.length > 0 && (
                     <div
                       className="flex flex-col gap-2 flex-shrink-0"
