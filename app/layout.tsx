@@ -28,6 +28,9 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <meta name="viewport" content="width=1280, initial-scale=0.5" />
+      </head>
       <body className="min-h-full flex flex-col bg-black text-white">
         <LayoutClient>
           <main className="flex-1">{children}</main>
