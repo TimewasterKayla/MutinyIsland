@@ -53,6 +53,15 @@ function buildYouTubeHTML(
   ></iframe></div></div>`
 }
 
+type Comment = {
+  id: string
+  user_id: string
+  content: string
+  created_at: string
+  username?: string
+  avatar?: string
+}
+
 export default function PostPage({
   params,
 }: {
@@ -70,6 +79,11 @@ export default function PostPage({
   const [editTitle, setEditTitle] = useState('')
   const [saving, setSaving] = useState(false)
   const [pinning, setPinning] = useState(false)
+
+  // Comments
+  const [comments, setComments] = useState<Comment[]>([])
+  const [commentText, setCommentText] = useState<string>('')
+  const [submittingComment, setSubmittingComment] = useState<boolean>(false)
 
   // Image modal
   const [showImageModal, setShowImageModal] = useState(false)
@@ -130,6 +144,7 @@ export default function PostPage({
   useEffect(() => {
     if (!postId) return
     fetchPost()
+    fetchComments()
   }, [postId])
 
   async function fetchPost() {
@@ -142,6 +157,71 @@ export default function PostPage({
     if (error || !data) { setLoading(false); return }
     setPost(data)
     setLoading(false)
+  }
+
+  // -----------------------------
+  // FETCH COMMENTS
+  // -----------------------------
+  async function fetchComments() {
+    const { data, error } = await supabase
+      .from('comments')
+      .select('*')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true })
+
+    if (error || !data) return
+
+    if (data.length === 0) {
+      setComments([])
+      return
+    }
+
+    const userIds = [...new Set(data.map((c) => c.user_id))]
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, username, avatar')
+      .in('id', userIds)
+
+    const profileMap = Object.fromEntries(
+      (profiles || []).map((p) => [p.id, { username: p.username, avatar: p.avatar }])
+    )
+
+    setComments(
+      data.map((c) => ({
+        ...c,
+        username: profileMap[c.user_id]?.username || 'Unknown',
+        avatar: profileMap[c.user_id]?.avatar || null,
+      }))
+    )
+  }
+
+  // -----------------------------
+  // SUBMIT COMMENT
+  // -----------------------------
+  async function submitComment() {
+    if (!commentText.trim() || !currentUserId || submittingComment) return
+    setSubmittingComment(true)
+
+    const { error } = await supabase.from('comments').insert({
+      post_id: postId,
+      user_id: currentUserId,
+      content: commentText.trim(),
+    })
+
+    if (!error) {
+      setCommentText('')
+      await fetchComments()
+    }
+
+    setSubmittingComment(false)
+  }
+
+  // -----------------------------
+  // DELETE COMMENT
+  // -----------------------------
+  async function deleteComment(commentId: string) {
+    await supabase.from('comments').delete().eq('id', commentId)
+    setComments((prev) => prev.filter((c) => c.id !== commentId))
   }
 
   // -----------------------------
@@ -187,7 +267,7 @@ export default function PostPage({
   }
 
   // -----------------------------
-  // TOGGLE PIN (admin only — verified server-side in the edge function)
+  // TOGGLE PIN
   // -----------------------------
   async function togglePin() {
     if (!post || pinning) return
@@ -196,10 +276,7 @@ export default function PostPage({
     const { data: sessionData } = await supabase.auth.getSession()
     const accessToken = sessionData.session?.access_token
 
-    if (!accessToken) {
-      setPinning(false)
-      return
-    }
+    if (!accessToken) { setPinning(false); return }
 
     try {
       const res = await fetch(
@@ -489,10 +566,7 @@ export default function PostPage({
       return
     }
 
-    if (!linkUrl.trim()) {
-      closeLinkModal()
-      return
-    }
+    if (!linkUrl.trim()) { closeLinkModal(); return }
 
     sel?.removeAllRanges()
     sel?.addRange(range)
@@ -538,6 +612,17 @@ export default function PostPage({
   function formatDate(dateString: string) {
     const d = new Date(dateString)
     return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  }
+
+  function formatCommentDate(dateString: string) {
+    const d = new Date(dateString)
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
   }
 
   // -----------------------------
@@ -621,10 +706,7 @@ export default function PostPage({
               {canEdit && !editing && (
                 <>
                   <button
-                    onClick={() => {
-                      setEditTitle(post.title || '')
-                      setEditing(true)
-                    }}
+                    onClick={() => { setEditTitle(post.title || ''); setEditing(true) }}
                     className="bg-orange-500 hover:bg-orange-400 px-3 py-1.5 rounded text-sm font-semibold cursor-pointer transition-colors text-white"
                   >
                     Edit
@@ -685,7 +767,6 @@ export default function PostPage({
           {/* EDIT MODE */}
           {editing && (
             <div className="space-y-4">
-              {/* TITLE INPUT */}
               <div>
                 <input
                   className="w-full p-3 bg-zinc-800 rounded-xl border border-zinc-700 text-white text-xl font-bold placeholder-zinc-500"
@@ -696,70 +777,29 @@ export default function PostPage({
                 <div className="text-right text-xs text-zinc-500 mt-1">{editTitle.length}/80</div>
               </div>
 
-              {/* TOOLBAR */}
               <div className="flex gap-2 items-center flex-wrap">
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); exec('bold') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold text-white cursor-pointer"
-                  title="Bold"
-                >B</button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); exec('italic') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic text-white cursor-pointer"
-                  title="Italic"
-                >I</button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditImageEl(null); setImageUrl(''); setImageSize('medium'); setShowImageModal(true) }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Insert image"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); exec('bold') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs font-bold text-white cursor-pointer" title="Bold">B</button>
+                <button onMouseDown={(e) => { e.preventDefault(); exec('italic') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded text-xs italic text-white cursor-pointer" title="Italic">I</button>
+                <button onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditImageEl(null); setImageUrl(''); setImageSize('medium'); setShowImageModal(true) }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Insert image">
                   <Image src="/picture.png" alt="img" width={14} height={14} />
                 </button>
-                {/* LINK */}
-                <button
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    saveCursor()
-                    setEditLinkEl(null)
-                    setLinkUrl('')
-                    setShowLinkModal(true)
-                  }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Insert link"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditLinkEl(null); setLinkUrl(''); setShowLinkModal(true) }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Insert link">
                   <Image src="/link.png" alt="Link" width={14} height={14} />
                 </button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Align left"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('left') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Align left">
                   <Image src="/left.png" alt="left" width={14} height={14} />
                 </button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Align center"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('center') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Align center">
                   <Image src="/center.png" alt="center" width={14} height={14} />
                 </button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Align right"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); handleAlign('right') }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Align right">
                   <Image src="/right.png" alt="right" width={14} height={14} />
                 </button>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditYouTubeWrapper(null); setYoutubeUrl(''); setYoutubeSize('medium'); setYoutubeAlignment('center'); setYoutubeAutoplay(false); setShowYouTubeModal(true) }}
-                  className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer"
-                  title="Insert YouTube video"
-                >
+                <button onMouseDown={(e) => { e.preventDefault(); saveCursor(); setEditYouTubeWrapper(null); setYoutubeUrl(''); setYoutubeSize('medium'); setYoutubeAlignment('center'); setYoutubeAutoplay(false); setShowYouTubeModal(true) }} className="w-7 h-7 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center cursor-pointer" title="Insert YouTube video">
                   <Image src="/youtube.png" alt="YouTube" width={14} height={14} />
                 </button>
               </div>
 
-              {/* RICH CONTENT EDITOR */}
               <div
                 ref={editorRef}
                 contentEditable
@@ -773,6 +813,111 @@ export default function PostPage({
           )}
 
         </div>
+
+        {/* COMMENTS SECTION */}
+        <div className="mt-6 bg-zinc-900 rounded-2xl border border-zinc-800 p-8">
+
+          <h2 className="text-xl font-bold text-white mb-6">
+            Comments ({comments.length})
+          </h2>
+
+          {/* COMMENT INPUT — signed in only */}
+          {currentUserId ? (
+            <div className="mb-6">
+              <textarea
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value.slice(0, 500))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    submitComment()
+                  }
+                }}
+                placeholder="Write a comment..."
+                rows={3}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-white placeholder-zinc-500 outline-none resize-none focus:border-zinc-500 transition-colors"
+              />
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-zinc-500">{commentText.length}/500</span>
+                <button
+                  onClick={submitComment}
+                  disabled={!commentText.trim() || submittingComment}
+                  className="bg-green-500 hover:bg-green-400 text-black px-4 py-1.5 rounded-lg text-sm font-bold cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  {submittingComment ? 'Posting...' : 'Post Comment'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-6 bg-zinc-800 rounded-xl p-4 text-zinc-400 text-sm text-center">
+              Sign in to leave a comment
+            </div>
+          )}
+
+          {/* COMMENT LIST */}
+          {comments.length === 0 ? (
+            <p className="text-zinc-500 text-sm text-center py-4">
+              No comments yet. Be the first!
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {comments.map((comment) => (
+                <div
+                  key={comment.id}
+                  className="flex gap-3 bg-zinc-800 rounded-xl p-4 border border-zinc-700"
+                >
+                  {/* AVATAR */}
+                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 flex-shrink-0">
+                    {comment.avatar ? (
+                      <Image
+                        src={comment.avatar}
+                        alt={comment.username || ''}
+                        width={40}
+                        height={40}
+                        className="w-full h-full object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-zinc-600" />
+                    )}
+                  </div>
+
+                  {/* CONTENT */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-white text-sm">
+                          {comment.username}
+                        </span>
+                        <span className="text-xs text-zinc-500">
+                          {formatCommentDate(comment.created_at)}
+                        </span>
+                      </div>
+
+                      {/* DELETE — own comment or admin */}
+                      {(currentUserId === comment.user_id || isAdmin) && (
+                        <button
+                          onClick={() => deleteComment(comment.id)}
+                          className="text-xs text-zinc-500 hover:text-red-400 transition-colors cursor-pointer flex-shrink-0"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+
+                    <p
+                      className="text-zinc-200 text-sm leading-relaxed"
+                      style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                    >
+                      {comment.content}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
 
       {/* IMAGE MODAL */}
@@ -818,54 +963,15 @@ export default function PostPage({
               <Image src="/link.png" alt="Link" width={20} height={20} />
               {editLinkEl ? 'Edit Link' : 'Insert Link'}
             </h2>
-
-            {!editLinkEl && (
-              <p className="text-xs text-zinc-400 mb-4">
-                Highlight text in the editor before clicking this button to turn it into a link.
-              </p>
-            )}
-            {editLinkEl && (
-              <p className="text-xs text-zinc-400 mb-4">
-                Update the URL below, or clear it to remove the link.
-              </p>
-            )}
-
-            <input
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') insertLink() }}
-              placeholder="https://example.com"
-              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4"
-              autoFocus
-            />
-
+            {!editLinkEl && <p className="text-xs text-zinc-400 mb-4">Highlight text in the editor before clicking this button to turn it into a link.</p>}
+            {editLinkEl && <p className="text-xs text-zinc-400 mb-4">Update the URL below, or clear it to remove the link.</p>}
+            <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') insertLink() }} placeholder="https://example.com" className="w-full p-2 rounded bg-zinc-800 border border-zinc-700 text-white mb-4" autoFocus />
             <div className="flex justify-end gap-2">
-              <button
-                onClick={closeLinkModal}
-                className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition"
-              >
-                Cancel
-              </button>
-
+              <button onClick={closeLinkModal} className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded cursor-pointer transition">Cancel</button>
               {editLinkEl && (
-                <button
-                  onClick={() => {
-                    const text = document.createTextNode(editLinkEl.innerText)
-                    editLinkEl.replaceWith(text)
-                    closeLinkModal()
-                  }}
-                  className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition"
-                >
-                  Remove
-                </button>
+                <button onClick={() => { const text = document.createTextNode(editLinkEl.innerText); editLinkEl.replaceWith(text); closeLinkModal() }} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition">Remove</button>
               )}
-
-              <button
-                onClick={insertLink}
-                className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition"
-              >
-                {editLinkEl ? 'Update' : 'Insert'}
-              </button>
+              <button onClick={insertLink} className="bg-green-500 hover:bg-green-400 text-black px-4 py-1 rounded font-bold cursor-pointer transition">{editLinkEl ? 'Update' : 'Insert'}</button>
             </div>
           </div>
         </div>
