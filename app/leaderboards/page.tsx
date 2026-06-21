@@ -27,7 +27,21 @@ type PlayerSection =
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const RANK_LIST = ["Peasant"]
+const RANK_LIST = [
+  "Peasant",
+  "Villager",
+  "Merchant",
+  "Banker",
+  "Squire",
+  "Knight",
+  "Lord",
+  "Baron",
+  "Count",
+  "Duke",
+  "Archduke",
+  "Royalty",
+  "Legend",
+]
 
 const MEDAL: Record<number, string> = { 0: "🥇", 1: "🥈", 2: "🥉" }
 
