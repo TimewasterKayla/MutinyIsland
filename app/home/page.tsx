@@ -654,16 +654,16 @@ export default function HomePage() {
                 </div>
                 <div className="space-y-2 text-xs">
                   <div className="bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700 text-center">
-                    <span className="text-zinc-400" style={{ fontFamily: "'Booter', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.85rem' }}>Rank: </span>
-                    <span className="font-semibold text-white" style={{ fontSize: '0.85rem' }}>{myProfile.rank || 'Peasant'}</span>
+                    <span className="text-zinc-400" style={{ fontFamily: "'Booter', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.95rem' }}>Rank: </span>
+                    <span className="font-semibold text-white">{myProfile.rank || 'Peasant'}</span>
                   </div>
                   <div className="bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700 text-center">
-                    <span className="text-zinc-400" style={{ fontFamily: "'Booter', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.85rem' }}>Doubloons: </span>
-                    <span className="font-semibold text-yellow-400" style={{ fontSize: '0.85rem' }}>{myProfile.coins || 0}</span>
+                    <span className="text-zinc-400" style={{ fontFamily: "'Booter', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.95rem' }}>Doubloons: </span>
+                    <span className="font-semibold text-yellow-400">{myProfile.coins || 0}</span>
                   </div>
                   <div className="bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700 text-center">
-                    <span className="text-zinc-400" style={{ fontFamily: "'Booter', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.85rem' }}>Crowns: </span>
-                    <span className="font-semibold text-amber-300" style={{ fontSize: '0.85rem' }}>{myProfile.crowns || 0}</span>
+                    <span className="text-zinc-400" style={{ fontFamily: "'Booter', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.95rem' }}>Crowns: </span>
+                    <span className="font-semibold text-amber-300">{myProfile.crowns || 0}</span>
                   </div>
                 </div>
                 <button
@@ -825,7 +825,7 @@ export default function HomePage() {
                                 style={{
                                   background: index % 2 === 0
                                     ? 'rgba(120, 60, 10, 0.55)'
-                                    : 'transparent',
+                                    : 'rgba(180, 110, 50, 0.35)',
                                 }}
                               >
                                 <button
