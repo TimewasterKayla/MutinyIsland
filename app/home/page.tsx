@@ -101,7 +101,6 @@ export default function HomePage() {
   // -----------------------------
   // PAGINATION
   // -----------------------------
-  // Only show posts that fall within our max window (first MAX_PAGES * POSTS_PER_PAGE)
   const maxPosts = MAX_PAGES * POSTS_PER_PAGE
   const visiblePosts = posts.slice(0, maxPosts)
   const totalPages = Math.min(Math.ceil(visiblePosts.length / POSTS_PER_PAGE), MAX_PAGES)
@@ -112,7 +111,6 @@ export default function HomePage() {
 
   function goToPage(page: number) {
     setCurrentPage(page)
-    // Scroll the feed back to top smoothly without affecting sidebar
     document.getElementById('feed-top')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -572,7 +570,6 @@ export default function HomePage() {
           {/* MIDDLE: MAIN FEED */}
           <div className="flex-1 min-w-0">
 
-            {/* Anchor for scroll-to-top on page change */}
             <div id="feed-top" />
 
             <div className="flex justify-between items-center mb-6">
@@ -654,6 +651,8 @@ export default function HomePage() {
                             paddingRight: '4px',
                             fontSize: '0.95rem',
                             marginTop: '1px',
+                            overflowWrap: 'break-word',
+                            wordBreak: 'break-word',
                           }}
                         >
                           {post.title}
@@ -668,6 +667,8 @@ export default function HomePage() {
                           WebkitBoxOrient: 'vertical',
                           overflow: 'hidden',
                           fontSize: '0.8rem',
+                          overflowWrap: 'break-word',
+                          wordBreak: 'break-word',
                         }}
                       >
                         {getPreviewText(post.content)}
@@ -681,7 +682,6 @@ export default function HomePage() {
             {/* PAGINATION */}
             {visiblePosts.length > POSTS_PER_PAGE && (
               <div className="flex items-center justify-end gap-1.5 mt-4">
-                {/* Back button */}
                 {hasPrev && (
                   <button
                     onClick={() => goToPage(currentPage - 1)}
@@ -690,13 +690,9 @@ export default function HomePage() {
                     ‹
                   </button>
                 )}
-
-                {/* Current page indicator */}
                 <div className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-green-600 text-white select-none">
                   {currentPage}
                 </div>
-
-                {/* Forward button */}
                 {hasNext ? (
                   <button
                     onClick={() => goToPage(currentPage + 1)}
@@ -725,7 +721,7 @@ export default function HomePage() {
 
             <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl p-4">
               <h2 className="text-base font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="text-green-400">🏆</span> Top Posts
+                <span className="text-green-400">🏆</span> Top Daily Posts
               </h2>
               {topPosts.length === 0 ? (
                 <p className="text-zinc-400 text-sm italic">No posts yet.</p>
@@ -739,7 +735,17 @@ export default function HomePage() {
                           onClick={() => router.push(`/posts/${post.id}`)}
                           className="text-left w-full group cursor-pointer"
                         >
-                          <p className="text-sm font-semibold text-zinc-200 group-hover:text-white leading-snug truncate underline underline-offset-2 decoration-zinc-600">
+                          <p
+                            className="text-sm font-semibold text-zinc-200 group-hover:text-white leading-snug underline underline-offset-2 decoration-zinc-600"
+                            style={{
+                              display: '-webkit-box',
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              overflowWrap: 'break-word',
+                              wordBreak: 'break-word',
+                            }}
+                          >
                             {post.title || 'Untitled'}
                           </p>
                         </button>
