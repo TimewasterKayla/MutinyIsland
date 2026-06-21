@@ -36,6 +36,23 @@ export default function HomePage() {
   }, [router])
 
   // -----------------------------
+  // ENTER KEY HANDLER
+  // -----------------------------
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Enter' || loading || signupSuccess) return
+      if (mode === 'login') {
+        if (username && password) login()
+      } else {
+        if (email && username && password) signUp()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [mode, email, username, password, loading, signupSuccess])
+
+  // -----------------------------
   // SWITCH MODE
   // -----------------------------
   function switchMode(to: 'login' | 'signup') {
@@ -66,7 +83,7 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // SIGN UP → show "check your email"
+  // SIGN UP
   // -----------------------------
   async function signUp() {
     setLoading(true)
@@ -85,7 +102,6 @@ export default function HomePage() {
       return
     }
 
-    // Case-insensitive duplicate username check
     const { data: existingUsers, error: lookupError } = await supabase
       .from('profiles')
       .select('username')
@@ -124,7 +140,6 @@ export default function HomePage() {
         return
       }
 
-      // Show "check your email" message
       setSignupSuccess(true)
     } catch (err) {
       console.error(err)
@@ -135,7 +150,7 @@ export default function HomePage() {
   }
 
   // -----------------------------
-  // LOGIN (username + password only, via edge function)
+  // LOGIN
   // -----------------------------
   async function login() {
     setLoading(true)
