@@ -25,8 +25,6 @@ Deno.serve(async (req) => {
   // the first entry is the original client.
   const forwardedFor = req.headers.get('x-forwarded-for')
   const clientIp = forwardedFor ? forwardedFor.split(',')[0].trim() : null
-  console.log('[login_ips debug] raw x-forwarded-for header:', forwardedFor)
-  console.log('[login_ips debug] parsed clientIp:', clientIp)
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -35,7 +33,7 @@ Deno.serve(async (req) => {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id')
+    .select('id, username')
     .ilike('username', username)
     .single()
 
@@ -80,56 +78,32 @@ Deno.serve(async (req) => {
   // ---------------------------------
   // RECORD LOGIN IP (best-effort — never blocks login on failure)
   // ---------------------------------
-  console.log('[login_ips debug] entering IP tracking block, clientIp is:', clientIp, 'profile.id:', profile.id)
-
-  // TEMP: confirm the service role key is actually present and well-formed
-  const keyUsed = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-  console.log('[login_ips debug] service key length:', keyUsed.length, 'starts with:', keyUsed.slice(0, 12))
-  // Decode the JWT payload (middle segment) to see the "role" claim — no signature verification needed for this debug check
-  try {
-    const payloadSegment = keyUsed.split('.')[1]
-    const decoded = JSON.parse(atob(payloadSegment))
-    console.log('[login_ips debug] JWT role claim:', decoded.role, 'ref:', decoded.ref)
-  } catch (e) {
-    console.log('[login_ips debug] could not decode key payload:', e)
-  }
-
   if (clientIp) {
     try {
       // Upsert: if this IP is already on file for this user, just bump
       // last_used_at. Otherwise insert a new row.
-      const { data: upsertData, error: upsertError } = await supabase
+      await supabase
         .from('login_ips')
         .upsert(
-          { user_id: profile.id, ip_address: clientIp, last_used_at: new Date().toISOString() },
+          { user_id: profile.id, ip_address: clientIp, username: profile.username, last_used_at: new Date().toISOString() },
           { onConflict: 'user_id,ip_address' }
         )
-        .select()
-
-      console.log('[login_ips debug] upsert data:', JSON.stringify(upsertData))
-      console.log('[login_ips debug] upsert error:', JSON.stringify(upsertError))
 
       // Trim to the MAX_LOGIN_IPS most recent distinct IPs for this user.
-      const { data: ipRows, error: selectError } = await supabase
+      const { data: ipRows } = await supabase
         .from('login_ips')
         .select('id, last_used_at')
         .eq('user_id', profile.id)
         .order('last_used_at', { ascending: false })
 
-      console.log('[login_ips debug] ipRows after upsert:', JSON.stringify(ipRows))
-      console.log('[login_ips debug] select error:', JSON.stringify(selectError))
-
       if (ipRows && ipRows.length > MAX_LOGIN_IPS) {
         const staleIds = ipRows.slice(MAX_LOGIN_IPS).map((r) => r.id)
-        const { error: deleteError } = await supabase.from('login_ips').delete().in('id', staleIds)
-        console.log('[login_ips debug] delete error:', JSON.stringify(deleteError))
+        await supabase.from('login_ips').delete().in('id', staleIds)
       }
     } catch (err) {
       // Don't fail the login just because IP logging hiccuped.
-      console.error('[login_ips debug] thrown exception:', err)
+      console.error('login_ips tracking failed:', err)
     }
-  } else {
-    console.log('[login_ips debug] skipped — clientIp was falsy')
   }
 
   return new Response(JSON.stringify({ session: signInData.session }), {
