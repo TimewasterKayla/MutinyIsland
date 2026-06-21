@@ -53,6 +53,7 @@ type FriendListEntry = {
   id: string
   username: string
   avatar: string | null
+  created_at: string
 }
 
 type IncomingRequest = {
@@ -650,11 +651,13 @@ export default function ProfilePage({
         id,
         requester_id,
         recipient_id,
+        created_at,
         requester:profiles!friends_requester_id_fkey(id, username, avatar),
         recipient:profiles!friends_recipient_id_fkey(id, username, avatar)
       `)
       .eq('status', 'accepted')
       .or(`requester_id.eq.${profileId},recipient_id.eq.${profileId}`)
+      .order('created_at', { ascending: false })
 
     if (error) { console.error(error); return }
 
@@ -665,6 +668,7 @@ export default function ProfilePage({
         id: other?.id,
         username: other?.username ?? 'Unknown',
         avatar: other?.avatar ?? null,
+        created_at: row.created_at,
       }
     })
 
@@ -2015,7 +2019,7 @@ export default function ProfilePage({
                           <div className="relative w-full" style={{ aspectRatio: '3 / 4' }}>
                             <button
                               onClick={() => router.push(`/profile/${friend.username}`)}
-                              className={`w-full h-full rounded-xl overflow-hidden bg-white/5 border cursor-pointer transition ${
+                              className={`w-full h-full overflow-hidden bg-white/5 border cursor-pointer transition ${
                                 isHovered ? 'border-green-500' : 'border-white/10'
                               }`}
                             >
