@@ -1481,7 +1481,7 @@ export default function ProfilePage({
 
                 {!editing ? (
                   <div
-                    className="bg-zinc-900 rounded-xl p-4 min-h-[200px]"
+                    className="min-h-[200px] pt-1"
                     dangerouslySetInnerHTML={{
                       __html:
                         profile.about_me?.trim() ||
