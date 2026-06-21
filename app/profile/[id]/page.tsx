@@ -1435,18 +1435,18 @@ export default function ProfilePage({
                           <button
                             onClick={sendFriendRequest}
                             disabled={friendActionLoading}
-                            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-bold px-4 py-2 rounded-xl cursor-pointer transition"
+                            className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer transition text-sm"
                           >
-                            <Image src="/friendadd.png" alt="" width={16} height={16} />
+                            <Image src="/friendadd.png" alt="" width={13} height={13} />
                             Add Friend
                           </button>
                         )}
                         {friendStatus === 'pending_sent' && (
                           <button
                             disabled
-                            className="flex items-center gap-2 bg-zinc-700 text-zinc-300 font-bold px-4 py-2 rounded-xl cursor-not-allowed"
+                            className="flex items-center gap-1.5 bg-zinc-700 text-zinc-300 font-bold px-3 py-1.5 rounded-xl cursor-not-allowed text-sm"
                           >
-                            <Image src="/friendadd.png" alt="" width={16} height={16} />
+                            <Image src="/friendadd.png" alt="" width={13} height={13} />
                             Pending
                           </button>
                         )}
@@ -1454,18 +1454,18 @@ export default function ProfilePage({
                           <button
                             onClick={acceptFriendRequestFromProfile}
                             disabled={friendActionLoading}
-                            className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-60 text-black font-bold px-4 py-2 rounded-xl cursor-pointer transition"
+                            className="flex items-center gap-1.5 bg-green-500 hover:bg-green-400 disabled:opacity-60 text-black font-bold px-3 py-1.5 rounded-xl cursor-pointer transition text-sm"
                           >
-                            <Image src="/friendadd.png" alt="" width={16} height={16} />
+                            <Image src="/friendadd.png" alt="" width={13} height={13} />
                             Accept Request
                           </button>
                         )}
                         {friendStatus === 'friends' && (
                           <button
                             disabled
-                            className="flex items-center gap-2 bg-zinc-700 text-white font-bold px-4 py-2 rounded-xl cursor-default"
+                            className="flex items-center gap-1.5 bg-sky-400 text-white font-bold px-3 py-1.5 rounded-xl cursor-default text-sm"
                           >
-                            <Image src="/friends.png" alt="" width={16} height={16} />
+                            <Image src="/friends.png" alt="" width={13} height={13} />
                             Friends
                           </button>
                         )}
