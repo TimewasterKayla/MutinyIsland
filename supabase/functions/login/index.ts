@@ -82,6 +82,18 @@ Deno.serve(async (req) => {
   // ---------------------------------
   console.log('[login_ips debug] entering IP tracking block, clientIp is:', clientIp, 'profile.id:', profile.id)
 
+  // TEMP: confirm the service role key is actually present and well-formed
+  const keyUsed = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  console.log('[login_ips debug] service key length:', keyUsed.length, 'starts with:', keyUsed.slice(0, 12))
+  // Decode the JWT payload (middle segment) to see the "role" claim — no signature verification needed for this debug check
+  try {
+    const payloadSegment = keyUsed.split('.')[1]
+    const decoded = JSON.parse(atob(payloadSegment))
+    console.log('[login_ips debug] JWT role claim:', decoded.role, 'ref:', decoded.ref)
+  } catch (e) {
+    console.log('[login_ips debug] could not decode key payload:', e)
+  }
+
   if (clientIp) {
     try {
       // Upsert: if this IP is already on file for this user, just bump
