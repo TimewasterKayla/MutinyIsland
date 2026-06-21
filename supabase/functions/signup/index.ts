@@ -6,6 +6,15 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// Keep this in sync with the avatars array in profile/[id]/page.tsx
+const avatars = [
+  "/avatars/jess.png",
+  "/avatars/laffite.png",
+  "/avatars/malley.png",
+  "/avatars/morgan.png",
+  "/avatars/read.png",
+];
+
 Deno.serve(async (req) => {
 
   // ---------------------------------
@@ -75,6 +84,8 @@ Deno.serve(async (req) => {
     // ---------------------------------
     // 3. CREATE PROFILE
     // ---------------------------------
+    const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
+
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .insert({
@@ -82,6 +93,7 @@ Deno.serve(async (req) => {
         username,
         email,
         coins: 0,
+        avatar: randomAvatar,
       });
 
     // ---------------------------------
