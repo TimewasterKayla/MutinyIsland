@@ -1423,7 +1423,7 @@ export default function ProfilePage({
             {/* ======================== ABOUT TAB ======================== */}
             {activeTab === 'about' && (
               <div>
-                <div className="flex items-center justify-between mb-4 pl-4">
+                <div className="flex items-center justify-between mb-4">
                   <h2 className="text-3xl font-bold">About Me</h2>
                   <div className="flex items-center gap-2">
                     {isOwnProfile && !editing && (
