@@ -29,6 +29,12 @@ Deno.serve(async (req) => {
   try {
     const { email, password, username } = await req.json();
 
+    // ---------------------------------
+    // GET CLIENT IP
+    // ---------------------------------
+    const forwardedFor = req.headers.get("x-forwarded-for");
+    const clientIp = forwardedFor ? forwardedFor.split(",")[0].trim() : null;
+
     // Admin client for DB operations
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -94,6 +100,7 @@ Deno.serve(async (req) => {
         email,
         coins: 0,
         avatar: randomAvatar,
+        signup_ip: clientIp,
       });
 
     // ---------------------------------
