@@ -38,6 +38,31 @@ type ProfilePostSummary = {
   likes: number | null
 }
 
+type FriendStatus = 'none' | 'pending_sent' | 'pending_received' | 'friends'
+
+type FriendRow = {
+  id: string
+  requester_id: string
+  recipient_id: string
+  status: 'pending' | 'accepted'
+  created_at: string
+}
+
+type FriendListEntry = {
+  friendshipId: string
+  id: string
+  username: string
+  avatar: string | null
+}
+
+type IncomingRequest = {
+  friendshipId: string
+  id: string
+  username: string
+  avatar: string | null
+  created_at: string
+}
+
 type TabType = 'about' | 'inbox' | 'posts' | 'friends' | 'wins' | 'inventory'
 type PostsViewType = 'all' | 'top'
 
@@ -192,6 +217,28 @@ export default function ProfilePage({
   const [postsPage, setPostsPage] = useState<number>(1)
   const [postsView, setPostsView] = useState<PostsViewType>('all')
 
+  // -----------------------------
+  // FRIENDS STATE
+  // -----------------------------
+  // Status of the *viewed* profile relative to the logged-in user (only relevant when !isOwnProfile)
+  const [friendStatus, setFriendStatus] = useState<FriendStatus>('none')
+  const [friendStatusRowId, setFriendStatusRowId] = useState<string | null>(null)
+  const [friendActionLoading, setFriendActionLoading] = useState<boolean>(false)
+
+  // The viewed profile's friends list (shown in the grid, works for own or others' profiles)
+  const [friendsList, setFriendsList] = useState<FriendListEntry[]>([])
+
+  // Incoming pending requests (own profile only)
+  const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>([])
+  const [showRequestsDropdown, setShowRequestsDropdown] = useState<boolean>(false)
+  const [requestActionLoadingId, setRequestActionLoadingId] = useState<string | null>(null)
+
+  // Edit mode for unfriending from own friends grid
+  const [friendsEditMode, setFriendsEditMode] = useState<boolean>(false)
+  const [unfriendLoadingId, setUnfriendLoadingId] = useState<string | null>(null)
+
+  const requestsDropdownRef = useRef<HTMLDivElement | null>(null)
+
   const editorRef = useRef<HTMLDivElement | null>(null)
   const composeEditorRef = useRef<HTMLDivElement | null>(null)
   const replyEditorRef = useRef<HTMLDivElement | null>(null)
@@ -244,6 +291,8 @@ export default function ProfilePage({
     setIsOwnProfile(own)
     if (user) {
       setCurrentUserId(user.id)
+    }
+    if (own) {
       setCurrentUsername(data.username)
     }
 
@@ -254,6 +303,20 @@ export default function ProfilePage({
 
     setLoading(false)
   }
+
+  // Need currentUsername even when viewing someone else's profile (used in thread "isMe" labels on own inbox only,
+  // so fetch separately if not own profile so it's still available where needed elsewhere)
+  useEffect(() => {
+    if (isOwnProfile || !currentUserId) return
+    supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', currentUserId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.username) setCurrentUsername(data.username)
+      })
+  }, [isOwnProfile, currentUserId])
 
   // -----------------------------
   // LOAD USER POSTS (any profile, own or not)
@@ -466,6 +529,282 @@ export default function ProfilePage({
     setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, read: true } : m)))
     setUnreadCount((prev) => Math.max(0, prev - 1))
   }
+
+  // ============================================================
+  // FRIENDS SYSTEM
+  // ============================================================
+
+  // -----------------------------
+  // Load friend status between currentUserId and the viewed profile (other people's profiles only)
+  // -----------------------------
+  useEffect(() => {
+    if (!profile || !currentUserId) return
+    if (isOwnProfile) {
+      setFriendStatus('none')
+      setFriendStatusRowId(null)
+      return
+    }
+    loadFriendStatus()
+  }, [profile?.id, currentUserId, isOwnProfile])
+
+  async function loadFriendStatus() {
+    if (!profile || !currentUserId) return
+
+    const { data, error } = await supabase
+      .from('friends')
+      .select('*')
+      .or(
+        `and(requester_id.eq.${currentUserId},recipient_id.eq.${profile.id}),and(requester_id.eq.${profile.id},recipient_id.eq.${currentUserId})`
+      )
+      .maybeSingle()
+
+    if (error) { console.error(error); return }
+
+    if (!data) {
+      setFriendStatus('none')
+      setFriendStatusRowId(null)
+      return
+    }
+
+    const row = data as FriendRow
+    setFriendStatusRowId(row.id)
+
+    if (row.status === 'accepted') {
+      setFriendStatus('friends')
+    } else if (row.requester_id === currentUserId) {
+      setFriendStatus('pending_sent')
+    } else {
+      setFriendStatus('pending_received')
+    }
+  }
+
+  // -----------------------------
+  // Send a friend request (viewing someone else's profile)
+  // -----------------------------
+  async function sendFriendRequest() {
+    if (!profile || !currentUserId || friendActionLoading) return
+    setFriendActionLoading(true)
+
+    const { data: inserted, error } = await supabase
+      .from('friends')
+      .insert({
+        requester_id: currentUserId,
+        recipient_id: profile.id,
+        status: 'pending',
+      })
+      .select('id')
+      .single()
+
+    setFriendActionLoading(false)
+
+    if (error || !inserted) {
+      console.error('Friend request error:', error)
+      // Could be a duplicate row (unique constraint) — refresh status to reflect reality
+      loadFriendStatus()
+      return
+    }
+
+    setFriendStatus('pending_sent')
+    setFriendStatusRowId(inserted.id)
+  }
+
+  // -----------------------------
+  // Accept a friend request directly from someone's profile
+  // (used when friendStatus === 'pending_received')
+  // -----------------------------
+  async function acceptFriendRequestFromProfile() {
+    if (!friendStatusRowId || friendActionLoading) return
+    setFriendActionLoading(true)
+
+    const { error } = await supabase
+      .from('friends')
+      .update({ status: 'accepted' })
+      .eq('id', friendStatusRowId)
+
+    setFriendActionLoading(false)
+
+    if (error) {
+      console.error('Accept error:', error)
+      return
+    }
+
+    setFriendStatus('friends')
+    // Refresh the friends grid if we're looking at our own profile's friends tab elsewhere — not needed here
+    // since this only renders on someone else's profile, but refresh their list in case it's displayed.
+    if (profile) loadFriendsList(profile.id)
+  }
+
+  // -----------------------------
+  // Load the friends list (grid) for whichever profile is being viewed
+  // -----------------------------
+  useEffect(() => {
+    if (!profile) return
+    loadFriendsList(profile.id)
+  }, [profile?.id])
+
+  async function loadFriendsList(profileId: string) {
+    const { data, error } = await supabase
+      .from('friends')
+      .select(`
+        id,
+        requester_id,
+        recipient_id,
+        requester:profiles!friends_requester_id_fkey(id, username, avatar),
+        recipient:profiles!friends_recipient_id_fkey(id, username, avatar)
+      `)
+      .eq('status', 'accepted')
+      .or(`requester_id.eq.${profileId},recipient_id.eq.${profileId}`)
+
+    if (error) { console.error(error); return }
+
+    const list: FriendListEntry[] = (data || []).map((row: any) => {
+      const other = row.requester_id === profileId ? row.recipient : row.requester
+      return {
+        friendshipId: row.id,
+        id: other?.id,
+        username: other?.username ?? 'Unknown',
+        avatar: other?.avatar ?? null,
+      }
+    })
+
+    setFriendsList(list)
+  }
+
+  // -----------------------------
+  // Load incoming pending requests (own profile only) + live updates
+  // -----------------------------
+  useEffect(() => {
+    if (!isOwnProfile || !currentUserId) return
+    loadIncomingRequests()
+
+    const channel = supabase
+      .channel('friend-requests-' + currentUserId)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'friends',
+          filter: `recipient_id=eq.${currentUserId}`,
+        },
+        () => { loadIncomingRequests() }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [isOwnProfile, currentUserId])
+
+  async function loadIncomingRequests() {
+    if (!currentUserId) return
+    const { data, error } = await supabase
+      .from('friends')
+      .select('id, created_at, requester:profiles!friends_requester_id_fkey(id, username, avatar)')
+      .eq('recipient_id', currentUserId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+
+    if (error) { console.error(error); return }
+
+    const reqs: IncomingRequest[] = (data || []).map((row: any) => ({
+      friendshipId: row.id,
+      id: row.requester?.id,
+      username: row.requester?.username ?? 'Unknown',
+      avatar: row.requester?.avatar ?? null,
+      created_at: row.created_at,
+    }))
+
+    setIncomingRequests(reqs)
+  }
+
+  // -----------------------------
+  // Accept / deny from the requests dropdown
+  // -----------------------------
+  async function acceptIncomingRequest(req: IncomingRequest) {
+    if (requestActionLoadingId) return
+    setRequestActionLoadingId(req.friendshipId)
+
+    const { error } = await supabase
+      .from('friends')
+      .update({ status: 'accepted' })
+      .eq('id', req.friendshipId)
+
+    setRequestActionLoadingId(null)
+
+    if (error) {
+      console.error('Accept error:', error)
+      return
+    }
+
+    setIncomingRequests((prev) => prev.filter((r) => r.friendshipId !== req.friendshipId))
+    if (profile) loadFriendsList(profile.id)
+  }
+
+  async function denyIncomingRequest(req: IncomingRequest) {
+    if (requestActionLoadingId) return
+    setRequestActionLoadingId(req.friendshipId)
+
+    const { error } = await supabase
+      .from('friends')
+      .delete()
+      .eq('id', req.friendshipId)
+
+    setRequestActionLoadingId(null)
+
+    if (error) {
+      console.error('Deny error:', error)
+      return
+    }
+
+    setIncomingRequests((prev) => prev.filter((r) => r.friendshipId !== req.friendshipId))
+  }
+
+  // -----------------------------
+  // Unfriend (from edit mode on own friends grid)
+  // -----------------------------
+  async function unfriend(entry: FriendListEntry) {
+    if (unfriendLoadingId) return
+    setUnfriendLoadingId(entry.friendshipId)
+
+    const { error } = await supabase
+      .from('friends')
+      .delete()
+      .eq('id', entry.friendshipId)
+
+    setUnfriendLoadingId(null)
+
+    if (error) {
+      console.error('Unfriend error:', error)
+      return
+    }
+
+    setFriendsList((prev) => prev.filter((f) => f.friendshipId !== entry.friendshipId))
+  }
+
+  // -----------------------------
+  // Close requests dropdown on outside click
+  // -----------------------------
+  useEffect(() => {
+    if (!showRequestsDropdown) return
+    function handleClickOutside(e: MouseEvent) {
+      if (requestsDropdownRef.current && !requestsDropdownRef.current.contains(e.target as Node)) {
+        setShowRequestsDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showRequestsDropdown])
+
+  // Reset edit mode if the user navigates away from the friends tab
+  useEffect(() => {
+    if (activeTab !== 'friends') {
+      setFriendsEditMode(false)
+      setShowRequestsDropdown(false)
+    }
+  }, [activeTab])
+
+  // ============================================================
+  // END FRIENDS SYSTEM
+  // ============================================================
 
   // -----------------------------
   // LOAD EDIT CONTENT
@@ -1065,6 +1404,11 @@ export default function ProfilePage({
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
+                {tab === 'friends' && isOwnProfile && incomingRequests.length > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none z-20">
+                    {incomingRequests.length > 9 ? '9+' : incomingRequests.length}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -1076,14 +1420,58 @@ export default function ProfilePage({
               <div>
                 <div className="flex items-center justify-between mb-4 pl-4">
                   <h2 className="text-3xl font-bold">About Me</h2>
-                  {isOwnProfile && !editing && (
-                    <button
-                      onClick={() => setEditing(true)}
-                      className="bg-green-500 text-black px-4 py-2 rounded-xl font-bold cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {isOwnProfile && !editing && (
+                      <button
+                        onClick={() => setEditing(true)}
+                        className="bg-green-500 text-black px-4 py-2 rounded-xl font-bold cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {!isOwnProfile && (
+                      <>
+                        {friendStatus === 'none' && (
+                          <button
+                            onClick={sendFriendRequest}
+                            disabled={friendActionLoading}
+                            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-bold px-4 py-2 rounded-xl cursor-pointer transition"
+                          >
+                            <Image src="/friendadd.png" alt="" width={16} height={16} />
+                            Add Friend
+                          </button>
+                        )}
+                        {friendStatus === 'pending_sent' && (
+                          <button
+                            disabled
+                            className="flex items-center gap-2 bg-zinc-700 text-zinc-300 font-bold px-4 py-2 rounded-xl cursor-not-allowed"
+                          >
+                            <Image src="/friendadd.png" alt="" width={16} height={16} />
+                            Pending
+                          </button>
+                        )}
+                        {friendStatus === 'pending_received' && (
+                          <button
+                            onClick={acceptFriendRequestFromProfile}
+                            disabled={friendActionLoading}
+                            className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-60 text-black font-bold px-4 py-2 rounded-xl cursor-pointer transition"
+                          >
+                            <Image src="/friendadd.png" alt="" width={16} height={16} />
+                            Accept Request
+                          </button>
+                        )}
+                        {friendStatus === 'friends' && (
+                          <button
+                            disabled
+                            className="flex items-center gap-2 bg-zinc-700 text-white font-bold px-4 py-2 rounded-xl cursor-default"
+                          >
+                            <Image src="/friends.png" alt="" width={16} height={16} />
+                            Friends
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {!editing ? (
@@ -1512,10 +1900,145 @@ export default function ProfilePage({
               </div>
             )}
 
+            {/* ======================== FRIENDS TAB ======================== */}
             {activeTab === 'friends' && (
               <div>
-                <h2 className="text-3xl font-bold mb-4">Friends</h2>
-                <div className="text-zinc-400">Friends coming soon...</div>
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="text-3xl font-bold">Friends</h2>
+
+                  {isOwnProfile && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setFriendsEditMode((prev) => !prev)}
+                        className={`px-4 py-1.5 rounded-xl font-bold text-sm cursor-pointer transition ${
+                          friendsEditMode
+                            ? 'bg-green-500 hover:bg-green-400 text-black'
+                            : 'bg-zinc-700 hover:bg-zinc-600 text-white'
+                        }`}
+                      >
+                        {friendsEditMode ? 'Finished?' : 'Edit'}
+                      </button>
+
+                      <div className="relative" ref={requestsDropdownRef}>
+                        <button
+                          onClick={() => setShowRequestsDropdown((prev) => !prev)}
+                          className="relative bg-orange-500 hover:bg-orange-600 text-white font-bold px-4 py-1.5 rounded-xl cursor-pointer transition text-sm"
+                        >
+                          Requests
+                          {incomingRequests.length > 0 && (
+                            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                              {incomingRequests.length > 9 ? '9+' : incomingRequests.length}
+                            </span>
+                          )}
+                        </button>
+
+                        {showRequestsDropdown && (
+                          <div className="absolute right-0 mt-2 w-72 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl z-30 overflow-hidden">
+                            <div className="px-4 py-2 border-b border-zinc-700 text-sm font-bold text-zinc-200">
+                              Pending Requests
+                            </div>
+                            {incomingRequests.length === 0 ? (
+                              <div className="px-4 py-4 text-sm text-zinc-400 italic">
+                                No pending requests.
+                              </div>
+                            ) : (
+                              <ul className="max-h-72 overflow-y-auto">
+                                {incomingRequests.map((req) => (
+                                  <li
+                                    key={req.friendshipId}
+                                    className="flex items-center gap-2 px-3 py-2 border-b border-zinc-700/60 last:border-b-0"
+                                  >
+                                    <button
+                                      onClick={() => {
+                                        setShowRequestsDropdown(false)
+                                        router.push(`/profile/${req.username}`)
+                                      }}
+                                      className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+                                    >
+                                      <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-700 flex-shrink-0">
+                                        <Image
+                                          src={req.avatar || '/avatars/jess.png'}
+                                          alt=""
+                                          width={32}
+                                          height={32}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      </div>
+                                      <span className="text-sm text-white truncate hover:text-green-400 transition">
+                                        @{req.username}
+                                      </span>
+                                    </button>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                      <button
+                                        onClick={() => acceptIncomingRequest(req)}
+                                        disabled={requestActionLoadingId === req.friendshipId}
+                                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-bold cursor-pointer transition"
+                                        title="Accept"
+                                      >
+                                        ✓
+                                      </button>
+                                      <button
+                                        onClick={() => denyIncomingRequest(req)}
+                                        disabled={requestActionLoadingId === req.friendshipId}
+                                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-500 hover:bg-red-400 disabled:opacity-50 text-white font-bold cursor-pointer transition"
+                                        title="Deny"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {friendsList.length === 0 ? (
+                  <div className="text-zinc-400 italic">No friends yet.</div>
+                ) : (
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-4">
+                    {friendsList.map((friend) => (
+                      <div key={friend.friendshipId} className="flex flex-col items-center">
+                        <div className="relative w-full aspect-square">
+                          <button
+                            onClick={() => router.push(`/profile/${friend.username}`)}
+                            className="w-full h-full rounded-xl overflow-hidden bg-white/5 border border-white/10 cursor-pointer hover:border-green-500 transition"
+                          >
+                            <Image
+                              src={friend.avatar || '/avatars/jess.png'}
+                              alt={friend.username}
+                              width={100}
+                              height={100}
+                              className="w-full h-full object-cover opacity-80"
+                            />
+                          </button>
+
+                          {friendsEditMode && (
+                            <button
+                              onClick={() => unfriend(friend)}
+                              disabled={unfriendLoadingId === friend.friendshipId}
+                              className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 hover:bg-red-400 disabled:opacity-50 flex items-center justify-center cursor-pointer shadow-lg z-10 transition"
+                              title="Remove friend"
+                            >
+                              <Image src="/friendremove.png" alt="Remove" width={12} height={12} />
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => router.push(`/profile/${friend.username}`)}
+                          className="mt-1.5 text-xs text-zinc-300 hover:text-green-400 transition cursor-pointer truncate w-full text-center"
+                          title={friend.username}
+                        >
+                          {friend.username}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
