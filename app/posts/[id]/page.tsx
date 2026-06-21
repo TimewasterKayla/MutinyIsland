@@ -109,8 +109,6 @@ export default function PostPage({
   const editorRef = useRef<HTMLDivElement | null>(null)
   const savedRangeRef = useRef<Range | null>(null)
 
-  const MAX_CHARS = 1000
-
   // -----------------------------
   // PARAMS
   // -----------------------------
@@ -160,14 +158,14 @@ export default function PostPage({
   }
 
   // -----------------------------
-  // FETCH COMMENTS
+  // FETCH COMMENTS (newest first)
   // -----------------------------
   async function fetchComments() {
     const { data, error } = await supabase
       .from('comments')
       .select('*')
       .eq('post_id', postId)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
 
     if (error || !data) return
 
@@ -866,8 +864,11 @@ export default function PostPage({
                   key={comment.id}
                   className="flex gap-3 bg-zinc-800 rounded-xl p-4 border border-zinc-700"
                 >
-                  {/* AVATAR */}
-                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 flex-shrink-0">
+                  {/* AVATAR — clickable */}
+                  <div
+                    onClick={() => router.push(`/profile/${comment.username}`)}
+                    className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                  >
                     {comment.avatar ? (
                       <Image
                         src={comment.avatar}
@@ -886,7 +887,11 @@ export default function PostPage({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white text-sm">
+                        {/* USERNAME — clickable */}
+                        <span
+                          onClick={() => router.push(`/profile/${comment.username}`)}
+                          className="font-semibold text-white text-sm cursor-pointer hover:underline"
+                        >
                           {comment.username}
                         </span>
                         <span className="text-xs text-zinc-500">
@@ -894,7 +899,7 @@ export default function PostPage({
                         </span>
                       </div>
 
-                      {/* DELETE — own comment or admin */}
+                      {/* DELETE */}
                       {(currentUserId === comment.user_id || isAdmin) && (
                         <button
                           onClick={() => deleteComment(comment.id)}
