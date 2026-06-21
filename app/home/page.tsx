@@ -689,140 +689,157 @@ export default function HomePage() {
 
             {/* POSTS */}
             <div className="space-y-3">
-              {pagePosts.map((post) => (
-                <div key={post.id}>
+              {pagePosts.map((post) => {
+                const isOpen = openComments === post.id
+                return (
+                  <div key={post.id}>
 
-                  {/* POST CARD */}
-                  <div className="bg-zinc-900/80 backdrop-blur-sm rounded-xl border border-zinc-800 p-4">
-                    <div className="flex gap-3">
-                      <div
-                        className="flex-shrink-0 self-start cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.username}`) }}
-                      >
-                        <div className="w-14 h-20 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 hover:border-zinc-400 transition-colors">
-                          {post.avatar ? (
-                            <Image
-                              src={post.avatar}
-                              alt={post.username}
-                              width={56}
-                              height={80}
-                              className="w-full h-full object-cover"
-                              unoptimized
-                            />
-                          ) : (
-                            <div className="w-full h-full bg-zinc-600" />
-                          )}
+                    {/* POST CARD — remove bottom rounding when comments are open */}
+                    <div
+                      className={`bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 p-4 ${
+                        isOpen
+                          ? 'rounded-t-xl rounded-b-none'
+                          : 'rounded-xl'
+                      }`}
+                    >
+                      <div className="flex gap-3">
+                        <div
+                          className="flex-shrink-0 self-start cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.username}`) }}
+                        >
+                          <div className="w-14 h-20 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 hover:border-zinc-400 transition-colors">
+                            {post.avatar ? (
+                              <Image
+                                src={post.avatar}
+                                alt={post.username}
+                                width={56}
+                                height={80}
+                                className="w-full h-full object-cover"
+                                unoptimized
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-zinc-600" />
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex-1 min-w-0" style={{ maxHeight: '80px', overflow: 'hidden' }}>
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-xs text-zinc-400 leading-tight truncate">
-                            <span
-                              className="font-semibold text-zinc-300 hover:text-white cursor-pointer transition-colors"
-                              onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.username}`) }}
+                        <div className="flex-1 min-w-0" style={{ maxHeight: '80px', overflow: 'hidden' }}>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-xs text-zinc-400 leading-tight truncate">
+                              <span
+                                className="font-semibold text-zinc-300 hover:text-white cursor-pointer transition-colors"
+                                onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.username}`) }}
+                              >
+                                {post.username}
+                              </span>
+                              <span className="mx-1 text-zinc-600">·</span>
+                              <span>{new Date(post.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                            </p>
+                            <button
+                              onClick={(e) => toggleLike(e, post)}
+                              className="flex-shrink-0 flex flex-col items-center gap-0 cursor-pointer leading-none"
+                              style={{ paddingTop: '2px' }}
                             >
-                              {post.username}
-                            </span>
-                            <span className="mx-1 text-zinc-600">·</span>
-                            <span>{new Date(post.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                          </p>
-                          <button
-                            onClick={(e) => toggleLike(e, post)}
-                            className="flex-shrink-0 flex flex-col items-center gap-0 cursor-pointer leading-none"
-                            style={{ paddingTop: '2px' }}
-                          >
-                            <span className="text-base leading-none">{likedPosts[post.id] ? '❤️' : '🤍'}</span>
-                            <span className="text-[10px] text-zinc-400 leading-tight">{post.likes || 0}</span>
-                          </button>
-                        </div>
+                              <span className="text-base leading-none">{likedPosts[post.id] ? '❤️' : '🤍'}</span>
+                              <span className="text-[10px] text-zinc-400 leading-tight">{post.likes || 0}</span>
+                            </button>
+                          </div>
 
-                        {post.title && (
-                          <h2
-                            onClick={(e) => { e.stopPropagation(); router.push(`/posts/${post.id}`) }}
-                            className="font-bold text-white underline underline-offset-2 decoration-zinc-500 leading-snug cursor-pointer hover:text-zinc-200 transition-colors inline-block w-full"
+                          {post.title && (
+                            <h2
+                              onClick={(e) => { e.stopPropagation(); router.push(`/posts/${post.id}`) }}
+                              className="font-bold text-white underline underline-offset-2 decoration-zinc-500 leading-snug cursor-pointer hover:text-zinc-200 transition-colors inline-block w-full"
+                              style={{
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                paddingRight: '4px',
+                                fontSize: '0.95rem',
+                                marginTop: '1px',
+                                overflowWrap: 'break-word',
+                                wordBreak: 'break-word',
+                              }}
+                            >
+                              {post.title}
+                            </h2>
+                          )}
+
+                          <p
+                            className="text-zinc-400 leading-snug mt-0.5"
                             style={{
                               display: '-webkit-box',
                               WebkitLineClamp: 2,
                               WebkitBoxOrient: 'vertical',
                               overflow: 'hidden',
-                              paddingRight: '4px',
-                              fontSize: '0.95rem',
-                              marginTop: '1px',
+                              fontSize: '0.8rem',
                               overflowWrap: 'break-word',
                               wordBreak: 'break-word',
                             }}
                           >
-                            {post.title}
-                          </h2>
-                        )}
+                            {getPreviewText(post.content)}
+                          </p>
+                        </div>
+                      </div>
 
-                        <p
-                          className="text-zinc-400 leading-snug mt-0.5"
-                          style={{
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                            fontSize: '0.8rem',
-                            overflowWrap: 'break-word',
-                            wordBreak: 'break-word',
-                          }}
+                      {/* COMMENTS TOGGLE */}
+                      <div className="flex justify-end mt-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleComments(post.id) }}
+                          className="text-[11px] text-amber-300 underline underline-offset-2 cursor-pointer hover:text-amber-200 transition-colors"
                         >
-                          {getPreviewText(post.content)}
-                        </p>
+                          Comments ({commentCounts[post.id] || 0})
+                        </button>
                       </div>
                     </div>
 
-                    {/* COMMENTS TOGGLE */}
-                    <div className="flex justify-end mt-2">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); toggleComments(post.id) }}
-                        className="text-[11px] text-amber-300 underline underline-offset-2 cursor-pointer hover:text-amber-200 transition-colors"
+                    {/* COMMENTS DROPDOWN */}
+                    {isOpen && (
+                      <div
+                        className="rounded-b-xl border border-t-0 border-amber-800/40 px-4 py-3"
+                        style={{
+                          background: 'linear-gradient(135deg, #3d2a1a 0%, #4a3420 50%, #3a2810 100%)',
+                        }}
                       >
-                        Comments ({commentCounts[post.id] || 0})
-                      </button>
-                    </div>
+                        {loadingComments === post.id ? (
+                          <p className="text-[11px] text-amber-300/60 italic">Loading comments...</p>
+                        ) : !postComments[post.id] || postComments[post.id].length === 0 ? (
+                          <p className="text-[11px] text-amber-300/60 italic">No comments yet.</p>
+                        ) : (
+                          <div>
+                            {postComments[post.id].map((comment, index) => (
+                              <div
+                                key={comment.id}
+                                className="flex gap-1.5 items-baseline px-2 py-1.5 rounded"
+                                style={{
+                                  background: index % 2 === 0
+                                    ? 'transparent'
+                                    : 'rgba(255,255,255,0.06)',
+                                }}
+                              >
+                                <button
+                                  onClick={() => router.push(`/profile/${comment.username}`)}
+                                  className="text-[11px] font-semibold text-amber-200 hover:text-amber-100 hover:underline cursor-pointer flex-shrink-0 transition-colors"
+                                >
+                                  {comment.username}
+                                </button>
+                                <span className="text-amber-600 text-[11px] flex-shrink-0">·</span>
+                                <p
+                                  className="text-[11px] text-amber-100/80 leading-snug"
+                                  style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                                >
+                                  {comment.content}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                   </div>
-
-                  {/* COMMENTS DROPDOWN */}
-                  {openComments === post.id && (
-                    <div
-                      className="rounded-b-xl border border-t-0 border-amber-800/40 px-4 py-3"
-                      style={{
-                        background: 'linear-gradient(135deg, #3d2a1a 0%, #4a3420 50%, #3a2810 100%)',
-                      }}
-                    >
-                      {loadingComments === post.id ? (
-                        <p className="text-[11px] text-amber-300/60 italic">Loading comments...</p>
-                      ) : !postComments[post.id] || postComments[post.id].length === 0 ? (
-                        <p className="text-[11px] text-amber-300/60 italic">No comments yet.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {postComments[post.id].map((comment) => (
-                            <div key={comment.id} className="flex gap-1.5 items-baseline">
-                              <button
-                                onClick={() => router.push(`/profile/${comment.username}`)}
-                                className="text-[11px] font-semibold text-amber-200 hover:text-amber-100 hover:underline cursor-pointer flex-shrink-0 transition-colors"
-                              >
-                                {comment.username}
-                              </button>
-                              <span className="text-amber-600 text-[11px] flex-shrink-0">·</span>
-                              <p
-                                className="text-[11px] text-amber-100/80 leading-snug"
-                                style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
-                              >
-                                {comment.content}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* PAGINATION */}
