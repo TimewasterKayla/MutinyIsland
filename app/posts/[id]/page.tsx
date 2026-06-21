@@ -598,13 +598,17 @@ export default function PostPage({
           {!editing && (
             <>
               {post.title && (
-                <h1 className="text-3xl font-bold text-white mb-5 leading-snug">
+                <h1
+                  className="text-3xl font-bold text-white mb-5 leading-snug"
+                  style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                >
                   {post.title}
                 </h1>
               )}
               {post.content && (
                 <div
                   className="text-zinc-200 leading-relaxed prose-invert"
+                  style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
                   dangerouslySetInnerHTML={{ __html: post.content }}
                 />
               )}
