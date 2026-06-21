@@ -1558,7 +1558,7 @@ export default function ProfilePage({
                     )}
 
                     {pageUserPosts.length === 0 ? (
-                      <div className="text-zinc-400 italic">No posts yet.</div>
+                      <div className="text-zinc-400 italic">No posts yet. Encourage this user to make one!</div>
                     ) : (
                       <ul className="flex flex-col">
                         {pageUserPosts.map((post, index) => (
@@ -1597,33 +1597,35 @@ export default function ProfilePage({
                   </div>
 
                   {/* Toggle buttons — align to top of list naturally via items-start */}
-                  <div
-                    className="flex flex-col gap-2 flex-shrink-0"
-                    style={{
-                      marginTop: visibleUserPosts.length > PROFILE_POSTS_PER_PAGE ? 'calc(1.5rem + 8px)' : '0',
-                    }}
-                  >
-                    <button
-                      onClick={() => switchPostsView('all')}
-                      className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
-                        postsView === 'all'
-                          ? 'bg-teal-500 text-white shadow-md'
-                          : 'bg-zinc-800 hover:bg-zinc-700 text-teal-300 border border-teal-600/50'
-                      }`}
+                  {userPosts.length > 0 && (
+                    <div
+                      className="flex flex-col gap-2 flex-shrink-0"
+                      style={{
+                        marginTop: visibleUserPosts.length > PROFILE_POSTS_PER_PAGE ? 'calc(1.5rem + 8px)' : '0',
+                      }}
                     >
-                      All Posts
-                    </button>
-                    <button
-                      onClick={() => switchPostsView('top')}
-                      className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
-                        postsView === 'top'
-                          ? 'bg-teal-500 text-white shadow-md'
-                          : 'bg-zinc-800 hover:bg-zinc-700 text-teal-300 border border-teal-600/50'
-                      }`}
-                    >
-                      Top Posts
-                    </button>
-                  </div>
+                      <button
+                        onClick={() => switchPostsView('all')}
+                        className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
+                          postsView === 'all'
+                            ? 'bg-teal-500 text-white shadow-md'
+                            : 'bg-zinc-800 hover:bg-zinc-700 text-teal-300 border border-teal-600/50'
+                        }`}
+                      >
+                        All Posts
+                      </button>
+                      <button
+                        onClick={() => switchPostsView('top')}
+                        className={`px-3 py-1.5 rounded-xl text-sm font-bold cursor-pointer transition ${
+                          postsView === 'top'
+                            ? 'bg-teal-500 text-white shadow-md'
+                            : 'bg-zinc-800 hover:bg-zinc-700 text-teal-300 border border-teal-600/50'
+                        }`}
+                      >
+                        Top Posts
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
