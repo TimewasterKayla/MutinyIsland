@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import LayoutClient from "@/components/LayoutClient"
@@ -18,6 +18,11 @@ export const metadata: Metadata = {
   description: "A multiplayer Survivor-style game simulator",
 }
 
+export const viewport: Viewport = {
+  width: 1280,
+  initialScale: 0.5,
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -28,9 +33,6 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <head>
-        <meta name="viewport" content="width=1280, initial-scale=0.5" />
-      </head>
       <body className="min-h-full flex flex-col bg-black text-white">
         <LayoutClient>
           <main className="flex-1">{children}</main>
