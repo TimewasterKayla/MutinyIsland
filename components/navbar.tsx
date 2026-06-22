@@ -79,12 +79,15 @@ export default function Navbar() {
 
   // React to musicEnabled changes — pause or resume any active audio
   useEffect(() => {
-    const audio = (window as any).__leaderboardAudio
-    if (!audio) return
+    const leaderboardAudio = (window as any).__leaderboardAudio
+    const shopAudio = (window as any).__shopAudio
+
     if (musicEnabled) {
-      audio.play().catch(() => {})
+      leaderboardAudio?.play().catch(() => {})
+      shopAudio?.play().catch(() => {})
     } else {
-      audio.pause()
+      leaderboardAudio?.pause()
+      shopAudio?.pause()
     }
   }, [musicEnabled])
 
@@ -152,6 +155,24 @@ export default function Navbar() {
     router.push('/leaderboards')
   }
 
+  function handleShopClick() {
+    // Only start music if the user has it enabled
+    if (!musicEnabled) {
+      router.push('/shop')
+      return
+    }
+    const existing = (window as any).__shopAudio
+    if (!existing || existing.paused) {
+      const track = Math.random() < 0.5 ? '/market1.mp3' : '/market2.mp3'
+      const audio = new Audio(track)
+      audio.loop = true
+      audio.volume = 0.4
+      audio.play().catch(() => {})
+      ;(window as any).__shopAudio = audio
+    }
+    router.push('/shop')
+  }
+
   const btnStyle =
     'px-3 py-2 rounded-lg bg-black/40 border border-yellow-700 hover:bg-yellow-700/40 active:scale-95 transition cursor-pointer text-white shadow-md backdrop-blur-sm text-sm whitespace-nowrap'
 
@@ -181,7 +202,7 @@ export default function Navbar() {
       <div className="flex-1 flex justify-center gap-2">
         <button onClick={() => router.push('/home')} className={btnStyle}>Home</button>
         <button onClick={() => router.push('/games')} className={btnStyle}>Games</button>
-        <button onClick={() => router.push('/shop')} className={btnStyle}>Shop</button>
+        <button onClick={handleShopClick} className={btnStyle}>Shops</button>
         <button onClick={() => router.push('/map')} className={btnStyle}>Map</button>
         <button onClick={handleLeaderboardClick} className={btnStyle}>Leaderboards</button>
         {username && (

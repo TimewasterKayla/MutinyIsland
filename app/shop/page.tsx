@@ -1,3 +1,7 @@
+'use client'
+
+import { useEffect } from 'react'
+
 const shops = [
   {
     name: "Mepole's Mischief",
@@ -72,6 +76,18 @@ const shops = [
 ]
 
 export default function ShopPage() {
+  // Stop the shop ambient music when leaving this page
+  useEffect(() => {
+    return () => {
+      const audio = (window as any).__shopAudio
+      if (audio) {
+        audio.pause()
+        audio.src = ""
+        delete (window as any).__shopAudio
+      }
+    }
+  }, [])
+
   return (
     <main
       className="min-h-screen p-10 text-white"
