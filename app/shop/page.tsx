@@ -92,11 +92,11 @@ export default function ShopPage() {
         Shops
       </h1>
 
-      <div className="max-w-5xl mx-auto mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+      <div className="max-w-5xl mx-auto mt-10 flex flex-wrap justify-center gap-5">
         {shops.map((shop) => (
           <button
             key={shop.name}
-            className="group relative aspect-square rounded-2xl p-4 flex items-center justify-center text-center cursor-pointer transition-transform duration-200 hover:-translate-y-1"
+            className="group relative aspect-square rounded-2xl p-4 flex items-center justify-center text-center cursor-pointer transition-transform duration-200 hover:-translate-y-1 w-[44%] sm:w-[30%] lg:w-[22%]"
             style={{
               background: shop.theme.bg,
               border: `2px solid ${shop.theme.border}`,
