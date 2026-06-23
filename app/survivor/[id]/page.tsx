@@ -406,6 +406,10 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const [crowns,   setCrowns]   = useState<number | null>(null)
   const [joinedAt, setJoinedAt] = useState<string | null>(null)
 
+  // Admin flag + music preference, both pulled from the profiles table.
+  const [isAdmin,      setIsAdmin]      = useState(false)
+  const [musicEnabled, setMusicEnabled] = useState(false)
+
   const [voteHistory,   setVoteHistory]   = useState<VoteRecord[]>([])
   const [voteInfoRecord, setVoteInfoRecord] = useState<VoteRecord | null>(null)
   const [placementMap,  setPlacementMap]  = useState<Record<string, number>>({})
@@ -429,6 +433,9 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   const pausedAtRef      = useRef<number | null>(null)
   const advancingRef     = useRef(false)
   const currentUserIdRef = useRef<string | null>(null)
+
+  // Tribal council theme audio element (created lazily, lives across tab switches)
+  const tikiAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // ─── Derived game state ───────────────────────────────────────────────────
 
@@ -615,6 +622,23 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
       })
   }, [me?.username])
 
+  // ─── Admin flag + music preference for the current user ──────────────────
+  // Both columns live on `profiles`, keyed by the user's auth id.
+
+  useEffect(() => {
+    if (!currentUserId) return
+    supabase
+      .from('profiles')
+      .select('is_admin, music_enabled')
+      .eq('id', currentUserId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) { console.error('PROFILE PREFS LOAD ERROR:', error); return }
+        setIsAdmin(!!data?.is_admin)
+        setMusicEnabled(!!data?.music_enabled)
+      })
+  }, [currentUserId])
+
   // ─── Winner username for the clock ───────────────────────────────────────
 
   useEffect(() => {
@@ -775,6 +799,37 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     if (!tabAccessible(activeTab)) setActiveTab('Players')
   }, [gameStarted, canAccessTikiCourt, activeTab])
+
+  // ─── Tribal Council music: play while on the Tiki Court tab, only if the
+  //     current user has music_enabled set to true on their profile ────────
+
+  useEffect(() => {
+    const shouldPlay = activeTab === 'Tiki Court' && musicEnabled
+
+    if (shouldPlay) {
+      if (!tikiAudioRef.current) {
+        const audio = new Audio('/tribalcounciltheme.mp3')
+        audio.loop = true
+        tikiAudioRef.current = audio
+      }
+      // play() returns a promise that can reject (e.g. autoplay policy) - swallow it safely
+      tikiAudioRef.current.play().catch(err => console.warn('[tribal council music] play() blocked:', err))
+    } else if (tikiAudioRef.current) {
+      tikiAudioRef.current.pause()
+      tikiAudioRef.current.currentTime = 0
+    }
+  }, [activeTab, musicEnabled])
+
+  // Stop and release the audio entirely when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (tikiAudioRef.current) {
+        tikiAudioRef.current.pause()
+        tikiAudioRef.current.src = ''
+        tikiAudioRef.current = null
+      }
+    }
+  }, [])
 
   // ─── Data loaders ────────────────────────────────────────────────────────
 
@@ -1694,7 +1749,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
                   <div className="w-24" />
                   <h2 className="text-2xl font-black uppercase tracking-widest text-center">Players</h2>
                   <div className="flex items-center gap-2 justify-end" style={{ minWidth: '6rem' }}>
-                    {!gameStarted && !hasFilled && (
+                    {!gameStarted && !hasFilled && isAdmin && (
                       <>
                         <button
                           onClick={() => setShowTimerModal(true)}
@@ -2678,7 +2733,7 @@ export default function SeasonPage({ params }: { params: Promise<{ id: string }>
         </div>
       </div>
     )}
-    {showTimerModal && !gameStarted && (
+    {showTimerModal && !gameStarted && isAdmin && (
       <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4">
         <div className="w-full max-w-sm rounded-xl border border-[#a07840] p-5 text-zinc-900 shadow-2xl" style={{ background: '#c8a96e', backgroundImage: WOOD_GRAIN }}>
           <h2 className="text-xl font-black uppercase tracking-widest mb-4">Set Timer</h2>
